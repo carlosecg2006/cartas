@@ -158,6 +158,14 @@ function db_schema(string $driver): array
             FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )$opts",
+        "CREATE TABLE IF NOT EXISTS letter_versions (
+            id $pk,
+            letter_id INT NOT NULL,
+            title VARCHAR(150) NOT NULL DEFAULT '',
+            content $long NOT NULL,
+            created_at DATETIME NOT NULL,
+            FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE CASCADE
+        )$opts",
         "CREATE TABLE IF NOT EXISTS remember_tokens (
             id $pk,
             user_id INT NOT NULL,
@@ -173,6 +181,19 @@ function db_schema(string $driver): array
             attempted_at DATETIME NOT NULL
         )$opts",
     ];
+}
+
+const SCHEMA_VERSION = 2;
+
+/** Atualiza o banco de instalações antigas (cria tabelas novas) uma única vez. */
+function ensure_schema(): void
+{
+    $flag = ROOT . '/storage/.schema-' . SCHEMA_VERSION;
+    if (is_file($flag)) {
+        return;
+    }
+    db_install();
+    @file_put_contents($flag, date('c'));
 }
 
 function db_install(): void

@@ -7,25 +7,30 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 ## O que dá para fazer
 
 **Você (remetente)**
-- Painel com todas as cartas, filtros por amigo e por situação (rascunho, enviada, ainda não lida)
-- Cadastro de amigos: o site gera a senha e monta a mensagem pronta para mandar pelo WhatsApp
-- **Editor estilo Canva + Notion**
-  - Blocos: texto, títulos, citação, listas, lista de desejos, destaque com emoji, foto (polaroid, fita, círculo…), divisórias decoradas, **segredo** (texto escondido até tocar), música do YouTube/Spotify, assinatura e espaçamento
-  - Digite `/` numa linha vazia para abrir o menu de blocos; atalhos `#`, `-`, `[]`, `>`, `---`
-  - Selecione um texto para negrito, itálico, cor, marca-texto, tamanho e link
-  - Arraste os blocos pela alça `⋮⋮` para reorganizar
-  - **Adesivos livres**: emojis, fitas washi, bilhetinhos, desenho à mão livre e imagens próprias. Arraste, gire e redimensione
-  - Papel (pautado, quadriculado, kraft, antigo, pergaminho…), cor do papel e da tinta, 12 letras (várias manuscritas), bordas e cenário de fundo
-  - Envelope personalizável: cor, forro e selo de cera
-  - Salvamento automático, desfazer/refazer (`Ctrl+Z`/`Ctrl+Shift+Z`) e prévia de como o amigo vai ver
-- Ao terminar, você escolhe **para quem** vai a carta e, se quiser, **a partir de quando** ela pode ser aberta
-- Confirmação de leitura (quando abriu e quantas vezes), reações e respostas dos amigos
+- Painel com todas as cartas desenhadas como envelopes de verdade (com selo e carimbo), filtros por pessoa e por situação
+- Cadastro de amigos: o site gera a senha e monta a mensagem pronta para o WhatsApp
+- **8 modelos prontos** para começar (aniversário, saudade, obrigado, "abra quando…", fim de ano, desculpa, bilhete, em branco)
+- **Editor com blocos (como no Notion)**
+  - Texto, títulos, citação, listas, lista de desejos, destaque, foto, **galeria** (espalhada, grade ou filme), **foto e texto lado a lado**, **mensagem de voz gravada no navegador**, música do YouTube/Spotify, segredo, divisórias, assinatura e espaçamento
+  - `/` numa linha vazia abre o menu de blocos; atalhos `#`, `-`, `[]`, `>`, `---`
+  - Barra de formatação ao selecionar texto, blocos arrastáveis pela alça
+  - **`Ctrl+K`**: busca qualquer ação
+  - **Histórico de versões** com prévia e restauração, desfazer/refazer, salvamento automático e contagem de palavras
+- **Adesivos livres (como no Canva)**
+  - Emojis, rabiscos desenhados à mão (com troca de cor), fitas washi, bilhetes, desenho livre e imagens próprias
+  - **Guias de alinhamento que grudam** ao arrastar (segure `Alt` para soltar livre), girar, redimensionar, espelhar, transparência
+  - **Travar posição**, menu do botão direito, **painel de camadas** e atalhos (`Ctrl+D`, `[`, `]`, `Ctrl+L`, `Delete`)
+- Papel, cor, tinta, 12 letras, bordas e cenário
+- **Envelope**: cor, forro, selo de cera, **selo postal ilustrado**, **carimbo com a data de envio** e o texto **"Abra quando…"**
+- **Efeito ao abrir**: corações, confete, pétalas, estrelas ou neve
+- Data mínima para abrir, confirmação de leitura, reações e respostas
 
 **Seus amigos**
-- Entram quando quiserem (com "lembrar de mim") e veem a caixinha só com as cartas deles, com aviso de carta nova
-- Abrem a carta com animação: o selo quebra, o envelope abre e a carta sai
+- Entram quando quiserem ("lembrar de mim") e veem só as cartas deles; as "abra quando…" ficam numa seção própria
+- Dá para instalar o site na tela inicial do celular, como um app
+- Abertura animada: o selo se parte, a aba abre, a carta sai e os blocos aparecem um a um
 - Cartas agendadas aparecem lacradas com contagem regressiva (o conteúdo nem chega ao navegador antes da hora)
-- Reagem com emojis, respondem e podem baixar a carta em PDF ou imagem
+- Reagem, respondem, ouvem a mensagem de voz e salvam a carta em PDF ou imagem
 
 ## Publicar de graça (InfinityFree)
 
@@ -52,13 +57,15 @@ Abra `http://localhost:8000` e, no instalador, escolha **SQLite**: não precisa 
 ## Estrutura
 
 ```
-index.php        painel do remetente / caixinha do amigo
+index.php        painel do remetente / caixa do amigo
+nova.php         escolha do modelo
 editor.php       editor de cartas
 carta.php        leitura da carta (envelope, reações, respostas)
 amigos.php       cadastro de amigos
 conta.php        trocar senha
-api.php          salvar, enviar, enviar imagem, reagir, responder
-media.php        entrega as imagens só para quem pode ver a carta
+api.php          salvar, enviar, enviar imagem/áudio, versões, reagir, responder
+media.php        entrega imagens e áudios só para quem pode ver a carta
+manifest.php     permite instalar o site no celular
 install.php      instalador
 app/             código PHP (banco, login, validação) — bloqueado para o navegador
 assets/          CSS e JavaScript

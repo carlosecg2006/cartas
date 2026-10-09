@@ -38,6 +38,19 @@
     setTimeout(() => t.remove(), 3700);
   };
 
+  // Envelopes desenhados (painel, caixa de cartas, login)
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!window.Letter) return;
+    document.querySelectorAll('[data-envelope]').forEach((node) => {
+      try {
+        const d = JSON.parse(node.dataset.envelope);
+        node.prepend(Letter.renderEnvelope(d.env || {}, d.to || '', {
+          paperColor: d.paper, locked: !!d.locked, sentAt: d.sentAt === undefined ? null : d.sentAt,
+        }));
+      } catch (e) { /* ignora */ }
+    });
+  });
+
   // Mensagens de sessão viram toasts
   document.querySelectorAll('.flash').forEach((f) => {
     toast(f.textContent.trim(), f.classList.contains('flash-error') ? 'error' : '');
@@ -69,7 +82,7 @@
         source.select();
         document.execCommand('copy');
       }
-      toast('Copiado! Agora é só colar no WhatsApp. 📋');
+      toast('Mensagem copiada.');
     });
   });
 
@@ -81,7 +94,7 @@
         const target = new Date(node.dataset.countdown).getTime();
         let diff = Math.max(0, Math.floor((target - Date.now()) / 1000));
         if (diff === 0) {
-          node.textContent = 'agora! ✨';
+          node.textContent = 'agora';
           if (node.hasAttribute('data-reload') && !node.dataset.reloading) {
             node.dataset.reloading = '1';
             setTimeout(() => location.reload(), 1500);
@@ -112,7 +125,7 @@
         const res = await api('mailbox');
         if (res.count > known) {
           document.querySelector('[data-new-banner]').hidden = false;
-          document.title = '💌 Carta nova! · ' + document.title.replace(/^💌 Carta nova! · /, '');
+          document.title = '(1) ' + document.title.replace(/^\(1\) /, '');
         }
       } catch (e) { /* silencioso */ }
     }, 60000);

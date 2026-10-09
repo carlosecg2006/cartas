@@ -28,13 +28,13 @@ function letter_locked(array $letter): bool
     return !empty($letter['open_at']) && strtotime($letter['open_at']) > time();
 }
 
-function create_letter(?int $recipientId, array $admin): int
+function create_letter(?int $recipientId, array $admin, string $template = 'branco'): int
 {
     $recipient = $recipientId ? q_one("SELECT * FROM users WHERE id = ? AND role = 'friend'", [$recipientId]) : null;
-    $content = default_letter_content($recipient['name'] ?? '', $admin['name']);
+    $content = build_template($template, $recipient['name'] ?? '', $admin['name']);
     return db_insert('letters', [
         'recipient_id' => $recipient ? (int) $recipient['id'] : null,
-        'title' => $recipient ? 'Carta para ' . first_name($recipient['name']) : 'Nova carta',
+        'title' => (letter_templates()[$template]['title'] ?? '') ?: ($recipient ? 'Carta para ' . first_name($recipient['name']) : 'Nova carta'),
         'content' => json_encode($content, JSON_UNESCAPED_UNICODE),
         'status' => 'draft',
         'created_at' => now(),
@@ -70,20 +70,34 @@ function duplicate_letter(array $letter): int
             $map[$file] = $new;
         }
     }
+    $content = remap_content_media($content, $map);
+    db_update('letters', $id, ['content' => json_encode($content, JSON_UNESCAPED_UNICODE)]);
+    return $id;
+}
+
+/** Troca nomes de arquivos de mídia no conteúdo (usado ao duplicar). */
+function remap_content_media(array $content, array $map): array
+{
+    $swap = fn($src) => is_string($src) && isset($map[$src]) ? $map[$src] : $src;
     foreach ($content['blocks'] as &$b) {
-        if (($b['type'] ?? '') === 'image' && isset($map[$b['src'] ?? ''])) {
-            $b['src'] = $map[$b['src']];
+        if (isset($b['src'])) {
+            $b['src'] = $swap($b['src']);
+        }
+        if (($b['type'] ?? '') === 'gallery') {
+            foreach ($b['items'] as &$item) {
+                $item['src'] = $swap($item['src'] ?? '');
+            }
+            unset($item);
         }
     }
     unset($b);
-    foreach ($content['stickers'] as &$s) {
-        if (($s['kind'] ?? '') === 'image' && isset($map[$s['src'] ?? ''])) {
-            $s['src'] = $map[$s['src']];
+    foreach ($content['stickers'] as &$st) {
+        if (isset($st['src'])) {
+            $st['src'] = $swap($st['src']);
         }
     }
-    unset($s);
-    db_update('letters', $id, ['content' => json_encode($content, JSON_UNESCAPED_UNICODE)]);
-    return $id;
+    unset($st);
+    return $content;
 }
 
 function delete_media_files(array $letterIds): void
@@ -106,7 +120,13 @@ function delete_letter(int $id): void
 /** Remove arquivos enviados que a carta não usa mais. */
 function prune_letter_media(int $letterId, array $content): void
 {
+    // Também preserva o que versões antigas usam, para o histórico continuar funcionando
     $used = array_flip(content_media($content));
+    foreach (q_all('SELECT content FROM letter_versions WHERE letter_id = ?', [$letterId]) as $v) {
+        foreach (content_media(json_decode($v['content'], true) ?: []) as $file) {
+            $used[$file] = true;
+        }
+    }
     $limit = date('Y-m-d H:i:s', time() - 3600); // dá uma hora de folga para o desfazer do editor
     foreach (q_all('SELECT id, filename, created_at FROM media WHERE letter_id = ?', [$letterId]) as $m) {
         if (!isset($used[$m['filename']]) && $m['created_at'] < $limit) {
@@ -148,6 +168,53 @@ function mark_replies_read(int $letterId, array $viewer): void
 {
     q('UPDATE replies SET read_at = ? WHERE letter_id = ? AND user_id <> ? AND read_at IS NULL',
         [now(), $letterId, (int) $viewer['id']]);
+}
+
+/** Mensagens de voz (gravadas no navegador ou enviadas como arquivo). */
+function upload_audio(array $file, int $letterId): array
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Falha no envio do áudio.');
+    }
+    if ($file['size'] > 12 * 1024 * 1024) {
+        throw new RuntimeException('O áudio passa de 12 MB. Tente uma gravação mais curta.');
+    }
+    $mime = function_exists('finfo_open') ? (string) finfo_file(finfo_open(FILEINFO_MIME_TYPE), $file['tmp_name']) : '';
+    $types = [
+        'audio/webm' => 'webm', 'video/webm' => 'webm', 'audio/ogg' => 'ogg', 'application/ogg' => 'ogg',
+        'audio/mp4' => 'm4a', 'audio/x-m4a' => 'm4a', 'video/mp4' => 'm4a', 'audio/mpeg' => 'mp3',
+    ];
+    if (!isset($types[$mime])) {
+        throw new RuntimeException('Formato de áudio não suportado.');
+    }
+    $ext = $types[$mime];
+    $name = bin2hex(random_bytes(16)) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], UPLOAD_DIR . '/' . $name)) {
+        throw new RuntimeException('Não consegui salvar o áudio.');
+    }
+    $served = ['webm' => 'audio/webm', 'ogg' => 'audio/ogg', 'm4a' => 'audio/mp4', 'mp3' => 'audio/mpeg'][$ext];
+    db_insert('media', [
+        'letter_id' => $letterId, 'filename' => $name, 'mime' => $served,
+        'width' => 0, 'height' => 0, 'size' => (int) $file['size'], 'created_at' => now(),
+    ]);
+    return ['src' => $name];
+}
+
+// ---------- Histórico de versões ----------
+
+/** Guarda uma foto da carta no máximo a cada 10 minutos (mantém as 40 últimas). */
+function save_version(int $letterId, string $title, string $contentJson, bool $force = false): void
+{
+    $last = q_one('SELECT id, created_at FROM letter_versions WHERE letter_id = ? ORDER BY id DESC LIMIT 1', [$letterId]);
+    if (!$force && $last && strtotime($last['created_at']) > time() - 600) {
+        db_update('letter_versions', (int) $last['id'], ['title' => $title, 'content' => $contentJson]);
+        return;
+    }
+    db_insert('letter_versions', ['letter_id' => $letterId, 'title' => $title, 'content' => $contentJson, 'created_at' => now()]);
+    $keep = q_all('SELECT id FROM letter_versions WHERE letter_id = ? ORDER BY id DESC LIMIT 40', [$letterId]);
+    if (count($keep) === 40) {
+        q('DELETE FROM letter_versions WHERE letter_id = ? AND id < ?', [$letterId, (int) end($keep)['id']]);
+    }
 }
 
 function upload_image(array $file, int $letterId): array

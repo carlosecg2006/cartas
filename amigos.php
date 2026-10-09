@@ -5,7 +5,7 @@ require __DIR__ . '/app/bootstrap.php';
 
 $admin = require_admin();
 $errors = [];
-$colors = ['#e8a0a0', '#f2b880', '#e9d27c', '#a8d5a2', '#8ecae6', '#b8a9e8', '#f4a6c8', '#9ad1c9'];
+$colors = ['#d9a5a0', '#e2b98f', '#d8c37e', '#a9c4a0', '#9fbfd6', '#b9a8d6', '#d6a3bd', '#9cc8bf'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'role' => 'friend', 'avatar' => $avatar, 'color' => $color, 'created_at' => now(),
                 ]);
                 $_SESSION['credentials'] = ['name' => $name, 'username' => $username, 'password' => $password, 'new' => true];
-                flash(first_name($name) . ' foi adicionado(a) aos seus amigos! 🎉');
+                flash(first_name($name) . ' está na sua lista.');
             } else {
                 db_update('users', (int) $friend['id'], ['name' => $name, 'username' => $username, 'avatar' => $avatar, 'color' => $color]);
                 flash('Dados de ' . first_name($name) . ' atualizados.');
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'remover' && $friend) {
         delete_media_files(array_column(q_all('SELECT id FROM letters WHERE recipient_id = ?', [(int) $friend['id']]), 'id'));
         q('DELETE FROM users WHERE id = ?', [(int) $friend['id']]);
-        flash(first_name($friend['name']) . ' foi removido(a), junto com as cartas dele(a).');
+        flash(first_name($friend['name']) . ' saiu da lista, junto com as cartas.');
         redirect('amigos.php');
     }
 }
@@ -75,36 +75,36 @@ $form = $editing ?: ['name' => $_POST['name'] ?? '', 'username' => $_POST['usern
 page_head('Amigos', ['body' => 'page-friends']);
 ?>
 <main class="container">
-    <section class="hero">
+    <section class="page-head">
         <div>
-            <p class="eyebrow">Seus destinatários</p>
-            <h1>Amigos</h1>
-            <p class="muted">Cada amigo tem o próprio login e só enxerga as cartas escritas para ele.</p>
+            <p class="eyebrow">Destinatários</p>
+            <h1>Seus <em>amigos</em></h1>
+            <p>Cada pessoa tem o próprio login e só enxerga as cartas escritas para ela.</p>
         </div>
     </section>
 
     <?php if ($credentials):
-        $message = "Oi, " . first_name($credentials['name']) . "! 💌 Tenho cartas pra você em " . base_url()
+        $message = 'Oi, ' . first_name($credentials['name']) . '! Escrevi umas cartas pra você. Entra aqui: ' . base_url()
             . "\nUsuário: " . $credentials['username'] . "\nSenha: " . $credentials['password'];
         ?>
         <div class="credentials card">
-            <h2><?= $credentials['new'] ? '🎉 Acesso criado!' : '🔑 Nova senha gerada' ?></h2>
-            <p class="muted">Anote ou envie agora: por segurança, a senha não aparece de novo.</p>
+            <h2><?= $credentials['new'] ? 'Acesso criado' : 'Senha nova' ?></h2>
+            <p class="muted">Envie agora. Por segurança, a senha não aparece de novo.</p>
             <dl class="cred-list">
                 <dt>Usuário</dt><dd><code><?= e($credentials['username']) ?></code></dd>
                 <dt>Senha</dt><dd><code><?= e($credentials['password']) ?></code></dd>
             </dl>
             <textarea class="cred-message" readonly rows="4" data-copy-source><?= e($message) ?></textarea>
-            <div class="row">
-                <button class="btn btn-primary" type="button" data-copy>📋 Copiar mensagem</button>
-                <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://wa.me/?text=<?= e(rawurlencode($message)) ?>">Enviar pelo WhatsApp</a>
+            <div class="row wrap">
+                <button class="btn btn-primary" type="button" data-copy><?= icon('copy') ?>Copiar mensagem</button>
+                <a class="btn" target="_blank" rel="noopener" href="https://wa.me/?text=<?= e(rawurlencode($message)) ?>"><?= icon('send') ?>Mandar pelo WhatsApp</a>
             </div>
         </div>
     <?php endif; ?>
 
     <div class="friends-layout">
         <section class="card friend-form-card">
-            <h2><?= $editing ? 'Editar ' . e(first_name($editing['name'])) : 'Adicionar amigo' ?></h2>
+            <h2><?= $editing ? 'Editar ' . e(first_name($editing['name'])) : 'Adicionar pessoa' ?></h2>
             <?php foreach ($errors as $error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endforeach; ?>
             <form method="post" class="form" data-friend-form>
                 <?= csrf_field() ?>
@@ -113,13 +113,13 @@ page_head('Amigos', ['body' => 'page-friends']);
                 <label>Nome
                     <input name="name" required maxlength="80" value="<?= e($form['name']) ?>" placeholder="Mariana Souza" data-name-input>
                 </label>
-                <label>Usuário para entrar
+                <label>Usuário
                     <input name="username" maxlength="40" pattern="[a-z0-9._\-]{3,40}" value="<?= e($form['username']) ?>" placeholder="mariana" autocapitalize="none" data-username-input>
-                    <small class="muted">Se deixar vazio, eu crio a partir do nome.</small>
+                    <small>Em branco, eu crio a partir do nome.</small>
                 </label>
                 <div class="grid-2">
-                    <label>Emoji (opcional)
-                        <input name="avatar" maxlength="4" value="<?= e($form['avatar']) ?>" placeholder="🌻">
+                    <label>Inicial ou emoji
+                        <input name="avatar" maxlength="4" value="<?= e($form['avatar']) ?>" placeholder="M">
                     </label>
                     <fieldset class="color-field">
                         <legend>Cor</legend>
@@ -133,7 +133,7 @@ page_head('Amigos', ['body' => 'page-friends']);
                         </div>
                     </fieldset>
                 </div>
-                <?php if (!$editing): ?><p class="small muted">A senha é gerada automaticamente e aparece só uma vez, para você enviar.</p><?php endif; ?>
+                <?php if (!$editing): ?><p class="small muted">A senha é gerada na hora e mostrada uma única vez.</p><?php endif; ?>
                 <div class="row">
                     <button class="btn btn-primary"><?= $editing ? 'Salvar' : 'Adicionar' ?></button>
                     <?php if ($editing): ?><a class="btn btn-ghost" href="amigos.php">Cancelar</a><?php endif; ?>
@@ -141,47 +141,42 @@ page_head('Amigos', ['body' => 'page-friends']);
             </form>
         </section>
 
-        <section class="friend-list">
+        <section>
             <?php if (!$friends): ?>
-                <div class="empty small-empty">
-                    <div class="empty-icon">🫂</div>
-                    <p class="muted">Ninguém por aqui ainda.</p>
+                <div class="empty"><p class="muted">Sua lista está vazia.</p></div>
+            <?php else: ?>
+                <div class="friend-list">
+                    <?php foreach ($friends as $f): ?>
+                        <article class="friend-row">
+                            <?= avatar_html($f, 'lg') ?>
+                            <div>
+                                <h3><?= e($f['name']) ?></h3>
+                                <p class="muted small">@<?= e($f['username']) ?> · visto <?= e(time_ago($f['last_seen_at'])) ?></p>
+                                <p class="friend-stats">
+                                    <span><?= (int) $f['sent_count'] ?> enviada<?= $f['sent_count'] == 1 ? '' : 's' ?></span>
+                                    <?php if ($f['draft_count']): ?><span><?= (int) $f['draft_count'] ?> rascunho<?= $f['draft_count'] == 1 ? '' : 's' ?></span><?php endif; ?>
+                                    <?php if ($f['unread_count']): ?><span><?= (int) $f['unread_count'] ?> ainda fechada<?= $f['unread_count'] == 1 ? '' : 's' ?></span><?php endif; ?>
+                                </p>
+                            </div>
+                            <div class="friend-actions">
+                                <a class="btn btn-sm" href="nova.php?para=<?= (int) $f['id'] ?>"><?= icon('pen', 'ic-sm') ?>Escrever</a>
+                                <a class="btn btn-sm btn-ghost" href="index.php?para=<?= (int) $f['id'] ?>">Cartas</a>
+                                <details class="menu">
+                                    <summary class="btn btn-sm btn-ghost btn-icon" aria-label="Mais ações"><?= icon('more') ?></summary>
+                                    <div class="menu-list">
+                                        <a href="amigos.php?editar=<?= (int) $f['id'] ?>"><?= icon('pen', 'ic-sm') ?>Editar</a>
+                                        <form method="post">
+                                            <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $f['id'] ?>">
+                                            <button name="acao" value="nova_senha" data-confirm="Gerar uma senha nova para <?= e(first_name($f['name'])) ?>? A antiga para de funcionar."><?= icon('lock', 'ic-sm') ?>Gerar senha nova</button>
+                                            <button name="acao" value="remover" class="danger" data-confirm="Remover <?= e(first_name($f['name'])) ?> e todas as cartas para essa pessoa? Não dá para desfazer."><?= icon('trash', 'ic-sm') ?>Remover</button>
+                                        </form>
+                                    </div>
+                                </details>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
                 </div>
             <?php endif; ?>
-            <?php foreach ($friends as $f): ?>
-                <article class="friend-card card">
-                    <div class="friend-head">
-                        <?= avatar_html($f, 'lg') ?>
-                        <div>
-                            <h3><?= e($f['name']) ?></h3>
-                            <p class="muted small">@<?= e($f['username']) ?> · último acesso <?= e(time_ago($f['last_seen_at'])) ?></p>
-                        </div>
-                    </div>
-                    <p class="friend-stats small">
-                        <span>✉ <?= (int) $f['sent_count'] ?> enviada<?= $f['sent_count'] == 1 ? '' : 's' ?></span>
-                        <?php if ($f['draft_count']): ?><span>📝 <?= (int) $f['draft_count'] ?> rascunho<?= $f['draft_count'] == 1 ? '' : 's' ?></span><?php endif; ?>
-                        <?php if ($f['unread_count']): ?><span>📬 <?= (int) $f['unread_count'] ?> não lida<?= $f['unread_count'] == 1 ? '' : 's' ?></span><?php endif; ?>
-                    </p>
-                    <div class="row wrap">
-                        <form method="post" action="acoes.php">
-                            <?= csrf_field() ?><input type="hidden" name="acao" value="criar"><input type="hidden" name="para" value="<?= (int) $f['id'] ?>">
-                            <button class="btn btn-sm btn-primary">＋ Carta para <?= e(first_name($f['name'])) ?></button>
-                        </form>
-                        <a class="btn btn-sm btn-ghost" href="index.php?para=<?= (int) $f['id'] ?>">Ver cartas</a>
-                        <details class="menu">
-                            <summary class="btn btn-sm btn-ghost" aria-label="Mais ações">⋯</summary>
-                            <div class="menu-list">
-                                <a href="amigos.php?editar=<?= (int) $f['id'] ?>">✏️ Editar</a>
-                                <form method="post">
-                                    <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $f['id'] ?>">
-                                    <button name="acao" value="nova_senha" data-confirm="Gerar uma nova senha para <?= e(first_name($f['name'])) ?>? A antiga para de funcionar.">🔑 Gerar nova senha</button>
-                                    <button name="acao" value="remover" class="danger" data-confirm="Remover <?= e(first_name($f['name'])) ?> e TODAS as cartas para essa pessoa? Não dá para desfazer.">🗑 Remover</button>
-                                </form>
-                            </div>
-                        </details>
-                    </div>
-                </article>
-            <?php endforeach; ?>
         </section>
     </div>
 </main>

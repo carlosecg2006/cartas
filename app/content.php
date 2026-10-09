@@ -24,9 +24,16 @@ const IMAGE_WIDTHS = ['sm', 'md', 'lg'];
 const TAPE_PATTERNS = ['pink', 'mint', 'yellow', 'lilac', 'dots', 'stripes', 'grid', 'hearts'];
 const TEXT_STICKER_STYLES = ['none', 'label', 'note', 'bubble'];
 const SPOTIFY_KINDS = ['track', 'album', 'playlist', 'episode'];
+const DOODLE_NAMES = ['heart', 'heart-fill', 'star', 'sparkle', 'arrow', 'arrow-loop', 'swirl', 'squiggle', 'circle',
+    'underline', 'flower', 'leaf', 'cloud', 'sun', 'moon', 'smile', 'xo', 'crown', 'bow', 'note'];
+const STAMP_NAMES = ['heart', 'flower', 'bird', 'moon', 'coffee', 'mountain', 'wave', 'plane', 'cat', 'sun'];
+const EFFECT_NAMES = ['none', 'hearts', 'confetti', 'petals', 'stars', 'snow'];
+const GALLERY_LAYOUTS = ['scatter', 'grid', 'strip'];
 const REACTION_EMOJIS = ['❤️', '🥹', '😂', '😭', '🤗', '🔥', '✨', '🫶'];
 
 const MEDIA_RE = '/^[a-f0-9]{32}\.(jpg|png|webp|gif)$/';
+const AUDIO_RE = '/^[a-f0-9]{32}\.(webm|ogg|m4a|mp3)$/';
+const ANY_MEDIA_RE = '/^[a-f0-9]{32}\.(jpg|png|webp|gif|webm|ogg|m4a|mp3)$/';
 
 function default_letter_content(string $recipientName = '', string $senderName = ''): array
 {
@@ -37,7 +44,8 @@ function default_letter_content(string $recipientName = '', string $senderName =
             'style' => 'lined', 'color' => '#fffdf6', 'ink' => '#3b3340', 'font' => 'caveat',
             'size' => 'md', 'border' => 'none', 'scene' => 'desk',
         ],
-        'envelope' => ['color' => '#e9b8b0', 'liner' => 'hearts', 'seal' => '❤', 'sealColor' => '#a8323e'],
+        'envelope' => ['color' => '#e9b8b0', 'liner' => 'hearts', 'seal' => '❤', 'sealColor' => '#a8323e', 'stamp' => 'heart', 'label' => ''],
+        'effect' => 'hearts',
         'blocks' => [
             ['id' => 'b' . bin2hex(random_bytes(4)), 'type' => 'heading', 'level' => 1, 'html' => $greeting],
             ['id' => 'b' . bin2hex(random_bytes(4)), 'type' => 'paragraph', 'html' => ''],
@@ -249,7 +257,10 @@ function sanitize_letter_content($raw): array
             'liner' => pick($env['liner'] ?? null, ENVELOPE_LINERS, 'hearts'),
             'seal' => plain($env['seal'] ?? '❤', 8) ?: '❤',
             'sealColor' => color_or($env['sealColor'] ?? null, '#a8323e'),
+            'stamp' => pick($env['stamp'] ?? '', array_merge([''], STAMP_NAMES), ''),
+            'label' => plain($env['label'] ?? '', 80),
         ],
+        'effect' => pick($raw['effect'] ?? 'none', EFFECT_NAMES, 'none'),
         'blocks' => [],
         'stickers' => [],
     ];
@@ -360,6 +371,33 @@ function sanitize_block(array $b): ?array
         case 'spacer':
             $block['height'] = (int) num($b['height'] ?? 40, 8, 240, 40);
             break;
+        case 'gallery':
+            $block['layout'] = pick($b['layout'] ?? null, GALLERY_LAYOUTS, 'scatter');
+            $block['items'] = [];
+            foreach (array_slice(is_array($b['items'] ?? null) ? $b['items'] : [], 0, 24) as $item) {
+                $src = is_array($item) ? ($item['src'] ?? '') : '';
+                if (is_string($src) && preg_match(MEDIA_RE, $src)) {
+                    $block['items'][] = ['src' => $src, 'caption' => plain($item['caption'] ?? '', 120)];
+                }
+            }
+            break;
+        case 'phototext':
+            $src = $b['src'] ?? '';
+            $block['src'] = is_string($src) && preg_match(MEDIA_RE, $src) ? $src : '';
+            $block['side'] = pick($b['side'] ?? null, ['left', 'right'], 'left');
+            $block['frame'] = pick($b['frame'] ?? null, IMAGE_FRAMES, 'polaroid');
+            $block['html'] = sanitize_inline_html($b['html'] ?? '');
+            break;
+        case 'audio':
+            $src = $b['src'] ?? '';
+            $block['src'] = is_string($src) && preg_match(AUDIO_RE, $src) ? $src : '';
+            $block['label'] = plain($b['label'] ?? '', 80);
+            $block['duration'] = num($b['duration'] ?? 0, 0, 3600, 0);
+            $block['peaks'] = [];
+            foreach (array_slice(is_array($b['peaks'] ?? null) ? $b['peaks'] : [], 0, 64) as $p) {
+                $block['peaks'][] = num($p, 0, 1, 0.3);
+            }
+            break;
         default:
             return null;
     }
@@ -377,6 +415,9 @@ function sanitize_sticker(array $s, array $blockIds): ?array
         'anchor' => $anchor,
         'w' => num($s['w'] ?? 10, 2, 100, 10),
         'r' => num($s['r'] ?? 0, -180, 180, 0),
+        'o' => num($s['o'] ?? 1, 0.1, 1, 1),
+        'f' => !empty($s['f']),
+        'lk' => !empty($s['lk']),
     ];
     switch ($sticker['kind']) {
         case 'emoji':
@@ -400,6 +441,10 @@ function sanitize_sticker(array $s, array $blockIds): ?array
             break;
         case 'tape':
             $sticker['pattern'] = pick($s['pattern'] ?? null, TAPE_PATTERNS, 'pink');
+            break;
+        case 'doodle':
+            $sticker['name'] = pick($s['name'] ?? null, DOODLE_NAMES, 'heart');
+            $sticker['c'] = color_or($s['c'] ?? null, '#3b3340');
             break;
         case 'drawing':
             $sticker['vw'] = num($s['vw'] ?? 100, 1, 5000, 100);
@@ -430,8 +475,15 @@ function content_media(array $content): array
 {
     $files = [];
     foreach ($content['blocks'] ?? [] as $b) {
-        if (($b['type'] ?? '') === 'image' && !empty($b['src'])) {
+        if (in_array($b['type'] ?? '', ['image', 'phototext', 'audio'], true) && !empty($b['src'])) {
             $files[] = $b['src'];
+        }
+        if (($b['type'] ?? '') === 'gallery') {
+            foreach ($b['items'] ?? [] as $item) {
+                if (!empty($item['src'])) {
+                    $files[] = $item['src'];
+                }
+            }
         }
     }
     foreach ($content['stickers'] ?? [] as $s) {
@@ -455,7 +507,7 @@ function content_excerpt(array $content, int $max = 140): string
             $texts[] = is_array($item) ? ($item['html'] ?? '') : $item;
         }
         if (($b['type'] ?? '') === 'secret') {
-            $texts = ['🔒 ' . ($b['label'] ?? '')];
+            $texts = [($b['label'] ?? '')];
         }
         foreach ($texts as $t) {
             $t = trim(html_entity_decode(strip_tags(str_replace('<br>', ' ', (string) $t)), ENT_QUOTES, 'UTF-8'));

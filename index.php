@@ -21,12 +21,13 @@ if ($filterFriend) {
     $where[] = 'l.recipient_id = ?';
     $params[] = $filterFriend;
 }
-if ($filterStatus === 'draft') {
-    $where[] = "l.status = 'draft'";
-} elseif ($filterStatus === 'sent') {
-    $where[] = "l.status = 'sent'";
-} elseif ($filterStatus === 'unread') {
-    $where[] = "l.status = 'sent' AND l.first_opened_at IS NULL";
+$statusSql = [
+    'draft' => "l.status = 'draft'",
+    'sent' => "l.status = 'sent'",
+    'unread' => "l.status = 'sent' AND l.first_opened_at IS NULL",
+];
+if (isset($statusSql[$filterStatus])) {
+    $where[] = $statusSql[$filterStatus];
 }
 $sql = "SELECT l.*, u.name AS recipient_name, u.avatar, u.color,
             (SELECT GROUP_CONCAT(emoji) FROM reactions r WHERE r.letter_id = l.id) AS reaction_list,
@@ -37,11 +38,13 @@ $sql = "SELECT l.*, u.name AS recipient_name, u.avatar, u.color,
     . ' ORDER BY l.updated_at DESC';
 $letters = q_all($sql, array_merge([(int) $user['id']], $params));
 
-$stats = q_one("SELECT COUNT(*) AS total,
+$countParams = $filterFriend ? [$filterFriend] : [];
+$countWhere = $filterFriend ? ' WHERE recipient_id = ?' : '';
+$counts = q_one("SELECT COUNT(*) AS total,
+        SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS draft,
         SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
-        SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS drafts,
-        SUM(CASE WHEN status = 'sent' AND first_opened_at IS NOT NULL THEN 1 ELSE 0 END) AS opened
-    FROM letters");
+        SUM(CASE WHEN status = 'sent' AND first_opened_at IS NULL THEN 1 ELSE 0 END) AS unread
+    FROM letters$countWhere", $countParams);
 $newReplies = (int) q_val('SELECT COUNT(*) FROM replies WHERE read_at IS NULL AND user_id <> ?', [(int) $user['id']]);
 
 function filter_url(array $changes): string
@@ -50,118 +53,106 @@ function filter_url(array $changes): string
     return 'index.php' . ($query ? '?' . http_build_query($query) : '');
 }
 
-page_head('Cartas', ['body' => 'page-admin']);
+page_head('Cartas', ['body' => 'page-admin', 'css' => ['assets/css/letter.css']]);
 ?>
 <main class="container">
-    <section class="hero">
+    <section class="page-head">
         <div>
-            <p class="eyebrow">Olá, <?= e(first_name($user['name'])) ?> ✍️</p>
-            <h1>Suas cartas</h1>
-            <p class="muted">
-                <?= (int) $stats['sent'] ?> enviadas · <?= (int) $stats['drafts'] ?> rascunhos · <?= (int) $stats['opened'] ?> já lidas
-                <?php if ($newReplies): ?> · <a class="pill pill-hot" href="#cartas"><?= $newReplies ?> resposta<?= $newReplies > 1 ? 's' : '' ?> nova<?= $newReplies > 1 ? 's' : '' ?> 💬</a><?php endif; ?>
+            <p class="eyebrow">Escrivaninha de <?= e(first_name($user['name'])) ?></p>
+            <h1>Suas <em>cartas</em></h1>
+            <p>
+                <?= (int) $counts['sent'] ?> enviada<?= (int) $counts['sent'] === 1 ? '' : 's' ?>,
+                <?= (int) $counts['draft'] ?> em rascunho.
+                <?php if ($newReplies): ?>
+                    <a href="#cartas"><?= $newReplies ?> resposta<?= $newReplies > 1 ? 's' : '' ?> esperando você.</a>
+                <?php endif; ?>
             </p>
         </div>
-        <form method="post" action="acoes.php">
-            <?= csrf_field() ?>
-            <input type="hidden" name="acao" value="criar">
-            <?php if ($filterFriend): ?><input type="hidden" name="para" value="<?= $filterFriend ?>"><?php endif; ?>
-            <button class="btn btn-primary btn-lg"><span aria-hidden="true">＋</span> Criar nova carta</button>
-        </form>
+        <a class="btn btn-primary btn-lg" href="nova.php<?= $filterFriend ? '?para=' . $filterFriend : '' ?>"><?= icon('plus') ?>Nova carta</a>
     </section>
 
     <?php if (!$friends): ?>
-        <div class="callout-box">
-            <span class="callout-emoji">👋</span>
-            <div>Você ainda não adicionou ninguém. <a href="amigos.php">Adicione seus amigos</a> para poder enviar cartas para eles.</div>
+        <div class="notice"><?= icon('users') ?><div>Ninguém na sua lista ainda. <a href="amigos.php">Adicione as pessoas</a> para quem você quer escrever.</div></div>
+    <?php endif; ?>
+
+    <nav class="tabs" id="cartas" aria-label="Filtrar por situação">
+        <?php foreach (['' => ['Todas', 'total'], 'draft' => ['Rascunhos', 'draft'], 'sent' => ['Enviadas', 'sent'], 'unread' => ['Não abertas', 'unread']] as $key => [$label, $col]): ?>
+            <a class="<?= $filterStatus === $key ? 'active' : '' ?>" href="<?= e(filter_url(['status' => $key])) ?>"><?= e($label) ?> <span class="count"><?= (int) $counts[$col] ?></span></a>
+        <?php endforeach; ?>
+    </nav>
+
+    <?php if (count($friends) > 1): ?>
+        <div class="toolbar">
+            <div class="people" aria-label="Filtrar por pessoa">
+                <a class="person all <?= !$filterFriend ? 'active' : '' ?>" href="<?= e(filter_url(['para' => ''])) ?>">Todo mundo</a>
+                <?php foreach ($friends as $f): ?>
+                    <a class="person <?= $filterFriend === (int) $f['id'] ? 'active' : '' ?>" href="<?= e(filter_url(['para' => $f['id']])) ?>">
+                        <?= avatar_html($f, 'xs') ?><?= e(first_name($f['name'])) ?>
+                    </a>
+                <?php endforeach; ?>
+            </div>
         </div>
     <?php endif; ?>
 
-    <div class="filters" id="cartas">
-        <div class="chips">
-            <a class="chip <?= !$filterFriend ? 'active' : '' ?>" href="<?= e(filter_url(['para' => ''])) ?>">Todos</a>
-            <?php foreach ($friends as $f): ?>
-                <a class="chip <?= $filterFriend === (int) $f['id'] ? 'active' : '' ?>" href="<?= e(filter_url(['para' => $f['id']])) ?>">
-                    <?= avatar_html($f, 'xs') ?> <?= e(first_name($f['name'])) ?>
-                </a>
-            <?php endforeach; ?>
-        </div>
-        <div class="chips">
-            <?php foreach (['' => 'Todas', 'draft' => 'Rascunhos', 'sent' => 'Enviadas', 'unread' => 'Ainda não lidas'] as $key => $label): ?>
-                <a class="chip chip-soft <?= $filterStatus === $key ? 'active' : '' ?>" href="<?= e(filter_url(['status' => $key])) ?>"><?= e($label) ?></a>
-            <?php endforeach; ?>
-        </div>
-    </div>
-
     <?php if (!$letters): ?>
         <div class="empty">
-            <div class="empty-icon">🕊️</div>
-            <h2>Nenhuma carta por aqui</h2>
-            <p class="muted">Que tal escrever a primeira?</p>
+            <h2>Nada por aqui</h2>
+            <p class="muted">Quando você começar uma carta, ela aparece nesta mesa.</p>
+            <a class="btn" href="nova.php"><?= icon('pen') ?>Começar uma carta</a>
         </div>
     <?php else: ?>
         <div class="letter-grid">
             <?php foreach ($letters as $l):
                 $content = json_decode($l['content'], true) ?: [];
-                $envColor = $content['envelope']['color'] ?? '#e9b8b0';
-                $paperColor = $content['paper']['color'] ?? '#fffdf6';
                 $locked = letter_locked($l);
+                $envelope = [
+                    'env' => $content['envelope'] ?? [],
+                    'to' => $l['recipient_name'] ? first_name($l['recipient_name']) : '',
+                    'paper' => $content['paper']['color'] ?? '#fffdf6',
+                    'sentAt' => $l['status'] === 'sent' ? iso($l['sent_at']) : null,
+                    'locked' => $locked,
+                ];
                 ?>
                 <article class="letter-card">
-                    <a class="letter-card-preview" href="editor.php?id=<?= (int) $l['id'] ?>" style="--env: <?= e($envColor) ?>; --paper: <?= e($paperColor) ?>">
-                        <div class="lc-paper">
-                            <strong><?= e($l['title'] ?: 'Sem título') ?></strong>
-                            <p><?= e(content_excerpt($content, 120)) ?: '<em>Carta em branco</em>' ?></p>
-                        </div>
-                        <div class="lc-env"></div>
-                    </a>
-                    <div class="letter-card-body">
-                        <div class="lc-to">
+                    <a class="lc-visual" href="editor.php?id=<?= (int) $l['id'] ?>" data-envelope="<?= e(json_encode($envelope, JSON_UNESCAPED_UNICODE)) ?>" aria-label="Editar <?= e($l['title']) ?>"></a>
+                    <div class="lc-meta">
+                        <div class="lc-title"><a href="editor.php?id=<?= (int) $l['id'] ?>"><?= e($l['title'] ?: 'Sem título') ?></a></div>
+                        <p class="lc-excerpt"><?= e(content_excerpt($content, 110)) ?></p>
+                        <div class="lc-line">
                             <?php if ($l['recipient_id']): ?>
-                                <?= avatar_html(['name' => $l['recipient_name'], 'avatar' => $l['avatar'], 'color' => $l['color']], 'sm') ?>
-                                <span>Para <b><?= e(first_name($l['recipient_name'])) ?></b></span>
-                            <?php else: ?>
-                                <span class="avatar avatar-sm avatar-empty">?</span><span class="muted">Sem destinatário</span>
+                                <span class="lc-to"><?= avatar_html(['name' => $l['recipient_name'], 'avatar' => $l['avatar'], 'color' => $l['color']], 'xs') ?><?= e(first_name($l['recipient_name'])) ?></span>
                             <?php endif; ?>
-                        </div>
-                        <div class="lc-status">
                             <?php if ($l['status'] === 'draft'): ?>
-                                <span class="badge badge-draft">Rascunho</span>
+                                <span class="tag tag-draft">Rascunho</span>
                             <?php elseif ($locked): ?>
-                                <span class="badge badge-scheduled">⏳ Abre em <?= e(fmt_date($l['open_at'])) ?></span>
+                                <span class="tag tag-scheduled" title="Pode ser aberta a partir de <?= e(fmt_date($l['open_at'])) ?>">Lacrada até <?= e(fmt_date($l['open_at'], false)) ?></span>
                             <?php elseif ($l['first_opened_at']): ?>
-                                <span class="badge badge-read" title="Primeira leitura: <?= e(fmt_date($l['first_opened_at'])) ?>">✓✓ Lida <?= (int) $l['open_count'] ?>x · <?= e(time_ago($l['last_opened_at'])) ?></span>
+                                <span class="tag tag-read" title="Aberta pela primeira vez em <?= e(fmt_date($l['first_opened_at'])) ?>">Lida <?= e(time_ago($l['last_opened_at'])) ?><?= $l['open_count'] > 1 ? ' · ' . (int) $l['open_count'] . 'x' : '' ?></span>
                             <?php else: ?>
-                                <span class="badge badge-sent">✉ Enviada · ainda não aberta</span>
+                                <span class="tag tag-sent">Entregue, não aberta</span>
+                            <?php endif; ?>
+                            <?php if ($l['reaction_list']): ?><span class="lc-reactions"><?= e(str_replace(',', '', $l['reaction_list'])) ?></span><?php endif; ?>
+                            <?php if ($l['reply_count']): ?>
+                                <a href="carta.php?id=<?= (int) $l['id'] ?>#respostas" class="lc-replies <?= $l['unread_replies'] ? 'hot' : '' ?>"><?= icon('message', 'ic-sm') ?><?= (int) $l['reply_count'] ?></a>
                             <?php endif; ?>
                         </div>
-                        <?php if ($l['reaction_list'] || $l['reply_count']): ?>
-                            <div class="lc-feedback">
-                                <?php if ($l['reaction_list']): ?><span class="lc-reactions"><?= e(str_replace(',', ' ', $l['reaction_list'])) ?></span><?php endif; ?>
-                                <?php if ($l['reply_count']): ?>
-                                    <a href="carta.php?id=<?= (int) $l['id'] ?>#respostas" class="lc-replies <?= $l['unread_replies'] ? 'hot' : '' ?>">
-                                        💬 <?= (int) $l['reply_count'] ?><?= $l['unread_replies'] ? ' · ' . (int) $l['unread_replies'] . ' nova' . ($l['unread_replies'] > 1 ? 's' : '') : '' ?>
-                                    </a>
-                                <?php endif; ?>
+                    </div>
+                    <div class="lc-actions">
+                        <a class="btn btn-sm btn-ghost" href="editor.php?id=<?= (int) $l['id'] ?>"><?= icon('pen', 'ic-sm') ?>Editar</a>
+                        <a class="btn btn-sm btn-ghost" href="carta.php?id=<?= (int) $l['id'] ?>"><?= icon('eye', 'ic-sm') ?>Ver</a>
+                        <details class="menu">
+                            <summary class="btn btn-sm btn-ghost btn-icon" aria-label="Mais ações"><?= icon('more') ?></summary>
+                            <div class="menu-list">
+                                <form method="post" action="acoes.php">
+                                    <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $l['id'] ?>">
+                                    <button name="acao" value="duplicar"><?= icon('copy', 'ic-sm') ?>Duplicar</button>
+                                    <?php if ($l['status'] === 'sent'): ?>
+                                        <button name="acao" value="desenviar" data-confirm="A carta volta para os rascunhos e sai da caixa de <?= e(first_name((string) $l['recipient_name'])) ?>. Continuar?"><?= icon('undo', 'ic-sm') ?>Voltar para rascunho</button>
+                                    <?php endif; ?>
+                                    <button name="acao" value="excluir" class="danger" data-confirm="Excluir esta carta para sempre?"><?= icon('trash', 'ic-sm') ?>Excluir</button>
+                                </form>
                             </div>
-                        <?php endif; ?>
-                        <div class="lc-actions">
-                            <a class="btn btn-sm" href="editor.php?id=<?= (int) $l['id'] ?>">✏️ Editar</a>
-                            <a class="btn btn-sm btn-ghost" href="carta.php?id=<?= (int) $l['id'] ?>">👁 Ver</a>
-                            <details class="menu">
-                                <summary class="btn btn-sm btn-ghost" aria-label="Mais ações">⋯</summary>
-                                <div class="menu-list">
-                                    <form method="post" action="acoes.php">
-                                        <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $l['id'] ?>">
-                                        <button name="acao" value="duplicar">📄 Duplicar</button>
-                                        <?php if ($l['status'] === 'sent'): ?>
-                                            <button name="acao" value="desenviar" data-confirm="A carta volta a ser rascunho e some da caixa de <?= e(first_name((string) $l['recipient_name'])) ?>. Continuar?">↩️ Voltar para rascunho</button>
-                                        <?php endif; ?>
-                                        <button name="acao" value="excluir" class="danger" data-confirm="Excluir esta carta para sempre? Não dá para desfazer.">🗑 Excluir</button>
-                                    </form>
-                                </div>
-                            </details>
-                        </div>
+                        </details>
                     </div>
                 </article>
             <?php endforeach; ?>
@@ -169,4 +160,4 @@ page_head('Cartas', ['body' => 'page-admin']);
     <?php endif; ?>
 </main>
 <?php
-page_foot();
+page_foot(['assets/js/letter.js']);

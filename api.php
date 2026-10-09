@@ -41,12 +41,13 @@ switch ($action) {
         $letter = load_letter_for($user, $in['id'] ?? 0);
         $content = sanitize_letter_content($in['content'] ?? []);
         $title = plain($in['title'] ?? '', 150);
+        $json = json_encode($content, JSON_UNESCAPED_UNICODE);
         db_update('letters', (int) $letter['id'], [
             'title' => $title,
-            'content' => json_encode($content, JSON_UNESCAPED_UNICODE),
+            'content' => $json,
             'updated_at' => now(),
         ]);
-        prune_letter_media((int) $letter['id'], $content);
+        save_version((int) $letter['id'], $title, $json, !empty($in['checkpoint']));
         json_out(['ok' => true, 'savedAt' => date('H:i')]);
 
     case 'send':
@@ -81,17 +82,40 @@ switch ($action) {
             }
         }
         db_update('letters', (int) $letter['id'], $data);
+        prune_letter_media((int) $letter['id'], $letter['content']);
         json_out(['ok' => true, 'recipient' => first_name($recipient['name']), 'firstSend' => $firstSend]);
 
     case 'upload':
         need_admin($isAdmin);
         $letter = load_letter_for($user, $in['id'] ?? 0);
         try {
-            $media = upload_image($_FILES['image'] ?? [], (int) $letter['id']);
+            $media = isset($_FILES['audio'])
+                ? upload_audio($_FILES['audio'], (int) $letter['id'])
+                : upload_image($_FILES['image'] ?? [], (int) $letter['id']);
         } catch (RuntimeException $e) {
             json_error($e->getMessage());
         }
         json_out(['ok' => true] + $media);
+
+    case 'versions':
+        need_admin($isAdmin);
+        $letter = load_letter_for($user, $in['id'] ?? 0);
+        $rows = q_all('SELECT id, title, created_at, LENGTH(content) AS size FROM letter_versions WHERE letter_id = ? ORDER BY id DESC', [(int) $letter['id']]);
+        json_out(['ok' => true, 'versions' => array_map(fn($v) => [
+            'id' => (int) $v['id'],
+            'title' => $v['title'],
+            'when' => fmt_date($v['created_at']),
+            'ago' => time_ago($v['created_at']),
+        ], $rows)]);
+
+    case 'version':
+        need_admin($isAdmin);
+        $letter = load_letter_for($user, $in['id'] ?? 0);
+        $v = q_one('SELECT * FROM letter_versions WHERE id = ? AND letter_id = ?', [(int) ($in['version_id'] ?? 0), (int) $letter['id']]);
+        if (!$v) {
+            json_error('Versão não encontrada.', 404);
+        }
+        json_out(['ok' => true, 'title' => $v['title'], 'content' => sanitize_letter_content(json_decode($v['content'], true))]);
 
     // ---------- Leitor ----------
     case 'opened':

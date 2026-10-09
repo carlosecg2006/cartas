@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'created_at' => now(),
                     ]);
                     login_user(q_one('SELECT * FROM users WHERE id = ?', [$id]), true);
-                    flash('Tudo pronto! Agora adicione seus amigos e escreva a primeira carta. 💌');
+                    flash('Pronto. Agora adicione seus amigos e escreva a primeira carta.');
                 }
                 redirect('index.php');
             } catch (Throwable $e) {
@@ -77,7 +77,6 @@ page_head('Instalação', ['body' => 'auth-page', 'nav' => false]);
 ?>
 <main class="auth-wrap">
     <div class="auth-card card wide">
-        <div class="auth-logo">💌</div>
         <h1>Instalação</h1>
 
         <?php foreach ($errors as $error): ?>
@@ -116,7 +115,7 @@ page_head('Instalação', ['body' => 'auth-page', 'nav' => false]);
                 <button class="btn btn-primary btn-block">Criar conta e começar</button>
             </form>
         <?php else: ?>
-            <p>O site já está instalado. 🎉</p>
+            <p class="center">O site já está instalado.</p>
             <a class="btn btn-primary btn-block" href="login.php">Ir para o login</a>
         <?php endif; ?>
     </div>

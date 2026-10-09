@@ -28,6 +28,7 @@ require APP_DIR . '/db.php';
 require APP_DIR . '/auth.php';
 require APP_DIR . '/content.php';
 require APP_DIR . '/letters.php';
+require APP_DIR . '/templates.php';
 require APP_DIR . '/layout.php';
 
 // Cabeçalhos de segurança
@@ -39,6 +40,7 @@ header("Content-Security-Policy: default-src 'self'; "
     . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
     . "font-src 'self' https://fonts.gstatic.com; "
     . "img-src 'self' data: blob:; "
+    . "media-src 'self' blob:; "
     . "frame-src https://www.youtube-nocookie.com https://open.spotify.com; "
     . "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'");
 
@@ -59,4 +61,7 @@ define('IS_HTTPS', $https);
 $script = basename($_SERVER['SCRIPT_NAME'] ?? '');
 if ($script !== 'install.php' && ($GLOBALS['config'] === null || !db_ready())) {
     redirect('install.php');
+}
+if ($GLOBALS['config'] !== null && $script !== 'install.php') {
+    ensure_schema();
 }

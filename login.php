@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = (string) ($_POST['password'] ?? '');
 
     if (too_many_attempts($username)) {
-        $error = 'Muitas tentativas. Respire fundo e tente de novo em alguns minutos. 🌙';
+        $error = 'Muitas tentativas seguidas. Tente de novo em alguns minutos.';
     } else {
         $user = q_one('SELECT * FROM users WHERE username = ?', [$username]);
         if ($user && password_verify($password, $user['password_hash'])) {
@@ -31,15 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-page_head('Entrar', ['body' => 'auth-page', 'nav' => false]);
+page_head('Entrar', ['body' => 'auth-page', 'nav' => false, 'css' => ['assets/css/letter.css']]);
 ?>
 <main class="auth-wrap">
     <div class="auth-card card">
-        <div class="auth-envelope" aria-hidden="true">
-            <div class="mini-env"><span class="mini-seal">❤</span></div>
-        </div>
+        <div class="auth-art" aria-hidden="true" data-envelope="<?= e(json_encode(['env' => ['color' => '#e7d3bd', 'liner' => 'hearts', 'seal' => '❤', 'sealColor' => '#a3322a', 'stamp' => 'heart'], 'to' => '', 'sentAt' => iso(now())], JSON_UNESCAPED_UNICODE)) ?>"></div>
         <h1><?= e(app_name()) ?></h1>
-        <p class="muted">Alguém pode ter escrito algo pra você. Entre para ver.</p>
+        <p class="muted">Pode ter carta esperando por você.</p>
         <?php if ($error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endif; ?>
         <form method="post" class="form">
             <?= csrf_field() ?>
@@ -55,4 +53,4 @@ page_head('Entrar', ['body' => 'auth-page', 'nav' => false]);
     </div>
 </main>
 <?php
-page_foot();
+page_foot(['assets/js/letter.js']);

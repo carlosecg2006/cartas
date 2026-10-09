@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'A confirmação não é igual à nova senha.';
     } else {
         db_update('users', (int) $user['id'], ['password_hash' => password_hash($new, PASSWORD_DEFAULT)]);
-        flash('Senha alterada! 🔐');
+        flash('Senha alterada.');
         redirect('conta.php');
     }
 }
@@ -27,10 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 page_head('Minha conta');
 ?>
 <main class="container narrow">
-    <section class="hero hero-center">
+    <section class="page-head page-head-center">
         <?= avatar_html($user, 'xl') ?>
         <h1><?= e($user['name']) ?></h1>
-        <p class="muted">@<?= e($user['username']) ?> · <?= $user['role'] === 'admin' ? 'remetente' : 'destinatário(a)' ?></p>
+        <p>@<?= e($user['username']) ?> · <?= $user['role'] === 'admin' ? 'quem escreve' : 'quem recebe' ?></p>
     </section>
 
     <section class="card">
@@ -45,9 +45,9 @@ page_head('Minha conta');
         </form>
     </section>
 
-    <form method="post" action="logout.php" class="center">
+    <form method="post" action="logout.php" class="row center" style="margin-top:1.5rem">
         <?= csrf_field() ?>
-        <button class="btn btn-ghost">Sair da conta</button>
+        <button class="btn btn-ghost"><?= icon('logout') ?>Sair da conta</button>
     </form>
 </main>
 <?php

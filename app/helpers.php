@@ -166,3 +166,9 @@ function base_url(): string
     $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
     return (IS_HTTPS ? 'https' : 'http') . '://' . $host . $dir . '/';
 }
+
+/** Ícone SVG do arquivo assets/icons.svg */
+function icon(string $name, string $class = ''): string
+{
+    return '<svg class="ic' . ($class !== '' ? ' ' . e($class) : '') . '" aria-hidden="true"><use href="assets/icons.svg#' . e($name) . '"></use></svg>';
+}

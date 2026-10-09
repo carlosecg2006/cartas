@@ -15,7 +15,7 @@ $letter = !empty($_POST['id']) ? find_letter((int) $_POST['id']) : null;
 
 switch ($action) {
     case 'criar':
-        $id = create_letter(!empty($_POST['para']) ? (int) $_POST['para'] : null, $admin);
+        $id = create_letter(!empty($_POST['para']) ? (int) $_POST['para'] : null, $admin, (string) ($_POST['modelo'] ?? 'branco'));
         redirect('editor.php?id=' . $id);
 
     case 'duplicar':

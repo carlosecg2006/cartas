@@ -54,8 +54,8 @@ function require_admin(): array
     if ($user['role'] !== 'admin') {
         http_response_code(403);
         page_head('Sem acesso');
-        echo '<main class="container narrow"><div class="empty"><div class="empty-icon">🔒</div>'
-            . '<h1>Esse cantinho é só do remetente</h1><p><a class="btn" href="index.php">Voltar para minhas cartas</a></p></div></main>';
+        echo '<main class="container narrow"><div class="empty">'
+            . '<h1>Esta parte é só de quem escreve</h1><p><a class="btn" href="index.php">Voltar para a sua caixa</a></p></div></main>';
         page_foot();
         exit;
     }

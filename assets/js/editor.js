@@ -20,21 +20,24 @@
   // ---------------------------------------------------------------- tipos de bloco
 
   const BLOCKS = [
-    { key: 'paragraph', icon: '¶', label: 'Texto', desc: 'Um parágrafo simples', words: 'texto paragrafo', make: () => ({ type: 'paragraph', html: '' }) },
-    { key: 'h1', icon: 'H1', label: 'Título', desc: 'Título grande', words: 'titulo heading h1', make: () => ({ type: 'heading', level: 1, html: '' }) },
-    { key: 'h2', icon: 'H2', label: 'Subtítulo', desc: 'Título médio', words: 'subtitulo h2', make: () => ({ type: 'heading', level: 2, html: '' }) },
-    { key: 'h3', icon: 'H3', label: 'Título pequeno', desc: 'Para separar partes', words: 'titulo pequeno h3', make: () => ({ type: 'heading', level: 3, html: '' }) },
-    { key: 'quote', icon: '❝', label: 'Citação', desc: 'Uma frase em destaque', words: 'citacao quote frase', make: () => ({ type: 'quote', html: '' }) },
-    { key: 'list', icon: '•', label: 'Lista', desc: 'Lista com marcadores', words: 'lista bullet marcadores', make: () => ({ type: 'list', style: 'bullet', items: [''] }) },
-    { key: 'numbered', icon: '1.', label: 'Lista numerada', desc: 'Lista com números', words: 'lista numerada numeros', make: () => ({ type: 'list', style: 'number', items: [''] }) },
-    { key: 'checklist', icon: '☑', label: 'Lista de desejos', desc: 'Coisas para fazermos juntos', words: 'checklist tarefas desejos', make: () => ({ type: 'checklist', items: [{ checked: false, html: '' }] }) },
-    { key: 'callout', icon: '💡', label: 'Destaque', desc: 'Caixinha colorida com emoji', words: 'destaque callout caixa', make: () => ({ type: 'callout', emoji: '💌', bg: '#fde8e4', html: '' }) },
-    { key: 'image', icon: '🖼️', label: 'Foto', desc: 'Polaroid, moldura ou simples', words: 'foto imagem image polaroid', make: () => ({ type: 'image', src: '', caption: '', frame: 'polaroid', width: 'md', tilt: -2 }) },
-    { key: 'divider', icon: '〰', label: 'Divisória', desc: 'Separador decorado', words: 'divisoria separador linha', make: () => ({ type: 'divider', style: 'hearts' }) },
-    { key: 'secret', icon: '🔒', label: 'Segredo', desc: 'Texto escondido até tocar', words: 'segredo secreto surpresa', make: () => ({ type: 'secret', label: 'Toque para revelar um segredo', html: '' }) },
-    { key: 'music', icon: '🎵', label: 'Música', desc: 'YouTube ou Spotify', words: 'musica youtube spotify som', make: () => ({ type: 'music', provider: '', kind: '', mid: '' }) },
-    { key: 'signature', icon: '✍️', label: 'Assinatura', desc: 'Despedida com seu nome', words: 'assinatura despedida nome', make: () => ({ type: 'signature', closing: 'Com carinho,', name: DATA.sender, date: DATA.today }) },
-    { key: 'spacer', icon: '↕', label: 'Espaço', desc: 'Um respiro entre blocos', words: 'espaco espacamento', make: () => ({ type: 'spacer', height: 40 }) },
+    { key: 'paragraph', icon: 'type', label: 'Texto', desc: 'Um parágrafo simples', words: 'texto paragrafo', make: () => ({ type: 'paragraph', html: '' }) },
+    { key: 'h1', icon: 'h1', label: 'Título', desc: 'Título grande', words: 'titulo heading h1', make: () => ({ type: 'heading', level: 1, html: '' }) },
+    { key: 'h2', icon: 'h2', label: 'Subtítulo', desc: 'Título médio', words: 'subtitulo h2', make: () => ({ type: 'heading', level: 2, html: '' }) },
+    { key: 'h3', icon: 'h3', label: 'Título pequeno', desc: 'Para separar partes', words: 'titulo pequeno h3', make: () => ({ type: 'heading', level: 3, html: '' }) },
+    { key: 'quote', icon: 'quote', label: 'Citação', desc: 'Uma frase em destaque', words: 'citacao quote frase', make: () => ({ type: 'quote', html: '' }) },
+    { key: 'list', icon: 'list', label: 'Lista', desc: 'Lista com marcadores', words: 'lista bullet marcadores', make: () => ({ type: 'list', style: 'bullet', items: [''] }) },
+    { key: 'numbered', icon: 'list-ordered', label: 'Lista numerada', desc: 'Lista com números', words: 'lista numerada numeros', make: () => ({ type: 'list', style: 'number', items: [''] }) },
+    { key: 'checklist', icon: 'list-check', label: 'Lista de desejos', desc: 'Coisas para fazermos juntos', words: 'checklist tarefas desejos', make: () => ({ type: 'checklist', items: [{ checked: false, html: '' }] }) },
+    { key: 'callout', icon: 'sparkle', label: 'Destaque', desc: 'Caixinha colorida com emoji', words: 'destaque callout caixa', make: () => ({ type: 'callout', emoji: '💌', bg: '#fde8e4', html: '' }) },
+    { key: 'image', icon: 'image', label: 'Foto', desc: 'Polaroid, moldura ou simples', words: 'foto imagem image polaroid', make: () => ({ type: 'image', src: '', caption: '', frame: 'polaroid', width: 'md', tilt: -2 }) },
+    { key: 'gallery', icon: 'images', label: 'Galeria', desc: 'Várias fotos: espalhadas, grade ou filme', words: 'galeria fotos varias album', make: () => ({ type: 'gallery', layout: 'scatter', items: [] }) },
+    { key: 'phototext', icon: 'photo-text', label: 'Foto e texto', desc: 'Foto de um lado, texto do outro', words: 'foto texto lado colunas', make: () => ({ type: 'phototext', src: '', side: 'left', frame: 'polaroid', html: '' }) },
+    { key: 'audio', icon: 'mic', label: 'Mensagem de voz', desc: 'Grave sua voz ou envie um áudio', words: 'audio voz gravar mensagem microfone', make: () => ({ type: 'audio', src: '', label: '', duration: 0, peaks: [] }) },
+    { key: 'music', icon: 'music', label: 'Música', desc: 'YouTube ou Spotify', words: 'musica youtube spotify som', make: () => ({ type: 'music', provider: '', kind: '', mid: '' }) },
+    { key: 'secret', icon: 'eye-off', label: 'Segredo', desc: 'Texto escondido até tocar', words: 'segredo secreto surpresa', make: () => ({ type: 'secret', label: 'Toque para revelar um segredo', html: '' }) },
+    { key: 'divider', icon: 'minus', label: 'Divisória', desc: 'Separador decorado', words: 'divisoria separador linha', make: () => ({ type: 'divider', style: 'hearts' }) },
+    { key: 'signature', icon: 'signature', label: 'Assinatura', desc: 'Despedida com seu nome', words: 'assinatura despedida nome', make: () => ({ type: 'signature', closing: 'Com carinho,', name: DATA.sender, date: DATA.today }) },
+    { key: 'spacer', icon: 'move-v', label: 'Espaço', desc: 'Um respiro entre blocos', words: 'espaco espacamento', make: () => ({ type: 'spacer', height: 40 }) },
   ];
   const TEXT_TYPES = ['paragraph', 'heading', 'quote'];
   const CONVERTIBLE = ['paragraph', 'heading', 'quote', 'list', 'checklist', 'callout'];
@@ -104,7 +107,7 @@
   function renderBlocks() {
     inner.replaceChildren(...blocks().map(buildBlock));
     if (!blocks().length) {
-      const empty = L.el('button', 'eb-empty', { type: 'button', text: '＋ Clique para começar a escrever' });
+      const empty = L.el('button', 'eb-empty', { type: 'button', text: 'Clique para começar a escrever' });
       empty.addEventListener('click', () => {
         const b = newBlock('paragraph');
         blocks().push(b);
@@ -148,8 +151,10 @@
     wrap.tabIndex = -1;
 
     const gutter = L.el('div', 'eb-gutter', { contenteditable: 'false' });
-    const add = L.el('button', 'eb-add', { type: 'button', title: 'Adicionar bloco abaixo', text: '+' });
-    const handle = L.el('button', 'eb-handle', { type: 'button', title: 'Arraste para mover · clique para opções', text: '⋮⋮' });
+    const add = L.el('button', 'eb-add', { type: 'button', title: 'Adicionar bloco abaixo' });
+    add.appendChild(L.icon('plus'));
+    const handle = L.el('button', 'eb-handle', { type: 'button', title: 'Arraste para mover · clique para opções' });
+    handle.appendChild(L.icon('grip'));
     gutter.append(add, handle);
     add.addEventListener('click', () => openInsertMenu(add, b.id));
     setupHandle(handle, b);
@@ -314,7 +319,8 @@
       if (!b.src) {
         fig.replaceChildren();
         const pick = L.el('button', 'img-upload', { type: 'button' });
-        pick.innerHTML = '<span class="img-upload-icon">📷</span><span>Escolher foto</span><small>ou arraste uma imagem aqui</small>';
+        pick.innerHTML = '<span>Escolher foto</span><small>ou arraste uma imagem aqui</small>';
+        pick.prepend(L.icon('image', 'ic-lg'));
         pick.addEventListener('click', async () => {
           const file = await pickFile();
           if (file) setBlockImage(b, file);
@@ -354,7 +360,9 @@
       const box = L.el('div', 'secret editing');
       const label = plainEditable('div', 'secret-label', b.label, 'Texto do botão', (t) => { b.label = t; });
       const head = L.el('div', 'secret-head');
-      head.append(L.el('span', 'secret-lock', { text: '🔒' }), label);
+      const lock = L.el('span', 'secret-lock');
+      lock.appendChild(L.icon('eye-off', 'ic-sm'));
+      head.append(lock, label);
       const text = editable('div', 'secret-content lb-text', b.html, 'O segredo… (só aparece quando tocarem)', (n) => { b.html = n.innerHTML; });
       textBehavior(text, b);
       box.append(head, text);
@@ -365,7 +373,7 @@
         const embed = L.musicEmbed(b);
         const wrap = L.el('div', 'music-edit');
         wrap.appendChild(embed);
-        const change = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: '🎵 Trocar música' });
+        const change = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Trocar música' });
         change.addEventListener('click', () => {
           b.provider = '';
           b.mid = '';
@@ -378,7 +386,7 @@
         return;
       }
       const form = L.el('form', 'music-form');
-      form.innerHTML = '<span class="music-icon">🎵</span>';
+      form.appendChild(L.icon('music', 'music-icon'));
       const input = L.el('input', '', { type: 'url', placeholder: 'Cole o link do YouTube ou Spotify', 'aria-label': 'Link da música' });
       const btn = L.el('button', 'btn btn-sm btn-primary', { type: 'submit', text: 'Adicionar' });
       form.append(input, btn);
@@ -403,6 +411,75 @@
         plainEditable('p', 'sig-date', b.date, 'Data (opcional)', (t) => { b.date = t; }),
       );
       body.appendChild(wrap);
+    },
+    gallery(body, b) {
+      const gal = L.renderGallery(b);
+      Array.from(gal.children).forEach((fig, i) => {
+        const del = L.el('button', 'gal-del', { type: 'button', title: 'Tirar foto', contenteditable: 'false' });
+        del.appendChild(L.icon('x', 'ic-sm'));
+        del.addEventListener('click', () => {
+          b.items.splice(i, 1);
+          rerenderBlock(b);
+          commit();
+        });
+        fig.appendChild(del);
+        const cap = fig.querySelector('figcaption');
+        if (cap) {
+          const ed = plainEditable('figcaption', '', b.items[i].caption, 'Legenda', (t) => { b.items[i].caption = t; });
+          cap.replaceWith(ed);
+        }
+      });
+      const add = L.el('button', 'gal-add', { type: 'button' });
+      add.append(L.icon('plus'), L.el('span', '', { text: b.items.length ? 'Mais fotos' : 'Escolher fotos' }));
+      add.addEventListener('click', async () => {
+        const files = await pickFile(true);
+        if (files.length) addGalleryFiles(b, files);
+      });
+      gal.appendChild(add);
+      gal.addEventListener('dragover', (e) => { e.preventDefault(); gal.classList.add('drop-hover'); });
+      gal.addEventListener('dragleave', () => gal.classList.remove('drop-hover'));
+      gal.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        gal.classList.remove('drop-hover');
+        const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+        if (files.length) addGalleryFiles(b, files);
+      });
+      gal.querySelectorAll('img').forEach((img) => img.addEventListener('load', layout));
+      body.appendChild(gal);
+    },
+    phototext(body, b) {
+      const row = L.el('div', 'phototext side-' + b.side);
+      let fig;
+      if (b.src) {
+        fig = L.renderImageFigure({ src: b.src, frame: b.frame, width: 'lg', tilt: b.side === 'right' ? 2 : -2 });
+        fig.querySelector('figcaption')?.remove();
+        fig.querySelector('img')?.addEventListener('load', layout);
+      } else {
+        fig = L.el('figure', 'lb-figure frame-plain w-lg');
+        const pick = L.el('button', 'img-upload', { type: 'button' });
+        pick.append(L.icon('image', 'ic-lg'), L.el('span', '', { text: 'Foto' }));
+        pick.addEventListener('click', async () => {
+          const file = await pickFile();
+          if (file) setBlockImage(b, file);
+        });
+        fig.appendChild(pick);
+      }
+      const text = editable('div', 'phototext-text lb-text', b.html, 'Conte a história dessa foto…', (n) => { b.html = n.innerHTML; });
+      textBehavior(text, b);
+      row.append(fig, text);
+      body.appendChild(row);
+    },
+    audio(body, b) {
+      if (b.src) {
+        const wrap = L.el('div', 'audio-edit');
+        wrap.appendChild(L.renderAudio(b));
+        const label = plainEditable('div', 'audio-label', b.label, 'Mensagem de voz', (t) => { b.label = t; });
+        wrap.appendChild(label);
+        body.appendChild(wrap);
+        return;
+      }
+      body.appendChild(buildRecorder(b));
     },
     spacer(body, b, wrap) {
       wrap.style.height = b.height + 'px';
@@ -658,6 +735,8 @@
   function afterInsert(nb) {
     if (nb.type === 'image') {
       pickFile().then((file) => { if (file) setBlockImage(nb, file); });
+    } else if (nb.type === 'gallery') {
+      pickFile(true).then((files) => { if (files.length) addGalleryFiles(nb, files); });
     } else if (nb.type === 'music') {
       $('input', blockNode(nb.id))?.focus();
     } else if (nb.type === 'secret') {
@@ -799,7 +878,7 @@
     BLOCKS.filter((d) => !filter || filter(d)).forEach((d) => {
       const item = L.el('button', 'block-item', { type: 'button', 'data-key': d.key });
       item.append(
-        L.el('span', 'block-icon', { text: d.icon }),
+        (() => { const ic = L.el('span', 'block-icon'); ic.appendChild(L.icon(d.icon)); return ic; })(),
         L.el('span', 'block-label', { html: '<b></b><small></small>' }),
       );
       item.querySelector('b').textContent = d.label;
@@ -977,7 +1056,7 @@
 
   function optionRow(options, current, onPick, opts) {
     opts = opts || {};
-    const row = L.el('div', 'opt-row' + (opts.wrap ? ' wrap' : ''));
+    const row = L.el('div', 'opt-row' + (opts.wrap ? ' wrap' : '') + (opts.className ? ' ' + opts.className : ''));
     Object.entries(options).forEach(([value, label]) => {
       const btn = L.el('button', 'opt' + (String(current) === String(value) ? ' active' : ''), { type: 'button', title: opts.titles ? opts.titles[value] : null });
       if (opts.render) opts.render(btn, value, label);
@@ -1054,7 +1133,11 @@
       s.appendChild(optionRow(opts, blockKey(b), (key) => {
         closePopover();
         replaceBlock(b, convertBlock(b, key), 'end');
-      }, { titles: Object.fromEntries(keys.map((k) => [k, BLOCKS.find((d) => d.key === k).label])) }));
+      }, {
+        titles: Object.fromEntries(keys.map((k) => [k, BLOCKS.find((d) => d.key === k).label])),
+        render: (btn, value, label) => btn.appendChild(L.icon(label)),
+        className: 'opt-icons',
+      }));
       menu.appendChild(s);
     }
 
@@ -1072,13 +1155,47 @@
       });
       tilt.addEventListener('change', commit);
       s.appendChild(tilt);
-      const replace = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: '📷 Trocar foto' });
+      const replace = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Trocar foto' });
       replace.addEventListener('click', async () => {
         closePopover();
         const file = await pickFile();
         if (file) setBlockImage(b, file);
       });
       s.appendChild(replace);
+      menu.appendChild(s);
+    }
+
+    if (b.type === 'gallery') {
+      const s = section('Arrumação');
+      s.appendChild(optionRow(L.GALLERY_LAYOUTS, b.layout, (v) => update(() => { b.layout = v; })));
+      menu.appendChild(s);
+    }
+
+    if (b.type === 'phototext') {
+      const s = section('Lado da foto');
+      s.appendChild(optionRow({ left: 'Esquerda', right: 'Direita' }, b.side, (v) => update(() => { b.side = v; })));
+      s.appendChild(L.el('p', 'menu-label', { text: 'Moldura' }));
+      s.appendChild(optionRow(L.FRAMES, b.frame, (v) => update(() => { b.frame = v; }), { wrap: true }));
+      if (b.src) {
+        const replace = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Trocar foto' });
+        replace.addEventListener('click', async () => {
+          closePopover();
+          const file = await pickFile();
+          if (file) setBlockImage(b, file);
+        });
+        s.appendChild(replace);
+      }
+      menu.appendChild(s);
+    }
+
+    if (b.type === 'audio' && b.src) {
+      const s = section('Áudio');
+      const redo = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Gravar de novo' });
+      redo.addEventListener('click', () => {
+        closePopover();
+        update(() => { b.src = ''; b.peaks = []; b.duration = 0; });
+      });
+      s.appendChild(redo);
       menu.appendChild(s);
     }
 
@@ -1104,9 +1221,11 @@
       menu.appendChild(s);
     }
 
-    if (!['image', 'divider', 'music', 'spacer'].includes(b.type)) {
+    if (!['image', 'divider', 'music', 'spacer', 'gallery', 'audio'].includes(b.type)) {
       const s = section('Alinhamento');
-      s.appendChild(optionRow({ left: '⇤ Esq.', center: '↔ Centro', right: 'Dir. ⇥' }, b.align, (v) => update(() => { b.align = v; })));
+      s.appendChild(optionRow({ left: 'align-left', center: 'align-center', right: 'align-right' }, b.align, (v) => update(() => { b.align = v; }), {
+        titles: { left: 'Esquerda', center: 'Centro', right: 'Direita' }, render: (btn, v, ic) => btn.appendChild(L.icon(ic)), className: 'opt-icons',
+      }));
       s.appendChild(L.el('p', 'menu-label', { text: 'Tamanho do texto' }));
       s.appendChild(optionRow({ '': 'Auto', sm: 'P', md: 'M', lg: 'G', xl: 'GG' }, b.size || '', (v) => update(() => { b.size = v; })));
       s.appendChild(L.el('p', 'menu-label', { text: 'Fonte' }));
@@ -1116,24 +1235,27 @@
       menu.appendChild(s);
     } else if (b.type === 'image') {
       const s = section('Posição');
-      s.appendChild(optionRow({ left: '⇤', center: '↔', right: '⇥' }, b.align, (v) => update(() => { b.align = v; })));
+      s.appendChild(optionRow({ left: 'align-left', center: 'align-center', right: 'align-right' }, b.align, (v) => update(() => { b.align = v; }), {
+        titles: { left: 'Esquerda', center: 'Centro', right: 'Direita' }, render: (btn, v, ic) => btn.appendChild(L.icon(ic)), className: 'opt-icons',
+      }));
       menu.appendChild(s);
     }
 
     const actions = section();
     actions.classList.add('menu-actions');
-    const act = (label, fn, cls) => {
-      const btn = L.el('button', 'menu-action ' + (cls || ''), { type: 'button', text: label });
+    const act = (ic, label, fn, cls) => {
+      const btn = L.el('button', 'menu-action ' + (cls || ''), { type: 'button' });
+      btn.append(L.icon(ic, 'ic-sm'), L.el('span', '', { text: label }));
       btn.addEventListener('click', () => {
         closePopover();
         fn();
       });
       actions.appendChild(btn);
     };
-    act('↑ Subir', () => moveBlock(b.id, -1));
-    act('↓ Descer', () => moveBlock(b.id, 1));
-    act('⧉ Duplicar', () => duplicateBlock(b));
-    act('🗑 Excluir', () => { removeBlock(b.id); commit(); }, 'danger');
+    act('chevron-up', 'Subir', () => moveBlock(b.id, -1));
+    act('chevron-down', 'Descer', () => moveBlock(b.id, 1));
+    act('copy', 'Duplicar', () => duplicateBlock(b));
+    act('trash', 'Excluir', () => { removeBlock(b.id); commit(); }, 'danger');
     menu.appendChild(actions);
 
     openPopover(anchor, menu, { className: 'block-menu-popover' });
@@ -1144,18 +1266,26 @@
   const HIGHLIGHTS = ['#fff3a3', '#ffd6e0', '#d4f5dd', '#d6ecff', '#eadcff', '#ffe2c7'];
   const fmtBar = L.el('div', 'format-bar', { role: 'toolbar', 'aria-label': 'Formatação' });
   const FMT = [
-    ['bold', '<b>B</b>', 'Negrito (Ctrl+B)'],
-    ['italic', '<i>I</i>', 'Itálico (Ctrl+I)'],
-    ['underline', '<u>U</u>', 'Sublinhado (Ctrl+U)'],
-    ['strikeThrough', '<s>S</s>', 'Riscado'],
-    ['color', '<span class="fmt-color">A</span>', 'Cor do texto'],
-    ['highlight', '<span class="fmt-hl">🖍</span>', 'Marca-texto'],
-    ['size', '<span class="fmt-size">aA</span>', 'Tamanho'],
-    ['link', '🔗', 'Link'],
-    ['removeFormat', '⌫', 'Limpar formatação'],
+    ['bold', 'bold', 'Negrito (Ctrl+B)'],
+    ['italic', 'italic', 'Itálico (Ctrl+I)'],
+    ['underline', 'underline', 'Sublinhado (Ctrl+U)'],
+    ['strikeThrough', 'strike', 'Riscado'],
+    null,
+    ['color', 'text-color', 'Cor do texto'],
+    ['highlight', 'highlighter', 'Marca-texto'],
+    ['size', 'text-size', 'Tamanho'],
+    null,
+    ['link', 'link', 'Link'],
+    ['removeFormat', 'eraser', 'Limpar formatação'],
   ];
-  FMT.forEach(([cmd, html, title]) => {
-    const btn = L.el('button', 'fmt-btn', { type: 'button', title, 'data-cmd': cmd, html });
+  FMT.forEach((item) => {
+    if (!item) {
+      fmtBar.appendChild(L.el('span', 'sb-sep'));
+      return;
+    }
+    const [cmd, ic, title] = item;
+    const btn = L.el('button', 'fmt-btn', { type: 'button', title, 'aria-label': title, 'data-cmd': cmd });
+    btn.appendChild(L.icon(ic));
     btn.addEventListener('mousedown', (e) => e.preventDefault());
     btn.addEventListener('click', () => formatCommand(cmd, btn));
     fmtBar.appendChild(btn);
@@ -1309,16 +1439,131 @@
   // ---------------------------------------------------------------- imagens
 
   const fileInput = $('[data-file]');
-  function pickFile() {
+  function pickFile(multiple, accept) {
     return new Promise((resolve) => {
       fileInput.value = '';
+      fileInput.multiple = !!multiple;
+      fileInput.accept = accept || 'image/jpeg,image/png,image/gif,image/webp';
       const done = () => {
         fileInput.removeEventListener('change', done);
-        resolve(fileInput.files[0] || null);
+        const files = Array.from(fileInput.files);
+        resolve(multiple ? files : files[0] || null);
       };
       fileInput.addEventListener('change', done);
       fileInput.click();
     });
+  }
+
+  async function addGalleryFiles(b, files) {
+    for (const file of files.slice(0, 24 - b.items.length)) {
+      const res = await uploadFile(file);
+      if (res) {
+        b.items.push({ src: res.src, caption: '' });
+        rerenderBlock(b);
+      }
+    }
+    commit();
+  }
+
+  // ----- gravação de voz -----
+
+  async function audioPeaks(blob, count) {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+      const data = buf.getChannelData(0);
+      const step = Math.floor(data.length / count) || 1;
+      const peaks = [];
+      for (let i = 0; i < count; i++) {
+        let max = 0;
+        for (let j = i * step; j < Math.min(data.length, (i + 1) * step); j += 16) max = Math.max(max, Math.abs(data[j]));
+        peaks.push(max);
+      }
+      const top = Math.max(...peaks) || 1;
+      ctx.close();
+      return { peaks: peaks.map((p) => Math.round((0.12 + 0.88 * (p / top)) * 100) / 100), duration: buf.duration };
+    } catch (e) {
+      return { peaks: [], duration: 0 };
+    }
+  }
+
+  async function saveAudio(b, blob, filename) {
+    const fd = new FormData();
+    fd.append('id', letterId);
+    fd.append('audio', blob, filename);
+    setStatus('saving', 'Enviando áudio…');
+    const info = await audioPeaks(blob, 48);
+    try {
+      const res = await api('upload', fd);
+      Object.assign(b, { src: res.src, peaks: info.peaks, duration: Math.round(info.duration * 10) / 10 });
+      rerenderBlock(b);
+      commit();
+    } catch (err) {
+      setStatus('error');
+      toast(err.message, 'error');
+    }
+  }
+
+  function buildRecorder(b) {
+    const box = L.el('div', 'recorder');
+    const rec = L.el('button', 'rec-btn', { type: 'button' });
+    rec.append(L.icon('mic'), L.el('span', '', { text: 'Gravar' }));
+    const time = L.el('span', 'rec-time', { text: '0:00' });
+    const hint = L.el('span', 'rec-hint', { text: 'Até 3 minutos. Fale como se a pessoa estivesse do lado.' });
+    const upload = L.el('button', 'btn btn-sm btn-ghost', { type: 'button' });
+    upload.append(L.icon('upload', 'ic-sm'), L.el('span', '', { text: 'Enviar arquivo de áudio' }));
+    const info = L.el('div', 'rec-info');
+    info.append(time, hint);
+    box.append(rec, info, upload);
+
+    let recorder = null;
+    let timer = null;
+    upload.addEventListener('click', async () => {
+      const file = await pickFile(false, 'audio/*');
+      if (file) saveAudio(b, file, file.name);
+    });
+    rec.addEventListener('click', async () => {
+      if (recorder) {
+        recorder.stop();
+        return;
+      }
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        toast('Seu navegador não grava áudio. Envie um arquivo.', 'error');
+        return;
+      }
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (e) {
+        toast('Não tive permissão para usar o microfone.', 'error');
+        return;
+      }
+      const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find((t) => MediaRecorder.isTypeSupported(t)) || '';
+      recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const chunks = [];
+      const started = Date.now();
+      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      recorder.onstop = () => {
+        clearInterval(timer);
+        stream.getTracks().forEach((t) => t.stop());
+        box.classList.remove('recording');
+        const mime = recorder.mimeType || type || 'audio/webm';
+        recorder = null;
+        const blob = new Blob(chunks, { type: mime });
+        const ext = mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm';
+        if (blob.size) saveAudio(b, blob, 'voz.' + ext);
+      };
+      recorder.start(250);
+      box.classList.add('recording');
+      rec.querySelector('span').textContent = 'Parar';
+      timer = setInterval(() => {
+        const sec = (Date.now() - started) / 1000;
+        time.textContent = L.fmtTime(sec);
+        if (sec >= 180 && recorder) recorder.stop();
+      }, 250);
+    });
+    return box;
   }
 
   async function uploadFile(file) {
@@ -1384,7 +1629,12 @@
     const node = L.stickerEl(s);
     node.tabIndex = 0;
     node.addEventListener('pointerdown', (e) => stickerPointerDown(e, s, node));
-    node.addEventListener('dblclick', () => editStickerText(s));
+    node.addEventListener('dblclick', () => { if (!s.lk) editStickerText(s); });
+    node.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      selectSticker(s.id);
+      openStickerContext(e, s);
+    });
     if (s.kind === 'image') node.querySelector('img')?.addEventListener('load', layout);
     return node;
   }
@@ -1399,10 +1649,12 @@
       const on = n.dataset.id === selectedSticker;
       n.classList.toggle('selected', on);
       $$('.sh', n).forEach((h) => h.remove());
-      if (on) addHandles(n, stickers().find((s) => s.id === n.dataset.id));
+      const st = stickers().find((x) => x.id === n.dataset.id);
+      if (on && st && !st.lk) addHandles(n, st);
     });
     buildStickerBar();
     positionStickerBar();
+    if (typeof activeTab !== 'undefined' && activeTab === 'layers') renderPanel();
   }
 
   function addHandles(node, s) {
@@ -1413,6 +1665,51 @@
     node.append(rot, res);
   }
 
+  // ----- guias de alinhamento -----
+  const guides = { v: L.el('div', 'guide guide-v'), h: L.el('div', 'guide guide-h') };
+
+  function snapTargets(s) {
+    const pr = paper.getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(inner).paddingLeft) || 0;
+    const xs = [pr.width / 2, pad, pr.width - pad];
+    const ys = [];
+    stickers().forEach((o) => {
+      if (o.id === s.id) return;
+      const r = stickerNode(o.id)?.getBoundingClientRect();
+      if (!r) return;
+      xs.push(r.left - pr.left, r.left - pr.left + r.width / 2, r.right - pr.left);
+      ys.push(r.top - pr.top, r.top - pr.top + r.height / 2, r.bottom - pr.top);
+    });
+    return { xs, ys };
+  }
+
+  /** Ajusta a posição para grudar nas guias próximas (como no Canva). */
+  function snap(cx, cy, hw, hh, targets) {
+    const T = 6;
+    let gx = null;
+    let gy = null;
+    for (const [off, val] of [[0, cx], [-hw, cx - hw], [hw, cx + hw]]) {
+      const hit = targets.xs.find((t) => Math.abs(t - val) < T);
+      if (hit !== undefined) { cx = hit - off; gx = hit; break; }
+    }
+    for (const [off, val] of [[0, cy], [-hh, cy - hh], [hh, cy + hh]]) {
+      const hit = targets.ys.find((t) => Math.abs(t - val) < T);
+      if (hit !== undefined) { cy = hit - off; gy = hit; break; }
+    }
+    return { cx, cy, gx, gy };
+  }
+
+  function showGuides(gx, gy) {
+    if (gx !== null) {
+      guides.v.style.left = gx + 'px';
+      paper.appendChild(guides.v);
+    } else guides.v.remove();
+    if (gy !== null) {
+      guides.h.style.top = gy + 'px';
+      paper.appendChild(guides.h);
+    } else guides.h.remove();
+  }
+
   function stickerPointerDown(e, s, node) {
     if (e.button !== 0 || node.querySelector('[contenteditable="true"], [contenteditable="plaintext-only"]')) return;
     e.preventDefault();
@@ -1420,11 +1717,16 @@
     if (document.activeElement && document.activeElement.isContentEditable) document.activeElement.blur();
     const wasSelected = selectedSticker === s.id;
     selectSticker(s.id);
+    if (s.lk) return; // travado: só seleciona
     const pr = paper.getBoundingClientRect();
+    const own = node.getBoundingClientRect();
+    const hw = own.width / 2;
+    const hh = own.height / 2;
     const startX = e.clientX;
     const startY = e.clientY;
     const cx0 = (s.x * pr.width) / 100;
     const cy0 = parseFloat(node.style.top) || 0;
+    const targets = snapTargets(s);
     let moved = false;
     node.setPointerCapture(e.pointerId);
     node.classList.add('moving');
@@ -1434,9 +1736,15 @@
       const dy = ev.clientY - startY;
       if (!moved && Math.hypot(dx, dy) < 3) return;
       moved = true;
-      s.x = round(((cx0 + dx) / pr.width) * 100);
+      let cx = cx0 + dx;
+      let cy = cy0 + dy;
+      let gx = null;
+      let gy = null;
+      if (!ev.altKey) ({ cx, cy, gx, gy } = snap(cx, cy, hw, hh, targets));
+      showGuides(gx, gy);
+      s.x = round((cx / pr.width) * 100);
       node.style.setProperty('--x', s.x);
-      node.style.top = cy0 + dy + 'px';
+      node.style.top = cy + 'px';
       positionStickerBar();
     };
     const up = () => {
@@ -1444,6 +1752,7 @@
       node.removeEventListener('pointerup', up);
       node.removeEventListener('pointercancel', up);
       node.classList.remove('moving');
+      showGuides(null, null);
       if (moved) {
         reanchor(s, parseFloat(node.style.top) || 0);
         layout();
@@ -1574,26 +1883,104 @@
     t.addEventListener('input', layout);
   }
 
+  // ----- ações dos adesivos (barra, menu de contexto, atalhos e camadas) -----
+  function duplicateSticker(s) {
+    const copy = JSON.parse(JSON.stringify(s));
+    copy.id = L.uid();
+    copy.x = Math.min(100, s.x + 4);
+    copy.y = s.y + 3;
+    copy.lk = false;
+    stickers().push(copy);
+    layer.appendChild(buildSticker(copy));
+    selectSticker(copy.id);
+    layout();
+    commit();
+  }
+
+  function restack(s, where) {
+    const rest = stickers().filter((x) => x !== s);
+    const idx = stickers().indexOf(s);
+    if (where === 'front') state.content.stickers = rest.concat([s]);
+    else if (where === 'back') state.content.stickers = [s].concat(rest);
+    else {
+      const to = Math.max(0, Math.min(rest.length, idx + (where === 'up' ? 1 : -1)));
+      rest.splice(to, 0, s);
+      state.content.stickers = rest;
+    }
+    renderStickers();
+    commit();
+  }
+
+  function toggleLock(s) {
+    s.lk = !s.lk;
+    L.updateStickerBox(stickerNode(s.id), s);
+    refreshSelection();
+    commit();
+  }
+
+  function flipSticker(s) {
+    s.f = !s.f;
+    L.updateStickerBox(stickerNode(s.id), s);
+    commit();
+  }
+
+  function stickerMenuItems(s) {
+    return [
+      ['copy', 'Duplicar', 'Ctrl+D', () => duplicateSticker(s)],
+      ['chevron-up', 'Trazer para frente', ']', () => restack(s, 'front')],
+      ['chevron-down', 'Enviar para trás', '[', () => restack(s, 'back')],
+      ['flip', 'Espelhar', '', () => flipSticker(s)],
+      [s.lk ? 'unlock' : 'lock', s.lk ? 'Destravar' : 'Travar posição', 'Ctrl+L', () => toggleLock(s)],
+      ['trash', 'Excluir', 'Del', () => deleteSticker(s.id), 'danger'],
+    ];
+  }
+
+  function openStickerContext(e, s) {
+    const anchor = L.el('span', 'ctx-anchor');
+    anchor.style.left = e.pageX + 'px';
+    anchor.style.top = e.pageY + 'px';
+    document.body.appendChild(anchor);
+    const list = L.el('div', 'ctx-menu');
+    stickerMenuItems(s).forEach(([ic, label, key, fn, cls]) => {
+      const item = L.el('button', 'ctx-item ' + (cls || ''), { type: 'button' });
+      item.append(L.icon(ic, 'ic-sm'), L.el('span', '', { text: label }), L.el('kbd', '', { text: key }));
+      if (!key) item.lastChild.remove();
+      item.addEventListener('click', () => {
+        closePopover();
+        fn();
+      });
+      list.appendChild(item);
+    });
+    openPopover(anchor, list, { className: 'ctx-popover' });
+    anchor.remove();
+  }
+
   function buildStickerBar() {
     stickerBar.replaceChildren();
     const s = stickers().find((x) => x.id === selectedSticker);
     stickerBar.classList.toggle('show', !!s);
     if (!s) return;
-    const btn = (label, title, fn, cls) => {
-      const b = L.el('button', 'sb-btn ' + (cls || ''), { type: 'button', title, text: label });
+    const btn = (ic, title, fn, cls) => {
+      const b = L.el('button', 'sb-btn ' + (cls || ''), { type: 'button', title, 'aria-label': title });
+      b.appendChild(L.icon(ic));
       b.addEventListener('click', fn);
       stickerBar.appendChild(b);
       return b;
     };
+    const sep = () => stickerBar.appendChild(L.el('span', 'sb-sep'));
+    if (s.lk) {
+      btn('unlock', 'Destravar', () => toggleLock(s));
+      return;
+    }
     if (s.kind === 'text') {
-      btn('✏️', 'Editar texto', () => editStickerText(s));
+      btn('pen', 'Editar texto', () => editStickerText(s));
       const font = fontSelect(s.font, (v) => {
         s.font = v;
         refreshStickerNode(s);
         commit();
       });
       stickerBar.appendChild(font);
-      btn('🎨', 'Cor e estilo', (e) => {
+      btn('text-color', 'Cor e estilo', (e) => {
         const box = L.el('div', 'fmt-pop');
         box.appendChild(L.el('p', 'menu-label', { text: 'Cor' }));
         box.appendChild(swatchRow(L.ACCENT_COLORS.concat(['#ffffff']), s.color, (c) => {
@@ -1609,36 +1996,55 @@
         }, { wrap: true }));
         openPopover(e.currentTarget, box);
       });
+      sep();
+    }
+    if (s.kind === 'doodle') {
+      btn('text-color', 'Cor', (e) => {
+        const box = L.el('div', 'fmt-pop');
+        box.appendChild(swatchRow(L.ACCENT_COLORS.concat(['#ffffff', '#a3322a', '#c9a227']), s.c, (c) => {
+          s.c = c;
+          refreshStickerNode(s);
+          commit();
+        }));
+        openPopover(e.currentTarget, box);
+      });
+      sep();
     }
     if (s.kind === 'tape') {
-      btn('🎀', 'Trocar estampa', () => {
+      btn('sparkle', 'Trocar estampa', () => {
         s.pattern = L.TAPES[(L.TAPES.indexOf(s.pattern) + 1) % L.TAPES.length];
         refreshStickerNode(s);
         commit();
       });
+      sep();
     }
-    btn('⧉', 'Duplicar', () => {
-      const copy = JSON.parse(JSON.stringify(s));
-      copy.id = L.uid();
-      copy.x = Math.min(100, s.x + 4);
-      copy.y = s.y + 3;
-      stickers().push(copy);
-      layer.appendChild(buildSticker(copy));
-      selectSticker(copy.id);
-      layout();
-      commit();
+    btn('wand', 'Transparência', (e) => {
+      const box = L.el('div', 'fmt-pop');
+      box.appendChild(L.el('p', 'menu-label', { text: 'Transparência' }));
+      const range = L.el('input', '', { type: 'range', min: '10', max: '100', step: '5', value: String(Math.round((s.o ?? 1) * 100)) });
+      range.addEventListener('input', () => {
+        s.o = Number(range.value) / 100;
+        L.updateStickerBox(stickerNode(s.id), s);
+      });
+      range.addEventListener('change', commit);
+      box.appendChild(range);
+      openPopover(e.currentTarget, box);
     });
-    btn('⬆', 'Trazer para frente', () => {
-      state.content.stickers = stickers().filter((x) => x !== s).concat([s]);
-      renderStickers();
-      commit();
+    btn('flip', 'Espelhar', () => flipSticker(s));
+    btn('copy', 'Duplicar (Ctrl+D)', () => duplicateSticker(s));
+    btn('layers', 'Ordem', (e) => {
+      const box = L.el('div', 'ctx-menu');
+      [['chevron-up', 'Para a frente', 'front'], ['chevron-up', 'Subir uma camada', 'up'], ['chevron-down', 'Descer uma camada', 'down'], ['chevron-down', 'Para trás', 'back']].forEach(([ic, label, where]) => {
+        const item = L.el('button', 'ctx-item', { type: 'button' });
+        item.append(L.icon(ic, 'ic-sm'), L.el('span', '', { text: label }));
+        item.addEventListener('click', () => { closePopover(); restack(s, where); });
+        box.appendChild(item);
+      });
+      openPopover(e.currentTarget, box);
     });
-    btn('⬇', 'Enviar para trás', () => {
-      state.content.stickers = [s].concat(stickers().filter((x) => x !== s));
-      renderStickers();
-      commit();
-    });
-    btn('🗑', 'Excluir (Delete)', () => deleteSticker(s.id), 'danger');
+    btn('lock', 'Travar posição (Ctrl+L)', () => toggleLock(s));
+    sep();
+    btn('trash', 'Excluir (Delete)', () => deleteSticker(s.id), 'danger');
   }
 
   function refreshStickerNode(s) {
@@ -1677,7 +2083,20 @@
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
     const s = stickers().find((x) => x.id === selectedSticker);
     if (!s) return;
-    if (e.key === 'Delete' || e.key === 'Backspace') {
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === 'l') {
+      e.preventDefault();
+      toggleLock(s);
+      return;
+    }
+    if (s.lk) return;
+    if (mod && e.key.toLowerCase() === 'd') {
+      e.preventDefault();
+      duplicateSticker(s);
+    } else if (e.key === ']' || e.key === '[') {
+      e.preventDefault();
+      restack(s, e.key === ']' ? 'front' : 'back');
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       deleteSticker(s.id);
     } else if (e.key.startsWith('Arrow')) {
@@ -1719,17 +2138,17 @@
     scene.classList.add('drawing-mode');
 
     const bar = L.el('div', 'draw-bar');
-    bar.appendChild(L.el('span', 'draw-title', { text: '✏️ Desenhe no papel' }));
+    bar.appendChild(L.el('span', 'draw-title', { text: 'Desenhe no papel' }));
     bar.appendChild(swatchRow(L.ACCENT_COLORS.concat(['#ffffff']), drawing.color, (c) => { drawing.color = c; }));
     bar.appendChild(optionRow({ 2: 'Fino', 4: 'Médio', 9: 'Grosso' }, 4, (v) => { drawing.size = Number(v); }));
-    const undo = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: '↶ Traço' });
+    const undo = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Desfazer traço' });
     undo.addEventListener('click', () => {
       drawing.strokes.pop();
       redrawCanvas();
     });
     const cancel = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Cancelar' });
     cancel.addEventListener('click', () => stopDrawing(false));
-    const done = L.el('button', 'btn btn-sm btn-primary', { type: 'button', text: 'Concluir ✓' });
+    const done = L.el('button', 'btn btn-sm btn-primary', { type: 'button', text: 'Concluir' });
     done.addEventListener('click', () => stopDrawing(true));
     bar.append(undo, cancel, done);
     document.body.appendChild(bar);
@@ -1847,7 +2266,7 @@
 
   function renderPanel() {
     panelBody.replaceChildren();
-    ({ blocks: panelBlocks, stickers: panelStickers, paper: panelPaper, envelope: panelEnvelope })[activeTab]();
+    ({ blocks: panelBlocks, stickers: panelStickers, paper: panelPaper, envelope: panelEnvelope, layers: panelLayers })[activeTab]();
   }
 
   function panelSection(title, hint) {
@@ -1863,7 +2282,9 @@
     const grid = L.el('div', 'tile-grid');
     BLOCKS.forEach((d) => {
       const t = L.el('button', 'tile', { type: 'button', title: d.desc });
-      t.append(L.el('span', 'tile-icon', { text: d.icon }), L.el('span', 'tile-label', { text: d.label }));
+      const ti = L.el('span', 'tile-icon');
+      ti.appendChild(L.icon(d.icon));
+      t.append(ti, L.el('span', 'tile-label', { text: d.label }));
       t.addEventListener('mousedown', (e) => e.preventDefault());
       t.addEventListener('click', () => {
         closeSheetOnMobile();
@@ -1895,6 +2316,16 @@
       s1.appendChild(grid);
     });
 
+    const sd = panelSection('Rabiscos', 'Desenhos feitos à mão. Depois dá para trocar a cor.');
+    const dgrid = L.el('div', 'doodle-grid');
+    Object.entries(L.DOODLES).forEach(([name, def]) => {
+      const btn = L.el('button', 'doodle-btn', { type: 'button', title: def.label });
+      btn.appendChild(L.doodleSvg(name, state.content.paper.ink));
+      btn.addEventListener('click', () => addSticker({ kind: 'doodle', name, c: state.content.paper.ink, w: 12, r: 0 }));
+      dgrid.appendChild(btn);
+    });
+    sd.appendChild(dgrid);
+
     const s2 = panelSection('Fitas washi');
     const tapes = L.el('div', 'tape-grid');
     L.TAPES.forEach((p) => {
@@ -1909,7 +2340,9 @@
     const grid = L.el('div', 'tile-grid');
     Object.entries(L.TEXT_STYLES).forEach(([style, label]) => {
       const t = L.el('button', 'tile', { type: 'button' });
-      t.append(L.el('span', 'tile-icon', { text: { none: 'Aa', label: '🏷️', note: '🗒️', bubble: '💬' }[style] }), L.el('span', 'tile-label', { text: label }));
+      const sample = L.el('span', 'tile-icon tile-text-sample');
+      sample.appendChild(L.el('span', 'st-text st-' + style, { text: 'Aa' }));
+      t.append(sample, L.el('span', 'tile-label', { text: label }));
       t.addEventListener('click', () => {
         const s = addSticker({ kind: 'text', text: style === 'note' ? 'Lembra disso?' : 'Escreva aqui', font: state.content.paper.font, color: state.content.paper.ink, style, w: style === 'note' ? 26 : 30 });
         setTimeout(() => editStickerText(s), 50);
@@ -1919,9 +2352,11 @@
     s3.appendChild(grid);
 
     const s4 = panelSection('Desenho e imagens');
-    const draw = L.el('button', 'btn btn-block', { type: 'button', text: '✏️ Desenhar à mão livre' });
+    const draw = L.el('button', 'btn btn-block', { type: 'button', text: 'Desenhar à mão livre' });
+    draw.prepend(L.icon('brush'));
     draw.addEventListener('click', startDrawing);
-    const img = L.el('button', 'btn btn-block btn-ghost', { type: 'button', text: '📷 Imagem como adesivo' });
+    const img = L.el('button', 'btn btn-block btn-ghost', { type: 'button', text: 'Imagem como adesivo' });
+    img.prepend(L.icon('image'));
     img.addEventListener('click', async () => {
       const file = await pickFile();
       if (!file) return;
@@ -2032,6 +2467,90 @@
     s2.appendChild(custom);
     s2.appendChild(L.el('p', 'menu-label', { text: 'Cor do selo' }));
     s2.appendChild(swatchRow(['#a8323e', '#7b2d8b', '#1f4e79', '#2f6b4f', '#b8862b', '#333333', '#d4708a'], env.sealColor, (c) => set('sealColor', c)));
+
+    const s3 = panelSection('Selo postal');
+    const stamps = L.el('div', 'stamp-grid');
+    const none = L.el('button', 'stamp-btn stamp-none' + (!env.stamp ? ' active' : ''), { type: 'button', title: 'Sem selo', text: 'Sem' });
+    none.addEventListener('click', () => { $$('.stamp-btn', stamps).forEach((b) => b.classList.remove('active')); none.classList.add('active'); set('stamp', ''); });
+    stamps.appendChild(none);
+    Object.entries(L.STAMPS).forEach(([key, def]) => {
+      const btn = L.el('button', 'stamp-btn' + (env.stamp === key ? ' active' : ''), { type: 'button', title: def.label });
+      btn.appendChild(L.stampEl(key));
+      btn.addEventListener('click', () => {
+        $$('.stamp-btn', stamps).forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        set('stamp', key);
+      });
+      stamps.appendChild(btn);
+    });
+    s3.appendChild(stamps);
+
+    const s4 = panelSection('Abra quando…', 'Escrito no envelope. Na caixa da pessoa, essas cartas ficam guardadas numa seção à parte até ela abrir.');
+    const label = L.el('input', '', { maxlength: '80', placeholder: 'Ex.: Abra quando estiver com saudade', value: env.label || '' });
+    label.addEventListener('input', () => {
+      env.label = label.value;
+      refresh();
+      typed();
+    });
+    s4.appendChild(label);
+    const ideas = L.el('div', 'idea-chips');
+    ['estiver com saudade', 'precisar rir', 'estiver triste', 'não conseguir dormir', 'for seu aniversário', 'estiver com medo', 'conquistar algo grande', 'brigarmos'].forEach((t) => {
+      const chip = L.el('button', 'idea-chip', { type: 'button', text: t });
+      chip.addEventListener('click', () => {
+        label.value = 'Abra quando ' + t;
+        env.label = label.value;
+        refresh();
+        commit();
+      });
+      ideas.appendChild(chip);
+    });
+    s4.appendChild(ideas);
+
+    const s5 = panelSection('Efeito ao abrir', 'O que acontece na tela quando a carta sai do envelope.');
+    s5.appendChild(optionRow(L.EFFECTS, state.content.effect || 'none', (v) => {
+      state.content.effect = v;
+      commit();
+      L.playEffect(v, 3000);
+    }, { wrap: true }));
+  }
+
+  const KIND_LABEL = { emoji: 'Emoji', image: 'Imagem', text: 'Texto', tape: 'Fita', drawing: 'Desenho', doodle: 'Rabisco' };
+
+  function panelLayers() {
+    const sec = panelSection('Camadas', 'De cima para baixo: o primeiro fica na frente de todos.');
+    if (!stickers().length) {
+      sec.appendChild(L.el('p', 'panel-hint', { text: 'Nenhum adesivo ainda. Eles aparecem aqui conforme você adiciona.' }));
+      return;
+    }
+    const list = L.el('div', 'layer-list');
+    stickers().slice().reverse().forEach((s) => {
+      const row = L.el('div', 'layer-row' + (s.id === selectedSticker ? ' active' : ''));
+      const thumb = L.el('span', 'layer-thumb');
+      const mini = L.stickerEl(Object.assign({}, s, { x: 50, w: 100, r: 0, o: 1 }));
+      mini.classList.add('mini');
+      thumb.appendChild(mini);
+      const name = L.el('button', 'layer-name', { type: 'button' });
+      name.textContent = s.kind === 'text' ? '“' + (s.text || '').slice(0, 18) + '”' : s.kind === 'emoji' ? s.char + ' ' + KIND_LABEL.emoji : (s.kind === 'doodle' ? (L.DOODLES[s.name] || {}).label || 'Rabisco' : KIND_LABEL[s.kind]);
+      name.addEventListener('click', () => {
+        selectSticker(s.id);
+        stickerNode(s.id)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      });
+      const tools = L.el('span', 'layer-tools');
+      const tb = (ic, title, fn) => {
+        const b = L.el('button', 'layer-btn', { type: 'button', title, 'aria-label': title });
+        b.appendChild(L.icon(ic, 'ic-sm'));
+        b.addEventListener('click', fn);
+        tools.appendChild(b);
+      };
+      tb('chevron-up', 'Subir', () => restack(s, 'up'));
+      tb('chevron-down', 'Descer', () => restack(s, 'down'));
+      tb(s.lk ? 'lock' : 'unlock', s.lk ? 'Destravar' : 'Travar', () => toggleLock(s));
+      tb('trash', 'Excluir', () => deleteSticker(s.id));
+      row.append(thumb, name, tools);
+      if (s.lk) row.classList.add('locked');
+      list.appendChild(row);
+    });
+    sec.appendChild(list);
   }
 
   function recipientName() {
@@ -2076,6 +2595,7 @@
     renderAll();
     renderPanel();
     updateUndoButtons();
+    updateWordCount();
     markDirty();
   }
 
@@ -2130,7 +2650,7 @@
       pending: 'Editando…',
       saving: 'Salvando…',
       saved: lastSavedAt ? 'Salvo às ' + lastSavedAt : 'Salvo',
-      error: 'Não salvou — tentar de novo',
+      error: 'Não salvou. Tentar de novo',
     }[kind];
     statusEl.title = kind === 'error' && text ? text : '';
   }
@@ -2141,6 +2661,8 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 1200);
   }
+
+  let checkpointNext = false;
 
   async function save() {
     clearTimeout(saveTimer);
@@ -2153,7 +2675,8 @@
     dirty = false;
     setStatus('saving');
     try {
-      const res = await api('save', { id: letterId, title: state.title, content: state.content });
+      const res = await api('save', { id: letterId, title: state.title, content: state.content, checkpoint: checkpointNext });
+      checkpointNext = false;
       lastSavedAt = res.savedAt;
       if (!dirty) setStatus('saved');
     } catch (err) {
@@ -2184,6 +2707,171 @@
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && dirty) save();
+  });
+
+  // ---------------------------------------------------------------- contagem de palavras
+
+  const wordsEl = $('[data-words]');
+  function updateWordCount() {
+    if (!wordsEl) return;
+    const text = inner.innerText || '';
+    const words = (text.match(/[\p{L}\p{N}]+/gu) || []).length;
+    const minutes = Math.max(1, Math.round(words / 180));
+    wordsEl.textContent = words + (words === 1 ? ' palavra' : ' palavras') + ' · ' + minutes + ' min de leitura';
+  }
+  let wordTimer = null;
+  inner.addEventListener('input', () => {
+    clearTimeout(wordTimer);
+    wordTimer = setTimeout(updateWordCount, 400);
+  });
+
+  // ---------------------------------------------------------------- histórico de versões
+
+  const versionsDialog = $('[data-versions]');
+
+  async function openVersions() {
+    closePopover();
+    const list = $('[data-versions-list]', versionsDialog);
+    const preview = $('[data-versions-preview]', versionsDialog);
+    const restoreBtn = $('[data-versions-restore]', versionsDialog);
+    list.replaceChildren(L.el('p', 'muted small', { text: 'Carregando…' }));
+    preview.replaceChildren(L.el('p', 'muted small versions-empty', { text: 'Escolha uma versão para ver como estava.' }));
+    restoreBtn.hidden = true;
+    versionsDialog.showModal();
+    // garante que o estado atual também fique guardado
+    if (dirty || saving) {
+      checkpointNext = true;
+      await flushSave().catch(() => {});
+    }
+    let res;
+    try {
+      res = await api('versions', { id: letterId });
+    } catch (err) {
+      list.replaceChildren(L.el('p', 'muted small', { text: err.message }));
+      return;
+    }
+    list.replaceChildren();
+    if (!res.versions.length) {
+      list.appendChild(L.el('p', 'muted small', { text: 'Ainda não há versões guardadas. Elas são criadas enquanto você escreve, a cada 10 minutos.' }));
+      return;
+    }
+    res.versions.forEach((v, i) => {
+      const item = L.el('button', 'version-item', { type: 'button' });
+      item.append(L.el('strong', '', { text: i === 0 ? 'Mais recente' : v.ago }), L.el('span', '', { text: v.when }));
+      item.addEventListener('click', async () => {
+        $$('.version-item', list).forEach((x) => x.classList.remove('active'));
+        item.classList.add('active');
+        const data = await api('version', { id: letterId, version_id: v.id });
+        const holder = L.el('div', 'versions-render');
+        preview.replaceChildren(holder);
+        L.renderLetter(holder, data.content);
+        holder.style.transform = 'scale(' + Math.min(1, preview.clientWidth / 760) + ')';
+        restoreBtn.hidden = false;
+        restoreBtn.onclick = () => {
+          state.title = data.title;
+          state.content = data.content;
+          titleInput.value = state.title;
+          versionsDialog.close();
+          renderAll();
+          renderPanel();
+          commit();
+          toast('Versão restaurada. Se mudar de ideia, use desfazer.');
+        };
+      });
+      list.appendChild(item);
+    });
+  }
+  $('[data-open-versions]')?.addEventListener('click', openVersions);
+  $('[data-close-versions]')?.addEventListener('click', () => versionsDialog.close());
+  versionsDialog?.addEventListener('click', (e) => { if (e.target === versionsDialog) versionsDialog.close(); });
+
+  // ---------------------------------------------------------------- paleta de comandos (Ctrl+K)
+
+  const palette = $('[data-palette]');
+  const paletteInput = $('[data-palette-input]');
+  const paletteList = $('[data-palette-list]');
+  let paletteItems = [];
+  let paletteIndex = 0;
+
+  function paletteCommands() {
+    const after = () => (lastFocusedId && findBlock(lastFocusedId) ? lastFocusedId : (blocks().length ? blocks()[blocks().length - 1].id : null));
+    const tab = (key) => () => { $('[data-tab="' + key + '"]').click(); if (isMobile()) panel.classList.add('sheet-open'); };
+    return [
+      ...BLOCKS.map((d) => ({ icon: d.icon, label: 'Inserir ' + d.label.toLowerCase(), hint: d.desc, words: d.words, run: () => insertNewBlock(d.key, after()) })),
+      { icon: 'brush', label: 'Desenhar à mão livre', words: 'desenho rabisco caneta', run: startDrawing },
+      { icon: 'sticker', label: 'Abrir adesivos', words: 'emoji fita rabisco', run: tab('stickers') },
+      { icon: 'paper', label: 'Trocar papel e letra', words: 'papel fonte letra cor cenario borda', run: tab('paper') },
+      { icon: 'mail', label: 'Personalizar envelope', words: 'envelope selo carimbo efeito abra quando', run: tab('envelope') },
+      { icon: 'layers', label: 'Ver camadas', words: 'camadas ordem adesivos', run: tab('layers') },
+      { icon: 'sparkle', label: 'Testar efeito de abertura', words: 'efeito confete coracoes', run: () => L.playEffect(state.content.effect || 'hearts', 3000) },
+      { icon: 'history', label: 'Histórico de versões', words: 'versoes restaurar voltar', run: openVersions },
+      { icon: 'eye', label: 'Abrir prévia', words: 'previa visualizar ver', run: () => window.open('carta.php?id=' + letterId, '_blank') },
+      { icon: 'send', label: 'Enviar carta', words: 'enviar destinatario mandar', run: () => $('[data-open-send]').click() },
+      { icon: 'undo', label: 'Desfazer', words: 'voltar', run: () => restore(-1) },
+      { icon: 'redo', label: 'Refazer', words: '', run: () => restore(1) },
+    ];
+  }
+
+  function openPalette() {
+    closePopover();
+    paletteInput.value = '';
+    paletteIndex = 0;
+    renderPalette();
+    palette.showModal();
+    paletteInput.focus();
+  }
+
+  function renderPalette() {
+    const q = normalize(paletteInput.value.trim());
+    paletteItems = paletteCommands().filter((c) => !q || normalize(c.label + ' ' + (c.words || '')).includes(q)).slice(0, 40);
+    paletteIndex = Math.min(paletteIndex, Math.max(0, paletteItems.length - 1));
+    paletteList.replaceChildren();
+    if (!paletteItems.length) paletteList.appendChild(L.el('p', 'muted small palette-empty', { text: 'Nada encontrado.' }));
+    paletteItems.forEach((c, i) => {
+      const item = L.el('button', 'palette-item' + (i === paletteIndex ? ' active' : ''), { type: 'button' });
+      const ic = L.el('span', 'palette-icon');
+      ic.appendChild(L.icon(c.icon));
+      item.append(ic, L.el('span', 'palette-label', { text: c.label }));
+      if (c.hint) item.appendChild(L.el('span', 'palette-hint', { text: c.hint }));
+      item.addEventListener('mousemove', () => {
+        if (paletteIndex !== i) { paletteIndex = i; highlightPalette(); }
+      });
+      item.addEventListener('click', () => runPalette(i));
+      paletteList.appendChild(item);
+    });
+  }
+
+  function highlightPalette() {
+    $$('.palette-item', paletteList).forEach((n, i) => n.classList.toggle('active', i === paletteIndex));
+    $$('.palette-item', paletteList)[paletteIndex]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function runPalette(i) {
+    const c = paletteItems[i];
+    palette.close();
+    if (c) setTimeout(c.run, 30);
+  }
+
+  paletteInput.addEventListener('input', () => { paletteIndex = 0; renderPalette(); });
+  paletteInput.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!paletteItems.length) return;
+      paletteIndex = (paletteIndex + (e.key === 'ArrowDown' ? 1 : -1) + paletteItems.length) % paletteItems.length;
+      highlightPalette();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      runPalette(paletteIndex);
+    }
+  });
+  palette.addEventListener('click', (e) => { if (e.target === palette) palette.close(); });
+  $('[data-open-palette]')?.addEventListener('click', openPalette);
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if (palette.open) palette.close();
+      else openPalette();
+    }
   });
 
   // ---------------------------------------------------------------- envio
@@ -2240,12 +2928,14 @@
       DATA.letter.recipientId = Number(checked.value);
       DATA.letter.openAt = when;
       DATA.letter.status = 'sent';
-      $('[data-open-send]').innerHTML = '✉<span class="hide-sm"> Envio</span>';
-      $('[data-sent-title]').textContent = res.firstSend ? 'Carta enviada para ' + res.recipient + '! 💌' : 'Envio atualizado ✓';
+      $('[data-open-send] .send-label').textContent = 'Envio';
+      $('[data-sent-title]').textContent = res.firstSend ? 'A caminho de ' + res.recipient : 'Envio atualizado';
       $('[data-sent-text]').textContent = when
-        ? res.recipient + ' já vê o envelope, mas só vai conseguir abrir na data escolhida.'
-        : res.recipient + ' vai encontrar a carta na caixinha da próxima vez que entrar no site.';
-      $('[data-sent-view]').textContent = '👁 Ver como ' + res.recipient + ' vai ver';
+        ? res.recipient + ' já vê o envelope lacrado. Ele só abre na data que você escolheu.'
+        : res.recipient + ' vai encontrar a carta na caixa da próxima vez que entrar.';
+      $('[data-sent-view]').textContent = 'Ver como ' + res.recipient + ' vai ver';
+      if (DATA.letter.sentBefore !== true) L.playEffect(state.content.effect, 2600);
+      DATA.letter.sentBefore = true;
       $$('[data-send-step]', dialog).forEach((s) => { s.hidden = s.dataset.sendStep !== 'done'; });
     } catch (err) {
       toast(err.message, 'error');
@@ -2260,6 +2950,7 @@
   renderAll();
   renderPanel();
   pushHistory();
+  updateWordCount();
   setStatus('saved', 'Tudo salvo');
 
   // Foca o primeiro texto vazio para já sair escrevendo

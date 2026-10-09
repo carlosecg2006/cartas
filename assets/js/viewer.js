@@ -12,6 +12,7 @@
     interactive: !data.locked,
     locked: data.locked,
     paperColor: data.paperColor,
+    sentAt: data.sentAt,
   });
   holder.appendChild(envelope);
 
@@ -45,8 +46,10 @@
   function showLetter() {
     stage.hidden = true;
     letterStage.hidden = false;
-    rendered = Letter.renderLetter(letterStage, data.content);
+    rendered = Letter.renderLetter(letterStage, data.content, { reveal: !reduceMotion });
     letterStage.classList.add('appear');
+    setTimeout(() => Letter.playEffect(data.content.effect), 250);
+    setupProgress();
     after.hidden = false;
     renderReactions();
     renderReplies();
@@ -56,23 +59,42 @@
     }
   }
 
+  /** Pedacinhos de cera voando quando o selo quebra. */
   function burst(origin) {
     const rect = origin.getBoundingClientRect();
-    const symbols = ['❤', '✨', '♡', '✦', '💌'];
-    for (let i = 0; i < 14; i++) {
+    const color = data.envelope.sealColor || '#a8323e';
+    for (let i = 0; i < 12; i++) {
       const p = document.createElement('span');
       p.className = 'burst';
-      p.textContent = symbols[i % symbols.length];
-      const angle = (Math.PI * 2 * i) / 14;
-      const dist = 70 + Math.random() * 60;
+      const angle = (Math.PI * 2 * i) / 12 + Math.random() * 0.4;
+      const dist = 50 + Math.random() * 70;
+      const size = 5 + Math.random() * 9;
       p.style.left = rect.left + rect.width / 2 + 'px';
       p.style.top = rect.top + rect.height / 2 + 'px';
+      p.style.width = size + 'px';
+      p.style.height = size * (0.6 + Math.random() * 0.6) + 'px';
       p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
-      p.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
-      p.style.color = data.envelope.sealColor || '#a8323e';
+      p.style.setProperty('--dy', Math.sin(angle) * dist + 40 + 'px');
+      p.style.background = color;
       document.body.appendChild(p);
       setTimeout(() => p.remove(), 1100);
     }
+  }
+
+  /** Barrinha de leitura no topo. */
+  function setupProgress() {
+    const bar = document.querySelector('[data-progress]');
+    const fill = bar.querySelector('span');
+    bar.hidden = false;
+    const update = () => {
+      const paper = rendered.paper.getBoundingClientRect();
+      const total = paper.height - window.innerHeight + 120;
+      const ratio = total > 0 ? Math.min(1, Math.max(0, (120 - paper.top) / total)) : 1;
+      fill.style.transform = 'scaleX(' + ratio + ')';
+    };
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    update();
   }
 
   // ---------- Reações ----------
@@ -117,7 +139,8 @@
     meta.appendChild(Letter.el('b', '', { text: r.name }));
     meta.appendChild(Letter.el('span', 'muted', { text: ' · ' + r.when }));
     if (r.mine || data.isAdmin) {
-      const del = Letter.el('button', 'reply-del', { type: 'button', title: 'Apagar', text: '×' });
+      const del = Letter.el('button', 'reply-del', { type: 'button', title: 'Apagar', 'aria-label': 'Apagar' });
+      del.appendChild(Letter.icon('x', 'ic-sm'));
       del.addEventListener('click', async () => {
         if (!confirm('Apagar esta mensagem?')) return;
         try {
@@ -140,7 +163,7 @@
     replyList.replaceChildren();
     if (!data.replies.length) {
       replyList.appendChild(Letter.el('p', 'muted small', {
-        text: data.isAdmin ? 'Nenhuma resposta ainda.' : 'Que tal mandar uma resposta? Ela chega direto para quem te escreveu.',
+        text: data.isAdmin ? 'Nenhuma resposta ainda.' : 'Sua resposta chega direto para quem escreveu.',
       }));
     }
     data.replies.forEach((r) => replyList.appendChild(replyEl(r)));
@@ -158,7 +181,7 @@
       data.replies.push(res.reply);
       textarea.value = '';
       renderReplies();
-      toast(data.isAdmin ? 'Resposta enviada.' : 'Resposta enviada! 💌');
+      toast('Resposta enviada.');
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -172,8 +195,8 @@
   document.querySelector('[data-save-image]').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
-    const label = btn.textContent;
-    btn.textContent = '⏳ Gerando…';
+    const label = btn.innerHTML;
+    btn.textContent = 'Gerando…';
     try {
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
       const canvas = await window.html2canvas(rendered.paper, { scale: 2, backgroundColor: null, useCORS: true, logging: false });
@@ -182,10 +205,10 @@
       link.href = canvas.toDataURL('image/png');
       link.click();
     } catch (err) {
-      toast('Não consegui gerar a imagem. Tente "Baixar PDF".', 'error');
+      toast('Não consegui gerar a imagem. Tente "Salvar em PDF".', 'error');
     } finally {
       btn.disabled = false;
-      btn.textContent = label;
+      btn.innerHTML = label;
     }
   });
 

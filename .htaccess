@@ -1,0 +1,20 @@
+# Segurança básica
+Options -Indexes
+DirectoryIndex index.php
+
+# Bloqueia arquivos que não precisam ser públicos
+<FilesMatch "^(\.|config\.example\.php$|router\.php$|README\.md$)">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Limites de upload (só vale onde o PHP roda como módulo do Apache)
+<IfModule mod_php.c>
+    php_value upload_max_filesize 10M
+    php_value post_max_size 12M
+</IfModule>

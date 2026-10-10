@@ -1,4 +1,4 @@
-# 💌 Cartas
+# 💌 Cartas da Alma
 
 Um site para trocar cartas digitais. Cada pessoa tem o próprio login, a própria lista de pessoas e vê **apenas** as cartas que escreveu ou recebeu.
 

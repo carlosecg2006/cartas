@@ -1,7 +1,7 @@
 <?php
 // Copie este arquivo para config.php e preencha (ou use o instalador: /install.php).
 return [
-    'app_name' => 'Minhas Cartas',
+    'app_name' => 'Cartas da Alma',
     'timezone' => 'America/Sao_Paulo',
     'db' => [
         'driver' => 'mysql',          // 'mysql' (hospedagem) ou 'sqlite' (teste local)

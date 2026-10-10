@@ -747,7 +747,7 @@
       + '<path d="M2 22c10-5 20 5 30 0s20-5 30 0M2 34c10-5 20 5 30 0s20-5 30 0M2 46c10-5 20 5 30 0s20-5 30 0"/>'
       + '<circle cx="110" cy="35" r="30"/><circle cx="110" cy="35" r="23"/></g>'
       + '<path id="' + id + '" d="M84 35a26 26 0 1 1 52 0" fill="none"/>'
-      + '<text font-size="7.5" letter-spacing="1.5" fill="currentColor" font-family="Georgia, serif"><textPath href="#' + id + '" startOffset="50%" text-anchor="middle">CORREIO DO CORAÇÃO</textPath></text>'
+      + '<text font-size="7.5" letter-spacing="1.5" fill="currentColor" font-family="Georgia, serif"><textPath href="#' + id + '" startOffset="50%" text-anchor="middle">CARTAS DA ALMA</textPath></text>'
       + '<text x="110" y="38" font-size="8.5" text-anchor="middle" fill="currentColor" font-family="Georgia, serif">' + text + '</text></svg>';
     return wrap;
   }

@@ -59,7 +59,7 @@ function take_flashes(): array
 
 function app_name(): string
 {
-    return (string) config('app_name', 'Minhas Cartas');
+    return (string) config('app_name', 'Cartas da Alma');
 }
 
 function client_ip(): string

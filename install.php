@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($step === 'config') {
         $driver = ($_POST['driver'] ?? 'mysql') === 'sqlite' ? 'sqlite' : 'mysql';
         $cfg = [
-            'app_name' => trim((string) ($_POST['app_name'] ?? '')) ?: 'Minhas Cartas',
+            'app_name' => trim((string) ($_POST['app_name'] ?? '')) ?: 'Cartas da Alma',
             'timezone' => 'America/Sao_Paulo',
             'db' => [
                 'driver' => $driver,
@@ -88,7 +88,7 @@ page_head('Instalação', ['body' => 'auth-page', 'nav' => false]);
             <form method="post" class="form" data-install>
                 <?= csrf_field() ?>
                 <label>Nome do site
-                    <input name="app_name" value="<?= e($_POST['app_name'] ?? 'Minhas Cartas') ?>" maxlength="40">
+                    <input name="app_name" value="<?= e($_POST['app_name'] ?? 'Cartas da Alma') ?>" maxlength="40">
                 </label>
                 <label>Banco de dados
                     <select name="driver" data-driver>

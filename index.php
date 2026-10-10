@@ -5,7 +5,8 @@ require __DIR__ . '/app/bootstrap.php';
 
 $user = require_login();
 $uid = (int) $user['id'];
-$tab = ($_GET['aba'] ?? '') === 'escritas' ? 'escritas' : 'recebidas';
+$search = trim(mb_substr((string) ($_GET['q'] ?? ''), 0, 80));
+$tab = $search !== '' ? 'busca' : (in_array($_GET['aba'] ?? '', ['escritas', 'favoritas'], true) ? $_GET['aba'] : 'recebidas');
 $contacts = contacts_of($uid);
 $names = array_column($contacts, 'display', 'id');
 $nameOf = fn($id, $fallback) => $names[(int) $id] ?? (string) $fallback;
@@ -68,6 +69,99 @@ $newReplies = (int) q_val('SELECT COUNT(*) FROM replies p JOIN letters l ON l.id
 
 $birthdays = upcoming_birthdays($uid, 21);
 
+// ---------- Favoritas e busca ----------
+$favIds = array_map('intval', array_column(q_all('SELECT letter_id FROM favorites WHERE user_id = ?', [$uid]), 'letter_id'));
+
+/** Cartas que eu posso ler agora: as que escrevi e as recebidas que já podem ser abertas. */
+function readable_letters(int $uid, string $extraWhere = '', array $extraParams = []): array
+{
+    $rows = q_all(
+        "SELECT l.*, s.name AS sender_name, s.avatar AS sender_avatar, s.color AS sender_color,
+            r.name AS recipient_name, r.avatar AS recipient_avatar, r.color AS recipient_color
+         FROM letters l LEFT JOIN users s ON s.id = l.sender_id LEFT JOIN users r ON r.id = l.recipient_id
+         WHERE (l.sender_id = ? OR (l.recipient_id = ? AND l.status = 'sent' AND " . sql_delivered() . '))' . $extraWhere . '
+         ORDER BY COALESCE(l.sent_at, l.updated_at) DESC',
+        array_merge([$uid, $uid], $extraParams)
+    );
+    $out = [];
+    foreach ($rows as $l) {
+        $mine = (int) $l['sender_id'] === $uid;
+        if (!$mine && letter_locked($l)) {
+            continue; // lacrada: nem aparece na busca
+        }
+        $l['content'] = json_decode($l['content'], true) ?: [];
+        $l['mine'] = $mine;
+        $out[] = $l;
+    }
+    return $out;
+}
+
+/** Trecho do texto em volta do que foi buscado, com o termo marcado. */
+function search_snippet(string $text, string $term): string
+{
+    $pos = mb_stripos($text, $term);
+    if ($pos === false) {
+        return e(mb_substr($text, 0, 120));
+    }
+    $start = max(0, $pos - 50);
+    $piece = mb_substr($text, $start, 140);
+    $at = mb_stripos($piece, $term);
+    return ($start > 0 ? '…' : '') . e(mb_substr($piece, 0, $at)) . '<mark>' . e(mb_substr($piece, $at, mb_strlen($term))) . '</mark>'
+        . e(mb_substr($piece, $at + mb_strlen($term))) . (mb_strlen($text) > $start + 140 ? '…' : '');
+}
+
+$results = [];
+if ($tab === 'busca') {
+    foreach (readable_letters($uid) as $l) {
+        $other = $l['mine'] ? ($l['recipient_id'] ? $nameOf($l['recipient_id'], $l['recipient_name']) : '') : $nameOf($l['sender_id'], $l['sender_name']);
+        $text = content_excerpt($l['content'], 100000);
+        $hay = $l['title'] . ' ' . $other . ' ' . ($l['content']['envelope']['label'] ?? '') . ' ' . $text;
+        if (mb_stripos($hay, $search) !== false) {
+            $l['other'] = $other;
+            $l['snippet'] = search_snippet(mb_stripos($text, $search) !== false ? $text : $l['title'], $search);
+            $results[] = $l;
+        }
+    }
+}
+$favorites = [];
+if ($tab === 'favoritas' && $favIds) {
+    $favorites = readable_letters($uid, ' AND l.id IN (' . implode(',', $favIds) . ')');
+    foreach ($favorites as &$f) {
+        $f['other'] = $f['mine'] ? ($f['recipient_id'] ? $nameOf($f['recipient_id'], $f['recipient_name']) : '') : $nameOf($f['sender_id'], $f['sender_name']);
+        $f['snippet'] = e(content_excerpt($f['content'], 130));
+    }
+    unset($f);
+}
+
+// ---------- Lembrete gentil: alguém da lista para quem você não escreve há tempo ----------
+$reminder = null;
+if ($tab === 'recebidas' && $contacts) {
+    $lastSent = [];
+    foreach (q_all("SELECT recipient_id, MAX(sent_at) AS last FROM letters WHERE sender_id = ? AND status = 'sent' GROUP BY recipient_id", [$uid]) as $r) {
+        $lastSent[(int) $r['recipient_id']] = $r['last'];
+    }
+    $lastGot = [];
+    foreach (q_all("SELECT sender_id, MAX(sent_at) AS last FROM letters WHERE recipient_id = ? AND status = 'sent' GROUP BY sender_id", [$uid]) as $r) {
+        $lastGot[(int) $r['sender_id']] = $r['last'];
+    }
+    $candidates = [];
+    foreach ($contacts as $c) {
+        $last = $lastSent[(int) $c['id']] ?? null;
+        $days = $last ? (int) floor((time() - strtotime($last)) / 86400) : null;
+        if ($days !== null && $days < 45) {
+            continue;
+        }
+        // nunca escreveu: só lembra se a pessoa já te escreveu, ou se está na lista há uma semana
+        $since = q_val('SELECT created_at FROM contacts WHERE owner_id = ? AND contact_id = ?', [$uid, (int) $c['id']]);
+        if ($days === null && empty($lastGot[(int) $c['id']]) && $since && strtotime((string) $since) > time() - 7 * 86400) {
+            continue;
+        }
+        $candidates[] = $c + ['days' => $days, 'got' => $lastGot[(int) $c['id']] ?? null];
+    }
+    usort($candidates, fn($a, $b) => ($b['days'] ?? 9999) <=> ($a['days'] ?? 9999));
+    $reminder = $candidates[0] ?? null;
+}
+
 function filter_url(array $changes): string
 {
     $query = array_filter(array_merge(['aba' => 'escritas', 'para' => $_GET['para'] ?? '', 'status' => $_GET['status'] ?? ''], $changes));
@@ -83,6 +177,26 @@ function envelope_json(array $l, string $to, bool $locked): string
         'sentAt' => $l['status'] === 'sent' ? iso($l['sent_at']) : null,
         'locked' => $locked,
     ], JSON_UNESCAPED_UNICODE));
+}
+
+/** Cartão de uma carta na busca ou nas favoritas (escrita por mim ou recebida). */
+function found_item(array $l, array $user, bool $fav): void
+{
+    $href = $l['mine'] && $l['status'] !== 'sent' ? 'editor.php?id=' . (int) $l['id'] : 'carta.php?id=' . (int) $l['id'];
+    $who = $l['mine']
+        ? ['name' => $l['other'] ?: '?', 'avatar' => $l['recipient_avatar'], 'color' => $l['recipient_color']]
+        : ['name' => $l['other'], 'avatar' => $l['sender_avatar'], 'color' => $l['sender_color']];
+    ?>
+    <a class="found-item" href="<?= e($href) ?>">
+        <div class="mail-env" data-envelope="<?= envelope_json($l, first_name($l['mine'] ? ($l['other'] ?: '') : $user['name']), false) ?>"></div>
+        <div class="found-info">
+            <strong><?= e($l['title'] ?: 'Sem título') ?><?php if ($fav): ?> <span class="fav-dot" title="Favorita">★</span><?php endif; ?></strong>
+            <span class="found-who"><?= avatar_html($who, 'xs') ?><?= $l['mine'] ? ($l['other'] !== '' ? 'para ' . e($l['other']) : 'sem destinatário') : 'de ' . e($l['other']) ?>
+                <span class="muted">· <?= e(fmt_date($l['sent_at'] ?: $l['updated_at'], false)) ?></span><?= $l['status'] !== 'sent' ? ' <span class="tag tag-draft">Rascunho</span>' : '' ?></span>
+            <p class="found-snippet"><?= $l['snippet'] ?></p>
+        </div>
+    </a>
+    <?php
 }
 
 function mail_item(array $l, array $user): void
@@ -136,6 +250,37 @@ page_head('Cartas', ['body' => 'page-home', 'css' => ['assets/css/letter.css']])
         <a class="btn btn-primary btn-lg" href="nova.php"><?= icon('plus') ?>Nova carta</a>
     </section>
 
+    <form class="search-bar" action="index.php" role="search">
+        <?= icon('search', 'ic-sm') ?>
+        <input type="search" name="q" value="<?= e($search) ?>" placeholder="Buscar nas suas cartas…" aria-label="Buscar cartas">
+        <?php if ($search !== ''): ?><a class="search-clear" href="index.php" aria-label="Limpar busca"><?= icon('x', 'ic-sm') ?></a><?php endif; ?>
+    </form>
+
+    <div class="push-card" hidden data-push-prompt>
+        <?= icon('bell') ?>
+        <div><strong>Quer ser avisado(a) no celular quando chegar carta?</strong><span class="muted small">Dá para mudar quando quiser em Conta.</span></div>
+        <button class="btn btn-sm btn-primary" type="button" data-push-enable>Ativar avisos</button>
+        <button class="btn btn-sm btn-ghost btn-icon" type="button" data-push-dismiss aria-label="Agora não"><?= icon('x', 'ic-sm') ?></button>
+    </div>
+
+    <?php if ($reminder):
+        $rname = first_name($reminder['display']);
+        if ($reminder['days'] === null) {
+            $rtext = $reminder['got'] ? $rname . ' já te escreveu e você ainda não mandou nenhuma carta de volta.' : 'Você ainda não escreveu para ' . $rname . '.';
+        } elseif ($reminder['days'] >= 60) {
+            $rtext = 'Faz ' . (int) floor($reminder['days'] / 30) . ' meses que você não escreve para ' . $rname . '.';
+        } else {
+            $rtext = 'Faz ' . $reminder['days'] . ' dias que você não escreve para ' . $rname . '.';
+        }
+        ?>
+        <div class="reminder" hidden data-reminder="<?= (int) $reminder['id'] ?>-<?= date('Y-m') ?>">
+            <?= avatar_html($reminder, 'sm') ?>
+            <div><strong><?= e($rtext) ?></strong><span class="muted small">Um bilhete curto já faz o dia de alguém.</span></div>
+            <a class="btn btn-sm" href="nova.php?para=<?= (int) $reminder['id'] ?>"><?= icon('pen', 'ic-sm') ?>Escrever</a>
+            <button class="btn btn-sm btn-ghost btn-icon" type="button" data-reminder-dismiss aria-label="Agora não"><?= icon('x', 'ic-sm') ?></button>
+        </div>
+    <?php endif; ?>
+
     <?php if ($birthdays): ?>
         <section class="birthdays">
             <?php foreach ($birthdays as $b): ?>
@@ -152,15 +297,34 @@ page_head('Cartas', ['body' => 'page-home', 'css' => ['assets/css/letter.css']])
     <?php endif; ?>
 
     <?php if (!$contacts): ?>
-        <div class="notice"><?= icon('users') ?><div>Sua lista está vazia. <a href="amigos.php">Crie o acesso</a> de quem você quer escrever.</div></div>
+        <div class="notice"><?= icon('users') ?><div>Sua lista está vazia. <a href="amigos.php">Convide</a> quem você quer escrever.</div></div>
     <?php endif; ?>
 
     <nav class="tabs" aria-label="Cartas">
         <a class="<?= $tab === 'recebidas' ? 'active' : '' ?>" href="index.php"><?= icon('inbox', 'ic-sm') ?>Recebidas <span class="count"><?= count($received) ?></span></a>
-        <a class="<?= $tab === 'escritas' ? 'active' : '' ?>" href="index.php?aba=escritas"><?= icon('pen', 'ic-sm') ?>Escritas por você <span class="count"><?= (int) $wc['total'] ?></span></a>
+        <a class="<?= $tab === 'escritas' ? 'active' : '' ?>" href="index.php?aba=escritas"><?= icon('pen', 'ic-sm') ?><span>Escritas<span class="hide-sm"> por você</span></span> <span class="count"><?= (int) $wc['total'] ?></span></a>
+        <a class="<?= $tab === 'favoritas' ? 'active' : '' ?>" href="index.php?aba=favoritas"><?= icon('star', 'ic-sm') ?>Favoritas <span class="count"><?= count($favIds) ?></span></a>
     </nav>
 
-    <?php if ($tab === 'recebidas'): ?>
+    <?php if ($tab === 'busca'): ?>
+        <div class="section-title"><h2><?= count($results) ?> carta<?= count($results) === 1 ? '' : 's' ?> com “<?= e($search) ?>”</h2></div>
+        <?php if (!$results): ?>
+            <div class="empty"><p class="muted">Nada encontrado. Cartas lacradas só entram na busca depois de abertas.</p></div>
+        <?php else: ?>
+            <div class="found-list"><?php foreach ($results as $l) { found_item($l, $user, in_array((int) $l['id'], $favIds, true)); } ?></div>
+        <?php endif; ?>
+
+    <?php elseif ($tab === 'favoritas'): ?>
+        <?php if (!$favorites): ?>
+            <div class="empty">
+                <h2>Nenhuma favorita ainda</h2>
+                <p class="muted">Abra uma carta e toque na estrela para guardar aqui as que você quer reler sempre.</p>
+            </div>
+        <?php else: ?>
+            <div class="found-list"><?php foreach ($favorites as $l) { found_item($l, $user, true); } ?></div>
+        <?php endif; ?>
+
+    <?php elseif ($tab === 'recebidas'): ?>
         <div class="new-letter-banner" hidden data-new-banner>
             <?= icon('mail') ?>Chegou carta nova. <a href="index.php" class="btn btn-sm btn-primary">Ver agora</a>
         </div>

@@ -95,6 +95,7 @@ function delete_account(int $userId): void
         q('DELETE FROM media WHERE id = ?', [(int) $m['id']]);
     }
     q('UPDATE users SET created_by = NULL WHERE created_by = ?', [$userId]);
+    q("DELETE FROM invites WHERE kind = 'reset' AND user_id = ?", [$userId]);
     q('DELETE FROM users WHERE id = ?', [$userId]);
 }
 

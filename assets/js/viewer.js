@@ -30,6 +30,7 @@
     if (opened) return;
     opened = true;
     if (!data.isAdmin) api('opened', { id: data.id }).catch(() => {});
+    startMusic(); // precisa ser dentro do clique, senão o navegador bloqueia o som
 
     if (reduceMotion) {
       showLetter();
@@ -61,6 +62,83 @@
     if (location.hash === '#respostas') {
       setTimeout(() => document.getElementById('respostas').scrollIntoView({ behavior: 'smooth' }), 400);
     }
+  }
+
+  // ---------- Música enquanto lê ----------
+  function startMusic() {
+    const bgm = data.content && data.content.bgm;
+    if (!bgm || bgm.kind === 'none') return;
+    const volume = Math.max(0.05, Math.min(1, bgm.volume ?? 0.6));
+    const bar = Letter.el('div', 'bgm-player');
+    const toggle = Letter.el('button', 'bgm-toggle', { type: 'button', 'aria-label': 'Pausar música' });
+    const label = Letter.el('span', 'bgm-name', { text: bgm.name || 'Música da carta' });
+    const eq = Letter.el('span', 'bgm-eq', { 'aria-hidden': 'true' });
+    eq.append(Letter.el('i'), Letter.el('i'), Letter.el('i'));
+    bar.append(toggle, eq, label);
+    document.body.appendChild(bar);
+    let playing = false;
+    const show = (on) => {
+      playing = on;
+      bar.classList.toggle('is-playing', on);
+      toggle.replaceChildren(Letter.icon(on ? 'pause' : 'play'));
+      toggle.setAttribute('aria-label', on ? 'Pausar música' : 'Tocar música');
+    };
+
+    if (bgm.kind === 'file') {
+      const audio = new Audio(Letter.mediaUrl(bgm.src));
+      audio.loop = true;
+      audio.volume = 0;
+      const fadeIn = () => {
+        let v = 0;
+        const t = setInterval(() => {
+          v = Math.min(volume, v + volume / 20);
+          audio.volume = v;
+          if (v >= volume) clearInterval(t);
+        }, 100);
+      };
+      audio.addEventListener('play', () => show(true));
+      audio.addEventListener('pause', () => show(false));
+      audio.play().then(fadeIn).catch(() => { audio.volume = volume; show(false); bar.classList.add('needs-tap'); });
+      toggle.addEventListener('click', () => {
+        bar.classList.remove('needs-tap');
+        if (audio.paused) { audio.volume = volume; audio.play().catch(() => {}); } else audio.pause();
+      });
+      show(false);
+      return;
+    }
+
+    // YouTube: um player escondido, controlado por mensagens
+    const params = new URLSearchParams({
+      autoplay: '1', loop: '1', playlist: bgm.mid, controls: '0', enablejsapi: '1', playsinline: '1', rel: '0',
+      start: String(bgm.start || 0), origin: location.origin,
+    });
+    const frame = Letter.el('iframe', 'bgm-frame', {
+      src: 'https://www.youtube-nocookie.com/embed/' + bgm.mid + '?' + params,
+      allow: 'autoplay; encrypted-media', title: 'Música da carta', tabindex: '-1',
+    });
+    bar.appendChild(frame);
+    const send = (func, args) => {
+      try { frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: args || [] }), '*'); } catch (e) { /* ainda carregando */ }
+    };
+    frame.addEventListener('load', () => {
+      try { frame.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'bgm' }), '*'); } catch (e) { /* ignora */ }
+      send('setVolume', [Math.round(volume * 100)]);
+      send('playVideo');
+    });
+    window.addEventListener('message', (e) => {
+      if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(e.origin)) return;
+      let msg;
+      try { msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch (err) { return; }
+      const st = msg && msg.info && typeof msg.info === 'object' ? msg.info.playerState : (msg && msg.event === 'onStateChange' ? msg.info : undefined);
+      if (st === 1) { show(true); bar.classList.remove('needs-tap'); }
+      if (st === 2 || st === 0) show(false);
+    });
+    // alguns celulares não deixam tocar sozinho: mostra o vídeo pequeno para a pessoa tocar
+    setTimeout(() => { if (!playing) bar.classList.add('needs-tap', 'show-frame'); }, 3500);
+    toggle.addEventListener('click', () => {
+      if (playing) { send('pauseVideo'); show(false); } else { send('setVolume', [Math.round(volume * 100)]); send('playVideo'); }
+    });
+    show(false);
   }
 
   /** Texto aparecendo como se estivesse sendo escrito na hora. */
@@ -251,6 +329,26 @@
       btn.disabled = false;
     }
   });
+
+  // ---------- Favorita ----------
+  const favBtn = document.querySelector('[data-favorite]');
+  if (favBtn) {
+    favBtn.addEventListener('click', async () => {
+      favBtn.disabled = true;
+      try {
+        const res = await api('favorite', { id: data.id });
+        favBtn.setAttribute('aria-pressed', res.favorite ? 'true' : 'false');
+        favBtn.querySelector('use').setAttribute('href', 'assets/icons.svg#' + (res.favorite ? 'star-fill' : 'star'));
+        favBtn.querySelector('span').textContent = res.favorite ? 'Favorita' : 'Favoritar';
+        if (res.favorite) favBtn.classList.add('pop');
+        toast(res.favorite ? 'Guardada nas favoritas.' : 'Saiu das favoritas.');
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        favBtn.disabled = false;
+      }
+    });
+  }
 
   // ---------- Exportar ----------
   document.querySelector('[data-print]').addEventListener('click', () => window.print());

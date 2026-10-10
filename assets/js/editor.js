@@ -2788,6 +2788,110 @@
       commit();
     }, { wrap: true }));
     s6.appendChild(L.el('p', 'panel-hint', { text: '"Escrevendo" faz o texto surgir letra por letra, como se você estivesse escrevendo naquela hora.' }));
+
+    panelMusic();
+  }
+
+  // ----- música de fundo enquanto a pessoa lê -----
+  function panelMusic() {
+    const s = panelSection('Música enquanto lê', 'Começa a tocar quando a pessoa abre o envelope e continua baixinho durante a leitura.');
+    const body = L.el('div', 'bgm-box');
+    s.appendChild(body);
+    const bgm = () => state.content.bgm || { kind: 'none' };
+    const setBgm = (value) => {
+      state.content.bgm = value;
+      commit();
+      draw();
+    };
+
+    function draw() {
+      const cur = bgm();
+      body.replaceChildren();
+      if (cur.kind !== 'none') {
+        const card = L.el('div', 'bgm-current');
+        card.appendChild(L.icon(cur.kind === 'youtube' ? 'play' : 'music'));
+        const info = L.el('div', 'bgm-info');
+        info.appendChild(L.el('strong', '', { text: cur.name || (cur.kind === 'youtube' ? 'Vídeo do YouTube' : 'Sua música') }));
+        info.appendChild(L.el('span', 'small muted', { text: cur.kind === 'youtube' ? 'YouTube' + (cur.start ? ' · começa em ' + L.fmtTime(cur.start) : '') : 'Arquivo de áudio' }));
+        card.appendChild(info);
+        const remove = L.el('button', 'icon-btn', { type: 'button', title: 'Tirar música', 'aria-label': 'Tirar música' });
+        remove.appendChild(L.icon('x'));
+        remove.addEventListener('click', () => setBgm({ kind: 'none' }));
+        card.appendChild(remove);
+        body.appendChild(card);
+
+        if (cur.kind === 'file') {
+          const audio = L.el('audio', 'bgm-test', { controls: true, preload: 'none', src: L.mediaUrl(cur.src) });
+          body.appendChild(audio);
+        }
+        body.appendChild(L.el('p', 'menu-label', { text: 'Volume' }));
+        const range = L.el('input', '', { type: 'range', min: '5', max: '100', value: String(Math.round((cur.volume ?? 0.6) * 100)), 'aria-label': 'Volume' });
+        range.addEventListener('change', () => { cur.volume = Number(range.value) / 100; commit(); });
+        body.appendChild(range);
+        if (cur.kind === 'youtube') {
+          const startRow = L.el('label', 'bgm-start');
+          startRow.appendChild(L.el('span', '', { text: 'Começar em (min:seg)' }));
+          const start = L.el('input', '', { value: cur.start ? L.fmtTime(cur.start) : '', placeholder: '0:00', inputmode: 'numeric', maxlength: '6' });
+          start.addEventListener('change', () => {
+            const m = start.value.trim().match(/^(\d{1,3})(?::(\d{1,2}))?$/);
+            cur.start = m ? (m[2] !== undefined ? Number(m[1]) * 60 + Number(m[2]) : Number(m[1])) : 0;
+            commit();
+          });
+          startRow.appendChild(start);
+          body.appendChild(startRow);
+        }
+        return;
+      }
+
+      // nenhuma música: link do YouTube ou arquivo
+      const linkRow = L.el('form', 'bgm-link');
+      const input = L.el('input', '', { placeholder: 'Cole um link do YouTube', inputmode: 'url', 'aria-label': 'Link do YouTube' });
+      const ok = L.el('button', 'btn btn-sm', { type: 'submit', text: 'Usar' });
+      linkRow.append(input, ok);
+      linkRow.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const parsed = L.parseMusicUrl(input.value);
+        if (!parsed || parsed.provider !== 'youtube') {
+          toast(parsed && parsed.provider === 'spotify'
+            ? 'O Spotify não deixa tocar sozinho. Use um link do YouTube ou envie o arquivo da música.'
+            : 'Não reconheci esse link do YouTube.', 'error');
+          return;
+        }
+        const t = input.value.match(/[?&](?:t|start)=(\d+)/);
+        setBgm({ kind: 'youtube', mid: parsed.mid, name: '', start: t ? Number(t[1]) : 0, volume: 0.6 });
+      });
+      body.appendChild(linkRow);
+
+      body.appendChild(L.el('p', 'or-line', { text: 'ou' }));
+      const fileBtn = L.el('label', 'btn btn-sm btn-block');
+      fileBtn.appendChild(L.icon('upload'));
+      fileBtn.appendChild(document.createTextNode('Enviar um arquivo de música (mp3, m4a)'));
+      const file = L.el('input', 'visually-hidden', { type: 'file', accept: 'audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,audio/ogg,.mp3,.m4a,.ogg' });
+      fileBtn.appendChild(file);
+      file.addEventListener('change', async () => {
+        const f = file.files[0];
+        if (!f) return;
+        if (f.size > 12 * 1024 * 1024) {
+          toast('A música passa de 12 MB. Tente uma versão menor.', 'error');
+          return;
+        }
+        const fd = new FormData();
+        fd.append('id', letterId);
+        fd.append('audio', f, f.name);
+        libraryCache = null;
+        setStatus('saving', 'Enviando música…');
+        try {
+          const res = await api('upload', fd);
+          setBgm({ kind: 'file', src: res.src, name: f.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 80), volume: 0.6 });
+        } catch (err) {
+          setStatus('error', err.message);
+          toast(err.message, 'error');
+        }
+      });
+      body.appendChild(fileBtn);
+      body.appendChild(L.el('p', 'panel-hint', { text: 'Spotify não pode tocar sozinho, por isso aqui só vale YouTube ou arquivo. Um bloco de Música dentro da carta continua aceitando Spotify.' }));
+    }
+    draw();
   }
 
   // ----- biblioteca pessoal -----
@@ -3324,18 +3428,15 @@
     try {
       await flushSave();
       const when = scheduleToggle.checked && openAt.value ? openAt.value : '';
-      const delay = Number($('[data-delivery]').value || 0);
-      const res = await api('send', { id: letterId, recipient_id: Number(checked.value), open_at: when, delay_hours: delay });
+      const res = await api('send', { id: letterId, recipient_id: Number(checked.value), open_at: when });
       DATA.letter.recipientId = Number(checked.value);
       DATA.letter.openAt = when;
       DATA.letter.status = 'sent';
       $('[data-open-send] .send-label').textContent = 'Envio';
       $('[data-sent-title]').textContent = res.firstSend ? 'A caminho de ' + res.recipient : 'Envio atualizado';
-      $('[data-sent-text]').textContent = res.arrives
-        ? 'Correio lento: ' + res.recipient + ' vê a carta a caminho e ela chega em ' + res.arrives + '.'
-        : when
-          ? res.recipient + ' já vê o envelope lacrado. Ele só abre na data que você escolheu.'
-          : res.recipient + ' vai encontrar a carta na caixa da próxima vez que entrar.';
+      $('[data-sent-text]').textContent = when
+        ? res.recipient + ' já vê o envelope lacrado. Ele só abre na data que você escolheu.'
+        : res.recipient + ' vai encontrar a carta na caixa da próxima vez que entrar.';
       $('[data-sent-view]').textContent = 'Ver como ' + res.recipient + ' vai ver';
       if (DATA.letter.sentBefore !== true) L.playEffect(state.content.effect, 2600);
       DATA.letter.sentBefore = true;

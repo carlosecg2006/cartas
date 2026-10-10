@@ -24,7 +24,10 @@ function page_head(string $title, array $opts = []): void
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#f6f1ea">
+<meta name="theme-color" content="#f6f1ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171513" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<script src="<?= asset('assets/js/theme.js') ?>"></script>
 <title><?= e($title) ?> · <?= e(app_name()) ?></title>
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icon-192.png">

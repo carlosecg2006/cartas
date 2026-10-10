@@ -27,6 +27,8 @@ $toName = $letter['recipient_id'] ? name_for($uid, ['id' => $letter['recipient_i
 $fromName = name_for($uid, ['id' => $letter['sender_id'], 'name' => $letter['sender_name']]);
 
 $content = $letter['content'];
+$otherId = $isSender ? (int) $letter['recipient_id'] : (int) $letter['sender_id'];
+$isFav = (bool) q_val('SELECT 1 FROM favorites WHERE user_id = ? AND letter_id = ?', [$uid, (int) $letter['id']]);
 $data = [
     'id' => (int) $letter['id'],
     'title' => $letter['title'],
@@ -122,6 +124,10 @@ page_head($letter['title'] ?: 'Carta', [
         <?php endif; ?>
 
         <div class="export row center wrap">
+            <button class="btn btn-ghost fav-btn" type="button" data-favorite aria-pressed="<?= $isFav ? 'true' : 'false' ?>"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#<?= $isFav ? 'star-fill' : 'star' ?>"></use></svg><span><?= $isFav ? 'Favorita' : 'Favoritar' ?></span></button>
+            <?php if ($otherId && is_contact($uid, $otherId)): ?>
+                <a class="btn btn-ghost" href="pessoa.php?id=<?= $otherId ?>"><?= icon('mail', 'ic-sm') ?>Cartas com <?= e(first_name($isSender ? $toName : $fromName)) ?></a>
+            <?php endif; ?>
             <button class="btn btn-ghost" type="button" data-print><?= icon('printer') ?>Salvar em PDF</button>
             <button class="btn btn-ghost" type="button" data-save-image><?= icon('download') ?>Salvar imagem</button>
             <a class="btn btn-ghost" href="index.php"><?= icon('arrow-left') ?>Voltar</a>

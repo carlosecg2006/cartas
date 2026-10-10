@@ -193,6 +193,38 @@ function db_schema(string $driver): array
         "CREATE INDEX idx_letter_media_file ON letter_media (filename)",
         "CREATE INDEX idx_letters_sender ON letters (sender_id, status)",
         "CREATE INDEX idx_media_user ON media (user_id)",
+        "CREATE TABLE IF NOT EXISTS invites (
+            id $pk,
+            token_hash CHAR(64) NOT NULL UNIQUE,
+            kind VARCHAR(10) NOT NULL DEFAULT 'invite',
+            created_by INT NOT NULL,
+            user_id INT NULL,
+            name VARCHAR(80) NOT NULL DEFAULT '',
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME NULL,
+            created_at DATETIME NOT NULL,
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+        )$opts",
+        "CREATE TABLE IF NOT EXISTS favorites (
+            user_id INT NOT NULL,
+            letter_id INT NOT NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY (user_id, letter_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE CASCADE
+        )$opts",
+        "CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id $pk,
+            user_id INT NOT NULL,
+            endpoint_hash CHAR(64) NOT NULL UNIQUE,
+            endpoint TEXT NOT NULL,
+            created_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )$opts",
+        "CREATE TABLE IF NOT EXISTS settings (
+            name VARCHAR(40) NOT NULL PRIMARY KEY,
+            value TEXT NOT NULL
+        )$opts",
         "CREATE TABLE IF NOT EXISTS remember_tokens (
             id $pk,
             user_id INT NOT NULL,
@@ -210,7 +242,7 @@ function db_schema(string $driver): array
     ];
 }
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /** Atualiza o banco de instalações antigas uma única vez, sem perder dados. */
 function ensure_schema(): void
@@ -222,6 +254,18 @@ function ensure_schema(): void
     db_install();
     db_migrate();
     @file_put_contents($flag, date('c'));
+}
+
+function setting(string $name): ?string
+{
+    $v = q_val('SELECT value FROM settings WHERE name = ?', [$name]);
+    return $v === null ? null : (string) $v;
+}
+
+function set_setting(string $name, string $value): void
+{
+    q('DELETE FROM settings WHERE name = ?', [$name]);
+    db_insert('settings', ['name' => $name, 'value' => $value]);
 }
 
 /** Funciona em qualquer MySQL/MariaDB/SQLite: se a coluna não existe, a consulta falha. */

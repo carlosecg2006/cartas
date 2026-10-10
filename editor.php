@@ -89,16 +89,6 @@ page_head('Editor', [
                 <p class="small muted">Só a pessoa escolhida vai ver esta carta.</p>
             <?php endif; ?>
 
-            <label class="send-delivery">
-                <span>Entrega</span>
-                <select data-delivery>
-                    <option value="0">Agora</option>
-                    <option value="1">Correio lento: chega em 1 hora</option>
-                    <option value="6">Correio lento: chega em 6 horas</option>
-                    <option value="24">Correio lento: chega amanhã</option>
-                    <option value="72">Correio lento: chega em 3 dias</option>
-                </select>
-            </label>
             <label class="check"><input type="checkbox" data-schedule-toggle> Só pode ser aberta a partir de uma data</label>
             <div class="schedule" data-schedule hidden>
                 <input type="datetime-local" name="open_at" data-open-at>

@@ -30,6 +30,8 @@ require APP_DIR . '/content.php';
 require APP_DIR . '/people.php';
 require APP_DIR . '/letters.php';
 require APP_DIR . '/templates.php';
+require APP_DIR . '/push.php';
+require APP_DIR . '/invites.php';
 require APP_DIR . '/layout.php';
 
 // Cabeçalhos de segurança
@@ -43,7 +45,7 @@ header("Content-Security-Policy: default-src 'self'; "
     . "img-src 'self' data: blob:; "
     . "media-src 'self' blob:; "
     . "frame-src https://www.youtube-nocookie.com https://open.spotify.com; "
-    . "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'");
+    . "connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'");
 
 $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');

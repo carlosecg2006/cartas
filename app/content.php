@@ -277,6 +277,7 @@ function sanitize_letter_content($raw): array
         ],
         'effect' => pick($raw['effect'] ?? 'none', EFFECT_NAMES, 'none'),
         'reveal' => pick($raw['reveal'] ?? 'fade', REVEAL_MODES, 'fade'),
+        'bgm' => sanitize_bgm($raw['bgm'] ?? null),
         'blocks' => [],
         'stickers' => [],
     ];
@@ -495,9 +496,28 @@ function sanitize_sticker(array $s, array $blockIds): ?array
 }
 
 /** Arquivos de mídia citados por um conteúdo. */
+/** Música que toca enquanto a carta é lida: um arquivo de áudio seu ou um vídeo do YouTube. */
+function sanitize_bgm($raw): array
+{
+    $raw = is_array($raw) ? $raw : [];
+    $kind = pick($raw['kind'] ?? 'none', ['none', 'file', 'youtube'], 'none');
+    $src = (string) ($raw['src'] ?? '');
+    $mid = (string) ($raw['mid'] ?? '');
+    if ($kind === 'file' && preg_match(AUDIO_RE, $src)) {
+        return ['kind' => 'file', 'src' => $src, 'name' => plain($raw['name'] ?? '', 80), 'volume' => num($raw['volume'] ?? 0.6, 0.05, 1, 0.6)];
+    }
+    if ($kind === 'youtube' && preg_match('/^[A-Za-z0-9_-]{11}$/', $mid)) {
+        return ['kind' => 'youtube', 'mid' => $mid, 'name' => plain($raw['name'] ?? '', 80), 'start' => (int) num($raw['start'] ?? 0, 0, 36000, 0), 'volume' => num($raw['volume'] ?? 0.6, 0.05, 1, 0.6)];
+    }
+    return ['kind' => 'none'];
+}
+
 function content_media(array $content): array
 {
     $files = [];
+    if (($content['bgm']['kind'] ?? '') === 'file' && !empty($content['bgm']['src'])) {
+        $files[] = $content['bgm']['src'];
+    }
     foreach (['image', 'sceneImage'] as $key) {
         if (!empty($content['paper'][$key])) {
             $files[] = $content['paper'][$key];

@@ -4,7 +4,8 @@ Um site para trocar cartas digitais. Cada pessoa tem o próprio login, a própri
 
 ## Como funcionam as pessoas
 
-- Quem instala o site cria a primeira conta. A partir daí, **qualquer pessoa pode criar o acesso de alguém novo** (em **Pessoas**). Quem cria e quem foi criado entram um na lista do outro.
+- Quem instala o site cria a primeira conta. A partir daí, **qualquer pessoa pode convidar alguém** (em **Pessoas**): o site gera um **link de convite**, a pessoa abre, cria a própria conta com a senha que quiser e vocês entram um na lista do outro. Se ela já tem conta, o mesmo link só conecta vocês dois.
+- Para quem não consegue abrir o link, ainda dá para criar o acesso direto (o site gera a senha). Quem criou a conta pode mandar um **link para escolher senha nova** quando a pessoa esquecer.
 - Você só escreve para quem está na **sua** lista, com o apelido que quiser dar (o apelido é só seu).
 - Quem recebe uma carta ganha automaticamente quem escreveu na lista, e pode **responder com outra carta**.
 - Ninguém vê cartas de outras pessoas, nem quem instalou o site.
@@ -15,7 +16,10 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 
 **Escrevendo**
 - Painel com todas as cartas desenhadas como envelopes de verdade (com selo e carimbo), filtros por pessoa e por situação
-- Cadastro de amigos: o site gera a senha e monta a mensagem pronta para o WhatsApp
+- **Convite por link** (vale 14 dias, funciona uma vez), com mensagem pronta para o WhatsApp
+- **Página de amizade**: todas as cartas trocadas com uma pessoa numa linha do tempo, "trocando cartas desde…", contagens e aniversário
+- **Busca** em todas as suas cartas (cartas lacradas só entram depois de abertas) e **favoritas**
+- **Lembrete gentil**: avisa quando faz tempo que você não escreve para alguém da sua lista
 - **8 modelos prontos** para começar (aniversário, saudade, obrigado, "abra quando…", fim de ano, desculpa, bilhete, em branco)
 - **Editor com blocos (como no Notion)**
   - Texto, títulos, citação, listas, lista de desejos, destaque, foto, **galeria** (espalhada, grade ou filme), **foto e texto lado a lado**, **mensagem de voz gravada no navegador**, música do YouTube/Spotify, segredo, divisórias, assinatura e espaçamento
@@ -35,12 +39,14 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 - **Várias páginas** (bloco "Nova página"), **raspadinha** e **texto aparecendo como se estivesse sendo escrito**
 - **Figurinhas da internet**: envie ou cole (Ctrl+V) qualquer imagem; se tiver fundo liso, ele é apagado automaticamente
 - **Biblioteca pessoal**: tudo o que você enviou fica guardado para usar em outras cartas
-- **Correio lento**: a carta chega só depois de 1 hora, 6 horas, 1 dia ou 3 dias
+- **Música enquanto lê**: um link do YouTube ou um arquivo de música seu começa a tocar quando a pessoa abre o envelope
 - **Aniversários**: avisos no painel dias antes do aniversário de quem está na sua lista
 
 **Recebendo**
 - Entram quando quiserem ("lembrar de mim") e veem só as cartas deles; as "abra quando…" ficam numa seção própria
 - Dá para instalar o site na tela inicial do celular, como um app
+- **Avisos no celular** quando chega carta ou recado (ative em **Conta**; no iPhone, só com o site instalado na tela de início)
+- **Modo escuro**: automático (segue o celular) ou escolhido em **Conta**
 - Abertura animada: o selo se parte, a aba abre, a carta sai e os blocos aparecem um a um
 - Cartas agendadas aparecem lacradas com contagem regressiva (o conteúdo nem chega ao navegador antes da hora)
 - Reagem, respondem, ouvem a mensagem de voz e salvam a carta em PDF ou imagem
@@ -53,7 +59,7 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 4. Acesse o seu site. O **instalador** abre sozinho:
    - Passo 1: escolha *MySQL* e preencha os dados do banco
    - Passo 2: crie a sua conta de remetente
-5. Pronto! Vá em **Amigos**, adicione as pessoas e escreva a primeira carta.
+5. Pronto! Vá em **Pessoas**, convide quem você quer e escreva a primeira carta.
 
 > Faça a instalação logo depois de subir os arquivos: enquanto ela não é feita, qualquer pessoa que abrir o site vê o instalador.
 
@@ -64,6 +70,7 @@ Requisitos: PHP 8.1 ou mais novo com PDO MySQL, GD e DOM (todas as hospedagens c
 1. Baixe o ZIP novo e envie os arquivos para `htdocs`, **substituindo** os antigos.
 2. **Não apague** o `config.php` nem a pasta `storage` (é lá que ficam as fotos e os áudios). O ZIP não traz esses arquivos, então substituir tudo é seguro.
 3. Abra o site: o banco se atualiza sozinho na primeira visita, sem perder cartas.
+4. Para conferir os avisos no celular, vá em **Conta → Avisos no celular → Mandar um aviso de teste**. Algumas hospedagens gratuitas bloqueiam conexões de saída; se for o caso, o botão mostra o erro e o resto do site continua funcionando normalmente.
 
 ## Rodar no seu computador
 
@@ -79,10 +86,14 @@ Abra `http://localhost:8000` e, no instalador, escolha **SQLite**: não precisa 
 index.php        painel do remetente / caixa do amigo
 nova.php         escolha do modelo
 editor.php       editor de cartas
-carta.php        leitura da carta (envelope, reações, respostas)
-amigos.php       pessoas: criar acessos, apelidos, aniversários
-conta.php        perfil, aniversário e senha
-api.php          salvar, enviar, enviar imagem/áudio, versões, reagir, responder
+carta.php        leitura da carta (envelope, música, reações, respostas, favorita)
+amigos.php       pessoas: convites, apelidos, aniversários
+pessoa.php       página de amizade (linha do tempo com uma pessoa)
+convite.php      abre o link de convite ou de senha nova
+conta.php        perfil, aparência (modo escuro), avisos no celular e senha
+api.php          salvar, enviar, enviar imagem/áudio, versões, reagir, responder, favoritar, avisos
+avisos.php       diz ao celular o que chegou quando um aviso é recebido
+sw.js            service worker que mostra os avisos
 media.php        entrega imagens e áudios só para quem pode ver a carta
 manifest.php     permite instalar o site no celular
 install.php      instalador
@@ -98,5 +109,7 @@ storage/         imagens enviadas (e o banco SQLite, se usado) — bloqueado par
 - Todas as consultas usam *prepared statements*
 - O conteúdo das cartas passa por uma lista branca no servidor (só formatação de texto é aceita)
 - Cada carta e cada arquivo é conferido no servidor: ninguém abre carta, foto ou áudio de outra pessoa mudando o endereço
+- Links de convite guardam só o *hash* do código, expiram e funcionam uma única vez
+- Os avisos no celular não levam conteúdo: o serviço de push só recebe um "toque" vazio, e o celular pergunta ao próprio site o que chegou
 - Só dá para enviar carta para quem está na sua lista (conferido no servidor, não só na tela)
 - Imagens são recodificadas no envio (remove dados escondidos e reduz o tamanho)

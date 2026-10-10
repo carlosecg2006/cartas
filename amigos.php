@@ -53,6 +53,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             redirect('amigos.php');
         }
+    } elseif ($action === 'convidar') {
+        $name = mb_substr(trim((string) ($_POST['name'] ?? '')), 0, 80);
+        if ($name === '') {
+            $errors[] = 'Escreva o nome de quem você quer convidar.';
+        } else {
+            $_SESSION['invite_link'] = ['name' => $name, 'url' => invite_url(create_invite($user, $name)), 'kind' => 'invite'];
+            redirect('amigos.php');
+        }
+    } elseif ($action === 'cancelar_convite') {
+        q('DELETE FROM invites WHERE id = ? AND created_by = ? AND used_at IS NULL', [(int) ($_POST['convite'] ?? 0), $uid]);
+        flash('Convite cancelado. O link não funciona mais.');
+        redirect('amigos.php');
+    } elseif ($action === 'link_senha' && $createdByMe) {
+        $_SESSION['invite_link'] = ['name' => $contact['display'], 'url' => invite_url(create_invite($user, $contact['name'], 'reset', (int) $contact['id'])), 'kind' => 'reset'];
+        redirect('amigos.php');
     } elseif ($action === 'apelido' && $contact) {
         $nick = mb_substr(trim((string) ($_POST['nickname'] ?? '')), 0, 80);
         q('UPDATE contacts SET nickname = ? WHERE owner_id = ? AND contact_id = ?', [$nick, $uid, (int) $contact['id']]);
@@ -76,7 +91,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $credentials = $_SESSION['credentials'] ?? null;
-unset($_SESSION['credentials']);
+$inviteLink = $_SESSION['invite_link'] ?? null;
+unset($_SESSION['credentials'], $_SESSION['invite_link']);
+$pending = pending_invites($uid);
 
 $contacts = contacts_of($uid);
 $stats = [];
@@ -127,6 +144,25 @@ page_head('Pessoas', ['body' => 'page-friends']);
         </div>
     <?php endif; ?>
 
+    <?php if ($inviteLink):
+        $message = $inviteLink['kind'] === 'reset'
+            ? 'Oi, ' . first_name($inviteLink['name']) . '! Use este link para escolher uma senha nova no ' . app_name() . ' (vale por ' . RESET_DAYS . ' dias): ' . $inviteLink['url']
+            : 'Oi, ' . first_name($inviteLink['name']) . '! Quero trocar cartas com você no ' . app_name() . '. Abre esse link e cria sua conta: ' . $inviteLink['url'];
+        ?>
+        <div class="credentials card" data-invite-box>
+            <h2><?= $inviteLink['kind'] === 'reset' ? 'Link de senha nova' : 'Convite pronto' ?></h2>
+            <p class="muted"><?= $inviteLink['kind'] === 'reset'
+                ? 'Quem abrir escolhe a própria senha. Vale por ' . RESET_DAYS . ' dias e funciona uma vez só.'
+                : 'Quem abrir cria a própria conta, com a senha que quiser, e vocês já entram um na lista do outro. Vale por ' . INVITE_DAYS . ' dias e funciona uma vez só.' ?></p>
+            <input class="invite-url" readonly value="<?= e($inviteLink['url']) ?>" aria-label="Link">
+            <textarea class="cred-message" readonly rows="3" data-copy-source><?= e($message) ?></textarea>
+            <div class="row wrap">
+                <button class="btn btn-primary" type="button" data-copy><?= icon('copy') ?>Copiar mensagem</button>
+                <a class="btn" target="_blank" rel="noopener" href="https://wa.me/?text=<?= e(rawurlencode($message)) ?>"><?= icon('send') ?>Mandar pelo WhatsApp</a>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div class="friends-layout">
         <section class="card friend-form-card">
             <?php if ($nicking): ?>
@@ -143,9 +179,42 @@ page_head('Pessoas', ['body' => 'page-friends']);
                     </div>
                 </form>
             <?php else: ?>
-                <h2><?= $editing ? 'Editar ' . e(first_name($editing['name'])) : 'Criar acesso para alguém' ?></h2>
-                <?php if (!$editing): ?><p class="muted small">A pessoa entra na sua lista e você entra na dela.</p><?php endif; ?>
-                <?php foreach ($errors as $error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endforeach; ?>
+                <?php if (!$editing): ?>
+                    <h2>Convidar alguém</h2>
+                    <p class="muted small">Gere um link e mande para a pessoa. Ela cria a própria conta e vocês entram um na lista do outro.</p>
+                    <?php if (($_POST['acao'] ?? '') === 'convidar'): foreach ($errors as $error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endforeach; endif; ?>
+                    <form method="post" class="form">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="acao" value="convidar">
+                        <label>Nome (ou como você chama a pessoa)
+                            <input name="name" required maxlength="80" placeholder="Mariana" value="<?= e(($_POST['acao'] ?? '') === 'convidar' ? ($_POST['name'] ?? '') : '') ?>">
+                        </label>
+                        <button class="btn btn-primary"><?= icon('send') ?>Gerar link de convite</button>
+                    </form>
+
+                    <?php if ($pending): ?>
+                        <div class="pending-invites">
+                            <h3 class="small-title">Convites esperando</h3>
+                            <?php foreach ($pending as $inv): ?>
+                                <form method="post" class="pending-row">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="convite" value="<?= (int) $inv['id'] ?>">
+                                    <span><b><?= e($inv['name']) ?></b> <span class="muted small">· vale até <?= e(fmt_date($inv['expires_at'], false)) ?></span></span>
+                                    <button class="btn btn-sm btn-ghost" name="acao" value="cancelar_convite" data-confirm="Cancelar o convite de <?= e($inv['name']) ?>?">Cancelar</button>
+                                </form>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                <?php endif; ?>
+
+                <?php if (!$editing): ?>
+                <details class="more-options" <?= ($_POST['acao'] ?? '') === 'criar' ? 'open' : '' ?>>
+                    <summary>Ou crie o acesso você mesmo, com senha</summary>
+                    <p class="muted small">Para quem não consegue abrir o link. Você escolhe o usuário e o site gera a senha.</p>
+                <?php else: ?>
+                <h2>Editar <?= e(first_name($editing['name'])) ?></h2>
+                <?php endif; ?>
+                <?php if ($editing || ($_POST['acao'] ?? '') === 'criar'): foreach ($errors as $error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endforeach; endif; ?>
                 <form method="post" class="form" data-friend-form>
                     <?= csrf_field() ?>
                     <input type="hidden" name="acao" value="<?= $editing ? 'editar' : 'criar' ?>">
@@ -178,10 +247,11 @@ page_head('Pessoas', ['body' => 'page-friends']);
                     </div>
                     <?php if (!$editing): ?><p class="small muted">A senha é gerada na hora e mostrada uma única vez.</p><?php endif; ?>
                     <div class="row">
-                        <button class="btn btn-primary"><?= $editing ? 'Salvar' : 'Criar acesso' ?></button>
+                        <button class="btn <?= $editing ? 'btn-primary' : '' ?>"><?= $editing ? 'Salvar' : 'Criar acesso' ?></button>
                         <?php if ($editing): ?><a class="btn btn-ghost" href="amigos.php">Cancelar</a><?php endif; ?>
                     </div>
                 </form>
+                <?php if (!$editing): ?></details><?php endif; ?>
             <?php endif; ?>
         </section>
 
@@ -197,7 +267,7 @@ page_head('Pessoas', ['body' => 'page-friends']);
                         <article class="friend-row">
                             <?= avatar_html($f, 'lg') ?>
                             <div>
-                                <h3><?= e($f['display']) ?></h3>
+                                <h3><a class="friend-link" href="pessoa.php?id=<?= (int) $f['id'] ?>"><?= e($f['display']) ?></a></h3>
                                 <p class="muted small">
                                     <?= $f['nickname'] !== '' ? e($f['name']) . ' · ' : '' ?>@<?= e($f['username']) ?>
                                     <?php if ($f['birthday']): ?> · faz aniversário em <?= e(birthday_label($f['birthday'])) ?><?php endif; ?>
@@ -213,7 +283,7 @@ page_head('Pessoas', ['body' => 'page-friends']);
                                 <details class="menu">
                                     <summary class="btn btn-sm btn-ghost btn-icon" aria-label="Mais ações"><?= icon('more') ?></summary>
                                     <div class="menu-list">
-                                        <a href="index.php?aba=escritas&amp;para=<?= (int) $f['id'] ?>"><?= icon('mail', 'ic-sm') ?>Cartas para essa pessoa</a>
+                                        <a href="pessoa.php?id=<?= (int) $f['id'] ?>"><?= icon('mail', 'ic-sm') ?>Cartas trocadas</a>
                                         <a href="amigos.php?apelido=<?= (int) $f['id'] ?>"><?= icon('user', 'ic-sm') ?>Dar um apelido</a>
                                         <?php if ($mine): ?>
                                             <a href="amigos.php?editar=<?= (int) $f['id'] ?>"><?= icon('pen', 'ic-sm') ?>Editar dados</a>
@@ -221,6 +291,7 @@ page_head('Pessoas', ['body' => 'page-friends']);
                                         <form method="post">
                                             <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $f['id'] ?>">
                                             <?php if ($mine): ?>
+                                                <button name="acao" value="link_senha"><?= icon('lock', 'ic-sm') ?>Link para escolher senha nova</button>
                                                 <button name="acao" value="nova_senha" data-confirm="Gerar uma senha nova para <?= e($f['display']) ?>? A antiga para de funcionar."><?= icon('lock', 'ic-sm') ?>Gerar senha nova</button>
                                                 <button name="acao" value="excluir_conta" class="danger" data-confirm="Apagar a conta de <?= e($f['display']) ?>? Todas as cartas dela, enviadas e recebidas, somem. Não dá para desfazer."><?= icon('trash', 'ic-sm') ?>Apagar conta</button>
                                             <?php else: ?>

@@ -81,6 +81,28 @@ page_head('Minha conta');
     </section>
 
     <section class="card" style="margin-top:1.2rem">
+        <h2>Aparência</h2>
+        <p class="muted small">Fica salvo neste aparelho.</p>
+        <div class="theme-choice" role="radiogroup" aria-label="Tema">
+            <label><input type="radio" name="theme" value="auto" data-theme-choice><span><?= icon('sparkle') ?>Automático</span></label>
+            <label><input type="radio" name="theme" value="light" data-theme-choice><span><?= icon('sun') ?>Claro</span></label>
+            <label><input type="radio" name="theme" value="dark" data-theme-choice><span><?= icon('moon') ?>Escuro</span></label>
+        </div>
+    </section>
+
+    <section class="card push-panel" style="margin-top:1.2rem" data-push-panel>
+        <h2>Avisos no celular</h2>
+        <p class="muted small">Receba um aviso quando chegar carta ou recado novo. O aviso vale para este aparelho; ative em cada um que quiser.</p>
+        <p class="push-status" data-push-status>Verificando…</p>
+        <div class="row wrap">
+            <button class="btn btn-primary" type="button" data-push-enable hidden><?= icon('bell') ?>Ativar avisos</button>
+            <button class="btn" type="button" data-push-test hidden>Mandar um aviso de teste</button>
+            <button class="btn btn-ghost" type="button" data-push-disable hidden>Desativar neste aparelho</button>
+        </div>
+        <p class="small muted" data-push-ios hidden>No iPhone: toque em Compartilhar → “Adicionar à Tela de Início”, abra o site pelo ícone e ative aqui.</p>
+    </section>
+
+    <section class="card" style="margin-top:1.2rem">
         <h2>Trocar senha</h2>
         <form method="post" class="form">
             <?= csrf_field() ?>

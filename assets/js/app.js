@@ -152,4 +152,146 @@
         .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
     });
   }
+
+  // ---------- Tema (claro / escuro / automático) ----------
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* ignora */ } },
+  };
+  document.querySelectorAll('[data-theme-choice]').forEach((radio) => {
+    radio.checked = (store.get('theme') || 'auto') === radio.value;
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      store.set('theme', radio.value === 'auto' ? null : radio.value);
+      if (radio.value === 'auto') document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', radio.value);
+    });
+  });
+
+  // ---------- Lembrete gentil (some por um mês quando dispensado) ----------
+  const reminder = document.querySelector('[data-reminder]');
+  if (reminder) {
+    const key = 'lembrete-' + reminder.dataset.reminder;
+    if (!store.get(key)) reminder.hidden = false;
+    reminder.querySelector('[data-reminder-dismiss]').addEventListener('click', () => {
+      store.set(key, '1');
+      reminder.hidden = true;
+    });
+  }
+
+  // ---------- Avisos no celular ----------
+  const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+  function b64ToBytes(b64) {
+    const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  }
+  async function pushRegistration() {
+    return navigator.serviceWorker.register('sw.js');
+  }
+  async function currentSubscription() {
+    if (!pushSupported) return null;
+    const reg = await navigator.serviceWorker.getRegistration();
+    return reg ? reg.pushManager.getSubscription() : null;
+  }
+  async function enablePush() {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') throw new Error('Os avisos foram bloqueados. Libere nas configurações do navegador para este site.');
+    const reg = await pushRegistration();
+    await navigator.serviceWorker.ready;
+    const { key } = await api('push_key', {});
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+    await api('push_subscribe', { endpoint: sub.endpoint });
+    return sub;
+  }
+  // mantém o aparelho cadastrado (o endereço pode mudar com o tempo)
+  if (pushSupported && Notification.permission === 'granted' && csrf) {
+    currentSubscription().then((sub) => { if (sub) api('push_subscribe', { endpoint: sub.endpoint }).catch(() => {}); }).catch(() => {});
+  }
+
+  const panel = document.querySelector('[data-push-panel]');
+  if (panel) {
+    const status = panel.querySelector('[data-push-status]');
+    const btnOn = panel.querySelector('[data-push-enable]');
+    const btnTest = panel.querySelector('[data-push-test]');
+    const btnOff = panel.querySelector('[data-push-disable]');
+    const refresh = async () => {
+      btnOn.hidden = btnTest.hidden = btnOff.hidden = true;
+      if (!pushSupported) {
+        status.textContent = isIos && !standalone
+          ? 'No iPhone, os avisos só funcionam com o site instalado na tela de início.'
+          : 'Este navegador não aceita avisos.';
+        panel.querySelector('[data-push-ios]').hidden = !isIos;
+        return;
+      }
+      if (Notification.permission === 'denied') {
+        status.textContent = 'Os avisos estão bloqueados para este site. Libere nas configurações do navegador.';
+        return;
+      }
+      const sub = await currentSubscription().catch(() => null);
+      if (sub && Notification.permission === 'granted') {
+        status.textContent = 'Ativados neste aparelho.';
+        btnTest.hidden = btnOff.hidden = false;
+      } else {
+        status.textContent = 'Desativados neste aparelho.';
+        btnOn.hidden = false;
+      }
+    };
+    btnOn.addEventListener('click', async () => {
+      btnOn.disabled = true;
+      try {
+        await enablePush();
+        toast('Avisos ativados.');
+      } catch (err) {
+        toast(err.message || 'Não consegui ativar os avisos.', 'error');
+      }
+      btnOn.disabled = false;
+      refresh();
+    });
+    btnTest.addEventListener('click', async () => {
+      btnTest.disabled = true;
+      try {
+        const res = await api('push_test', {});
+        if (res.sent) toast('Aviso enviado. Deve chegar em alguns segundos.');
+        else toast('O aviso não saiu: ' + (res.error || 'motivo desconhecido') + ' Algumas hospedagens gratuitas bloqueiam isso.', 'error');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+      btnTest.disabled = false;
+    });
+    btnOff.addEventListener('click', async () => {
+      const sub = await currentSubscription().catch(() => null);
+      if (sub) {
+        await api('push_unsubscribe', { endpoint: sub.endpoint }).catch(() => {});
+        await sub.unsubscribe().catch(() => {});
+      }
+      toast('Avisos desativados neste aparelho.');
+      refresh();
+    });
+    refresh();
+  }
+
+  // Convite discreto na caixa de cartas
+  const prompt = document.querySelector('[data-push-prompt]');
+  if (prompt && pushSupported && Notification.permission === 'default' && !store.get('push-prompt-off')) {
+    prompt.hidden = false;
+    prompt.querySelector('[data-push-enable]').addEventListener('click', async () => {
+      try {
+        await enablePush();
+        toast('Pronto! Você vai ser avisado(a) quando chegar carta.');
+        prompt.hidden = true;
+      } catch (err) {
+        toast(err.message || 'Não consegui ativar os avisos.', 'error');
+        if (Notification.permission === 'denied') prompt.hidden = true;
+      }
+    });
+    prompt.querySelector('[data-push-dismiss]').addEventListener('click', () => {
+      store.set('push-prompt-off', '1');
+      prompt.hidden = true;
+    });
+  }
 })();

@@ -70,8 +70,6 @@ switch ($action) {
             }
             $openAt = date('Y-m-d H:i:s', $ts);
         }
-        // Correio lento: quantas horas a carta leva para chegar
-        $delay = max(0, min(24 * 7, (int) ($in['delay_hours'] ?? 0)));
         $data = [
             'recipient_id' => (int) $recipient['id'],
             'open_at' => $openAt,
@@ -81,7 +79,7 @@ switch ($action) {
         $firstSend = $letter['status'] !== 'sent' || (int) $letter['recipient_id'] !== (int) $recipient['id'];
         if ($firstSend) {
             $data['sent_at'] = now();
-            $data['delivered_at'] = $delay ? date('Y-m-d H:i:s', time() + $delay * 3600) : null;
+            $data['delivered_at'] = null;
             if ((int) $letter['recipient_id'] !== (int) $recipient['id']) {
                 $data['first_opened_at'] = null;
                 $data['last_opened_at'] = null;
@@ -91,11 +89,13 @@ switch ($action) {
         db_update('letters', (int) $letter['id'], $data);
         // Quem recebe passa a ter quem escreveu na lista, para poder responder
         add_contact((int) $recipient['id'], $uid);
+        if ($firstSend) {
+            notify_quietly((int) $recipient['id']);
+        }
         json_out([
             'ok' => true,
             'recipient' => first_name(name_for($uid, $recipient)),
             'firstSend' => $firstSend,
-            'arrives' => !empty($data['delivered_at']) ? fmt_date($data['delivered_at']) : null,
         ]);
 
     case 'upload':
@@ -187,6 +187,7 @@ switch ($action) {
         }
         $id = db_insert('replies', ['letter_id' => (int) $letter['id'], 'user_id' => $uid, 'message' => $message, 'created_at' => now()]);
         $reply = q_one('SELECT r.*, u.name, u.role, u.avatar, u.color FROM replies r JOIN users u ON u.id = r.user_id WHERE r.id = ?', [$id]);
+        notify_quietly((int) ($uid === (int) $letter['sender_id'] ? $letter['recipient_id'] : $letter['sender_id']));
         json_out(['ok' => true, 'reply' => reply_payload($reply, $user)]);
 
     case 'delete_reply':
@@ -196,6 +197,45 @@ switch ($action) {
         }
         q('DELETE FROM replies WHERE id = ?', [(int) $reply['id']]);
         json_out(['ok' => true]);
+
+    case 'favorite':
+        $letter = load_letter_for($user, $in['id'] ?? 0);
+        $on = (bool) q_val('SELECT 1 FROM favorites WHERE user_id = ? AND letter_id = ?', [$uid, (int) $letter['id']]);
+        if ($on) {
+            q('DELETE FROM favorites WHERE user_id = ? AND letter_id = ?', [$uid, (int) $letter['id']]);
+        } else {
+            db_insert('favorites', ['user_id' => $uid, 'letter_id' => (int) $letter['id'], 'created_at' => now()]);
+        }
+        json_out(['ok' => true, 'favorite' => !$on]);
+
+    // ---------- Avisos no celular ----------
+    case 'push_key':
+        $keys = vapid_keys();
+        if (!$keys) {
+            json_error('Esta hospedagem não tem suporte aos avisos (openssl).');
+        }
+        json_out(['ok' => true, 'key' => $keys['public']]);
+
+    case 'push_subscribe':
+        $endpoint = (string) ($in['endpoint'] ?? '');
+        $host = strtolower((string) parse_url($endpoint, PHP_URL_HOST));
+        $known = '/(^|\.)(fcm\.googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)$/';
+        if (!preg_match('#^https://\S{10,1000}$#', $endpoint) || !preg_match($known, $host)) {
+            json_error('Endereço de aviso inválido.');
+        }
+        $hash = hash('sha256', $endpoint);
+        q('DELETE FROM push_subscriptions WHERE endpoint_hash = ?', [$hash]);
+        db_insert('push_subscriptions', ['user_id' => $uid, 'endpoint_hash' => $hash, 'endpoint' => $endpoint, 'created_at' => now()]);
+        json_out(['ok' => true]);
+
+    case 'push_unsubscribe':
+        $endpoint = (string) ($in['endpoint'] ?? '');
+        q('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint_hash = ?', [$uid, hash('sha256', $endpoint)]);
+        json_out(['ok' => true]);
+
+    case 'push_test':
+        [$sent, $error] = notify_user($uid);
+        json_out(['ok' => true, 'sent' => $sent, 'error' => $error]);
 
     case 'mailbox':
         $count = (int) q_val("SELECT COUNT(*) FROM letters l WHERE l.recipient_id = ? AND l.status = 'sent' AND " . sql_delivered(), [$uid]);

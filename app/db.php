@@ -109,7 +109,9 @@ function db_schema(string $driver): array
             color VARCHAR(9) NOT NULL DEFAULT '#e8a0a0',
             created_at DATETIME NOT NULL,
             last_login_at DATETIME NULL,
-            last_seen_at DATETIME NULL
+            last_seen_at DATETIME NULL,
+            created_by INT NULL,
+            birthday DATE NULL
         )$opts",
         "CREATE TABLE IF NOT EXISTS letters (
             id $pk,
@@ -124,6 +126,9 @@ function db_schema(string $driver): array
             first_opened_at DATETIME NULL,
             last_opened_at DATETIME NULL,
             open_count INT NOT NULL DEFAULT 0,
+            sender_id INT NULL,
+            delivered_at DATETIME NULL,
+            reply_to INT NULL,
             FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
         )$opts",
         "CREATE INDEX idx_letters_recipient ON letters (recipient_id, status)",
@@ -136,7 +141,10 @@ function db_schema(string $driver): array
             height INT NOT NULL DEFAULT 0,
             size INT NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL,
-            FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE CASCADE
+            user_id INT NULL,
+            kind VARCHAR(10) NOT NULL DEFAULT 'image',
+            in_library INT NOT NULL DEFAULT 1,
+            FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE SET NULL
         )$opts",
         "CREATE TABLE IF NOT EXISTS reactions (
             id $pk,
@@ -166,6 +174,25 @@ function db_schema(string $driver): array
             created_at DATETIME NOT NULL,
             FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE CASCADE
         )$opts",
+        "CREATE TABLE IF NOT EXISTS contacts (
+            id $pk,
+            owner_id INT NOT NULL,
+            contact_id INT NOT NULL,
+            nickname VARCHAR(80) NOT NULL DEFAULT '',
+            created_at DATETIME NOT NULL,
+            UNIQUE (owner_id, contact_id),
+            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (contact_id) REFERENCES users(id) ON DELETE CASCADE
+        )$opts",
+        "CREATE TABLE IF NOT EXISTS letter_media (
+            letter_id INT NOT NULL,
+            filename VARCHAR(80) NOT NULL,
+            PRIMARY KEY (letter_id, filename),
+            FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE CASCADE
+        )$opts",
+        "CREATE INDEX idx_letter_media_file ON letter_media (filename)",
+        "CREATE INDEX idx_letters_sender ON letters (sender_id, status)",
+        "CREATE INDEX idx_media_user ON media (user_id)",
         "CREATE TABLE IF NOT EXISTS remember_tokens (
             id $pk,
             user_id INT NOT NULL,
@@ -183,9 +210,9 @@ function db_schema(string $driver): array
     ];
 }
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
-/** Atualiza o banco de instalações antigas (cria tabelas novas) uma única vez. */
+/** Atualiza o banco de instalações antigas uma única vez, sem perder dados. */
 function ensure_schema(): void
 {
     $flag = ROOT . '/storage/.schema-' . SCHEMA_VERSION;
@@ -193,7 +220,62 @@ function ensure_schema(): void
         return;
     }
     db_install();
+    db_migrate();
     @file_put_contents($flag, date('c'));
+}
+
+/** Funciona em qualquer MySQL/MariaDB/SQLite: se a coluna não existe, a consulta falha. */
+function column_exists(string $table, string $column): bool
+{
+    try {
+        db()->query('SELECT ' . $column . ' FROM ' . $table . ' LIMIT 0');
+        return true;
+    } catch (PDOException $e) {
+        return false;
+    }
+}
+
+function add_column(string $table, string $column, string $definition): void
+{
+    if (!column_exists($table, $column)) {
+        db()->exec('ALTER TABLE ' . $table . ' ADD COLUMN ' . $column . ' ' . $definition);
+    }
+}
+
+/** Versão 3: cada pessoa escreve e tem sua lista; biblioteca de mídia por pessoa. */
+function db_migrate(): void
+{
+    add_column('users', 'created_by', 'INT NULL');
+    add_column('users', 'birthday', 'DATE NULL');
+    add_column('letters', 'sender_id', 'INT NULL');
+    add_column('letters', 'delivered_at', 'DATETIME NULL');
+    add_column('letters', 'reply_to', 'INT NULL');
+    add_column('media', 'user_id', 'INT NULL');
+    add_column('media', 'kind', "VARCHAR(10) NOT NULL DEFAULT 'image'");
+    add_column('media', 'in_library', 'INT NOT NULL DEFAULT 1');
+    foreach (['CREATE INDEX idx_letter_media_file ON letter_media (filename)', 'CREATE INDEX idx_letters_sender ON letters (sender_id, status)', 'CREATE INDEX idx_media_user ON media (user_id)'] as $sql) {
+        try {
+            db()->exec($sql);
+        } catch (PDOException $e) {
+            // já existe
+        }
+    }
+
+    // Tudo o que existia antes foi escrito por quem instalou o site
+    $admin = q_one("SELECT * FROM users WHERE role = 'admin' ORDER BY id LIMIT 1");
+    if ($admin) {
+        q('UPDATE letters SET sender_id = ? WHERE sender_id IS NULL', [(int) $admin['id']]);
+        q("UPDATE users SET created_by = ? WHERE created_by IS NULL AND id <> ?", [(int) $admin['id'], (int) $admin['id']]);
+        foreach (q_all('SELECT * FROM users WHERE id <> ?', [(int) $admin['id']]) as $u) {
+            add_contact((int) $admin['id'], (int) $u['id']);
+            add_contact((int) $u['id'], (int) $admin['id']);
+        }
+    }
+    q('UPDATE media SET user_id = (SELECT sender_id FROM letters WHERE letters.id = media.letter_id) WHERE user_id IS NULL');
+    q("UPDATE media SET kind = 'audio' WHERE mime LIKE 'audio/%'");
+    foreach (q_all('SELECT id, content FROM letters') as $l) {
+        sync_letter_media((int) $l['id'], json_decode((string) $l['content'], true) ?: []);
+    }
 }
 
 function db_install(): void
@@ -203,7 +285,7 @@ function db_install(): void
             db()->exec($sql);
         } catch (PDOException $e) {
             // Índices já existentes não são erro
-            if (!str_starts_with($sql, 'CREATE INDEX')) {
+            if (!str_starts_with(ltrim($sql), 'CREATE INDEX')) {
                 throw $e;
             }
         }

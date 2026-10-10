@@ -1,12 +1,19 @@
 # 💌 Cartas
 
-Um site para escrever cartas digitais para os amigos. Só você (o remetente) cria as cartas; cada amigo tem o próprio login e vê **apenas** as cartas escritas para ele.
+Um site para trocar cartas digitais. Cada pessoa tem o próprio login, a própria lista de pessoas e vê **apenas** as cartas que escreveu ou recebeu.
+
+## Como funcionam as pessoas
+
+- Quem instala o site cria a primeira conta. A partir daí, **qualquer pessoa pode criar o acesso de alguém novo** (em **Pessoas**). Quem cria e quem foi criado entram um na lista do outro.
+- Você só escreve para quem está na **sua** lista, com o apelido que quiser dar (o apelido é só seu).
+- Quem recebe uma carta ganha automaticamente quem escreveu na lista, e pode **responder com outra carta**.
+- Ninguém vê cartas de outras pessoas, nem quem instalou o site.
 
 Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instalar nada além de uma hospedagem PHP comum.
 
 ## O que dá para fazer
 
-**Você (remetente)**
+**Escrevendo**
 - Painel com todas as cartas desenhadas como envelopes de verdade (com selo e carimbo), filtros por pessoa e por situação
 - Cadastro de amigos: o site gera a senha e monta a mensagem pronta para o WhatsApp
 - **8 modelos prontos** para começar (aniversário, saudade, obrigado, "abra quando…", fim de ano, desculpa, bilhete, em branco)
@@ -24,8 +31,14 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 - **Envelope**: cor, forro, selo de cera, **selo postal ilustrado**, **carimbo com a data de envio** e o texto **"Abra quando…"**
 - **Efeito ao abrir**: corações, confete, pétalas, estrelas ou neve
 - Data mínima para abrir, confirmação de leitura, reações e respostas
+- **Sua própria imagem como papel** (com véu claro/escuro para o texto aparecer) e **como fundo** (com desfoque e escurecer)
+- **Várias páginas** (bloco "Nova página"), **raspadinha** e **texto aparecendo como se estivesse sendo escrito**
+- **Figurinhas da internet**: envie ou cole (Ctrl+V) qualquer imagem; se tiver fundo liso, ele é apagado automaticamente
+- **Biblioteca pessoal**: tudo o que você enviou fica guardado para usar em outras cartas
+- **Correio lento**: a carta chega só depois de 1 hora, 6 horas, 1 dia ou 3 dias
+- **Aniversários**: avisos no painel dias antes do aniversário de quem está na sua lista
 
-**Seus amigos**
+**Recebendo**
 - Entram quando quiserem ("lembrar de mim") e veem só as cartas deles; as "abra quando…" ficam numa seção própria
 - Dá para instalar o site na tela inicial do celular, como um app
 - Abertura animada: o selo se parte, a aba abre, a carta sai e os blocos aparecem um a um
@@ -46,6 +59,12 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 
 Requisitos: PHP 8.1 ou mais novo com PDO MySQL, GD e DOM (todas as hospedagens comuns têm).
 
+## Atualizar um site que já está no ar
+
+1. Baixe o ZIP novo e envie os arquivos para `htdocs`, **substituindo** os antigos.
+2. **Não apague** o `config.php` nem a pasta `storage` (é lá que ficam as fotos e os áudios). O ZIP não traz esses arquivos, então substituir tudo é seguro.
+3. Abra o site: o banco se atualiza sozinho na primeira visita, sem perder cartas.
+
 ## Rodar no seu computador
 
 ```bash
@@ -61,8 +80,8 @@ index.php        painel do remetente / caixa do amigo
 nova.php         escolha do modelo
 editor.php       editor de cartas
 carta.php        leitura da carta (envelope, reações, respostas)
-amigos.php       cadastro de amigos
-conta.php        trocar senha
+amigos.php       pessoas: criar acessos, apelidos, aniversários
+conta.php        perfil, aniversário e senha
 api.php          salvar, enviar, enviar imagem/áudio, versões, reagir, responder
 media.php        entrega imagens e áudios só para quem pode ver a carta
 manifest.php     permite instalar o site no celular
@@ -78,5 +97,6 @@ storage/         imagens enviadas (e o banco SQLite, se usado) — bloqueado par
 - Proteção CSRF em todos os formulários e chamadas da API
 - Todas as consultas usam *prepared statements*
 - O conteúdo das cartas passa por uma lista branca no servidor (só formatação de texto é aceita)
-- Cada carta e cada imagem é conferida no servidor: um amigo não consegue abrir a carta de outro mudando o número na URL
+- Cada carta e cada arquivo é conferido no servidor: ninguém abre carta, foto ou áudio de outra pessoa mudando o endereço
+- Só dá para enviar carta para quem está na sua lista (conferido no servidor, não só na tela)
 - Imagens são recodificadas no envio (remove dados escondidos e reduz o tamanho)

@@ -22,14 +22,14 @@
 
   const PAPERS = {
     plain: 'Liso', lined: 'Pautado', grid: 'Quadriculado', dots: 'Pontilhado',
-    kraft: 'Kraft', vintage: 'Antigo', parchment: 'Pergaminho',
+    kraft: 'Kraft', vintage: 'Antigo', parchment: 'Pergaminho', image: 'Sua imagem',
   };
   const BORDERS = {
     none: 'Sem borda', simple: 'Simples', double: 'Dupla', dashed: 'Tracejada',
     stamp: 'Selo postal', hearts: 'Corações', flowers: 'Flores',
   };
   const SCENES = {
-    desk: 'Mesa de madeira', pink: 'Rosa suave', sky: 'Céu', night: 'Noite estrelada', garden: 'Jardim', plain: 'Neutro',
+    desk: 'Mesa de madeira', pink: 'Rosa suave', sky: 'Céu', night: 'Noite estrelada', garden: 'Jardim', plain: 'Neutro', image: 'Sua imagem',
   };
   const LINERS = { plain: 'Liso', stripes: 'Listras', dots: 'Bolinhas', hearts: 'Corações', stars: 'Estrelas' };
   const DIVIDERS = {
@@ -149,15 +149,41 @@
   /** Aplica estilos de papel e cena. */
   function applyPaper(scene, paper, p) {
     if (scene) {
-      scene.className = scene.className.replace(/\bscene-\S+/g, '').trim() + ' scene-' + (p.scene || 'desk');
+      const sceneKey = p.scene === 'image' && !p.sceneImage ? 'plain' : (p.scene || 'desk');
+      scene.className = scene.className.replace(/\bscene-\S+/g, '').trim() + ' scene-' + sceneKey;
+      if (sceneKey === 'image') {
+        // endereço absoluto: dentro de uma variável CSS, url() relativo seria resolvido a partir do arquivo .css
+        scene.style.setProperty('--scene-img', 'url("' + new URL(mediaUrl(p.sceneImage), location.href).href + '")');
+        scene.style.setProperty('--scene-blur', (p.sceneBlur || 0) + 'px');
+        scene.style.setProperty('--scene-dim', p.sceneDim || 0);
+      } else {
+        scene.style.removeProperty('--scene-img');
+      }
     }
-    paper.className = 'paper paper-' + (p.style || 'lined') + ' border-' + (p.border || 'none') + ' size-' + (p.size || 'md')
-      + (isDark(p.color) ? ' paper-dark' : '');
+    const usesImage = p.style === 'image' && p.image;
+    paper.className = 'paper paper-' + (usesImage ? 'image' : (p.style === 'image' ? 'plain' : (p.style || 'lined')))
+      + ' border-' + (p.border || 'none') + ' size-' + (p.size || 'md')
+      + ((usesImage ? p.veilDark : isDark(p.color)) ? ' paper-dark' : '');
     const font = FONTS[p.font] || FONTS.caveat;
     paper.style.setProperty('--paper', p.color || '#fffdf6');
     paper.style.setProperty('--ink', p.ink || '#3b3340');
     paper.style.setProperty('--font', font.css);
     paper.style.setProperty('--font-scale', font.scale);
+    if (usesImage) {
+      // Véu por cima da imagem, para o texto continuar legível
+      const v = p.veil === undefined ? 0.35 : p.veil;
+      const c = p.veilDark ? 'rgba(18, 14, 12, ' + v + ')' : 'rgba(255, 253, 248, ' + v + ')';
+      const tile = p.imageFit === 'tile';
+      paper.style.backgroundImage = 'linear-gradient(' + c + ', ' + c + '), url("' + mediaUrl(p.image) + '")';
+      paper.style.backgroundSize = '100% 100%, ' + (tile ? '360px auto' : (p.imageFit === 'contain' ? 'contain' : 'cover'));
+      paper.style.backgroundRepeat = 'no-repeat, ' + (tile ? 'repeat' : 'no-repeat');
+      paper.style.backgroundPosition = 'center, center';
+    } else {
+      paper.style.backgroundImage = '';
+      paper.style.backgroundSize = '';
+      paper.style.backgroundRepeat = '';
+      paper.style.backgroundPosition = '';
+    }
   }
 
   function isDark(hex) {
@@ -264,6 +290,11 @@
       case 'audio':
         if (b.src) node.appendChild(renderAudio(b));
         break;
+      case 'scratch':
+        node.appendChild(renderScratch(b, true));
+        break;
+      case 'pagebreak':
+        break;
       case 'spacer':
         node.style.height = (b.height || 40) + 'px';
         break;
@@ -283,6 +314,88 @@
       fig.appendChild(el('figcaption', '', { text: b.caption || '' }));
     }
     return fig;
+  }
+
+  const SCRATCH_COVERS = {
+    silver: { label: 'Prata', stops: ['#b9bec6', '#eef0f3', '#a9aeb7', '#dfe2e7'], ink: '#4a4f57' },
+    gold: { label: 'Dourada', stops: ['#c99a3b', '#f6dd8f', '#b8862b', '#ecca6c'], ink: '#5a3d0a' },
+    pink: { label: 'Rosa', stops: ['#e59bb0', '#fbd7e1', '#d77f99', '#f4bdcc'], ink: '#6b2338' },
+    mint: { label: 'Menta', stops: ['#8fcab3', '#d6f1e6', '#79b79f', '#bfe6d6'], ink: '#1f5240' },
+  };
+
+  /** Raspadinha: quem recebe raspa com o dedo (ou o mouse) para revelar. */
+  function renderScratch(b, interactive) {
+    const wrap = el('div', 'scratch');
+    const inner = el('div', 'scratch-content');
+    if (b.src) inner.appendChild(el('img', '', { src: mediaUrl(b.src), alt: '', loading: 'lazy' }));
+    if (b.html) inner.appendChild(el('div', 'lb-text', { html: b.html }));
+    wrap.appendChild(inner);
+    if (!interactive) return wrap;
+
+    const cv = el('canvas', 'scratch-cover', { 'aria-label': b.label || 'Raspe aqui' });
+    wrap.appendChild(cv);
+    const cover = SCRATCH_COVERS[b.cover] || SCRATCH_COVERS.silver;
+    let ready = false;
+    let strokes = 0;
+    let done = false;
+    const paint = () => {
+      const r = wrap.getBoundingClientRect();
+      if (!r.width || !r.height || ready) return;
+      ready = true;
+      const dpr = window.devicePixelRatio || 1;
+      cv.width = Math.round(r.width * dpr);
+      cv.height = Math.round(r.height * dpr);
+      const ctx = cv.getContext('2d');
+      ctx.scale(dpr, dpr);
+      const g = ctx.createLinearGradient(0, 0, r.width, r.height);
+      cover.stops.forEach((c, i) => g.addColorStop(i / (cover.stops.length - 1), c));
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, r.width, r.height);
+      // brilho e granulado
+      for (let i = 0; i < r.width * r.height / 60; i++) {
+        ctx.fillStyle = 'rgba(255,255,255,' + Math.random() * 0.35 + ')';
+        ctx.fillRect(Math.random() * r.width, Math.random() * r.height, 1, 1);
+      }
+      ctx.fillStyle = cover.ink;
+      ctx.font = '600 15px Geist, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText((b.label || 'Raspe aqui').toUpperCase(), r.width / 2, r.height / 2);
+      ctx.globalCompositeOperation = 'destination-out';
+    };
+    const progress = () => {
+      const ctx = cv.getContext('2d');
+      const data = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      let clear = 0;
+      let total = 0;
+      for (let i = 3; i < data.length; i += 4 * 97) {
+        total++;
+        if (data[i] < 40) clear++;
+      }
+      return total ? clear / total : 0;
+    };
+    const scratchAt = (e) => {
+      const r = cv.getBoundingClientRect();
+      const ctx = cv.getContext('2d');
+      ctx.beginPath();
+      ctx.arc(e.clientX - r.left, e.clientY - r.top, Math.max(16, r.width / 18), 0, Math.PI * 2);
+      ctx.fill();
+      if (++strokes % 12 === 0 && progress() > 0.55) finish();
+    };
+    const finish = () => {
+      if (done) return;
+      done = true;
+      wrap.classList.add('scratched');
+      setTimeout(() => cv.remove(), 700);
+    };
+    let down = false;
+    cv.addEventListener('pointerdown', (e) => { down = true; cv.setPointerCapture(e.pointerId); scratchAt(e); });
+    cv.addEventListener('pointermove', (e) => { if (down) scratchAt(e); });
+    cv.addEventListener('pointerup', () => { down = false; });
+    if (window.ResizeObserver) new ResizeObserver(paint).observe(wrap);
+    requestAnimationFrame(paint);
+    wrap.querySelectorAll('img').forEach((img) => img.addEventListener('load', () => { ready = false; paint(); }));
+    return wrap;
   }
 
   const SCATTER_TILT = [-6, 4, -3, 7, -5, 3, -2, 6];
@@ -473,33 +586,142 @@
     return block.getBoundingClientRect().top - (paperRect || paper.getBoundingClientRect()).top;
   }
 
-  /** Monta a carta completa para leitura. */
-  function renderLetter(container, content, opts) {
-    opts = opts || {};
-    const scene = el('div', 'letter-scene');
+  /** Divide os blocos em páginas nas quebras de página; adesivos vão com o bloco ao qual estão presos. */
+  function splitPages(content) {
+    const pages = [{ blocks: [], stickers: [] }];
+    const where = {};
+    (content.blocks || []).forEach((b) => {
+      if (b.type === 'pagebreak') {
+        pages.push({ blocks: [], stickers: [] });
+        return;
+      }
+      pages[pages.length - 1].blocks.push(b);
+      where[b.id] = pages.length - 1;
+    });
+    (content.stickers || []).forEach((s) => {
+      pages[s.anchor && where[s.anchor] !== undefined ? where[s.anchor] : 0].stickers.push(s);
+    });
+    return pages.filter((pg, i) => i === 0 || pg.blocks.length || pg.stickers.length);
+  }
+
+  function buildPaper(scene, page, p) {
     const paper = el('div', 'paper');
-    applyPaper(scene, paper, content.paper || {});
+    applyPaper(scene, paper, p);
     const inner = el('div', 'paper-inner');
-    (content.blocks || []).forEach((b) => inner.appendChild(renderBlock(b, content.paper || {})));
+    page.blocks.forEach((b) => inner.appendChild(renderBlock(b, p)));
     paper.appendChild(inner);
     const layer = el('div', 'sticker-layer');
-    (content.stickers || []).forEach((s) => layer.appendChild(stickerEl(s)));
+    page.stickers.forEach((s) => layer.appendChild(stickerEl(s)));
     paper.appendChild(layer);
-    scene.appendChild(paper);
-    container.replaceChildren(scene);
-    if (opts.reveal) {
-      // Os blocos aparecem um a um, como se a carta estivesse sendo desdobrada
-      paper.classList.add('reveal');
-      Array.from(inner.children).forEach((n, i) => n.style.setProperty('--i', Math.min(i, 14)));
-      Array.from(layer.children).forEach((n, i) => n.style.setProperty('--i', Math.min(inner.children.length, 14) + i * 0.5));
+    return paper;
+  }
+
+  /**
+   * Monta a carta completa para leitura.
+   * opts.reveal: blocos aparecem um a um · opts.onPage(paper, index): chamado quando uma página aparece pela 1ª vez
+   */
+  function renderLetter(container, content, opts) {
+    opts = opts || {};
+    const p = content.paper || {};
+    const scene = el('div', 'letter-scene');
+    const pages = splitPages(content);
+    const papers = pages.map((pg) => buildPaper(scene, pg, p));
+    let current = 0;
+    const seen = new Set();
+
+    const relayoutOne = (i) => layoutStickers(papers[i], pages[i].stickers);
+    const relayout = () => relayoutOne(current);
+
+    if (papers.length === 1) {
+      scene.appendChild(papers[0]);
+    } else {
+      // Várias páginas: uma de cada vez, com setas e animação de folha virando
+      const book = el('div', 'book');
+      papers.forEach((paper, i) => {
+        paper.classList.add('page');
+        paper.hidden = i !== 0;
+        book.appendChild(paper);
+      });
+      const nav = el('div', 'page-nav');
+      const prev = el('button', 'page-btn', { type: 'button', 'aria-label': 'Página anterior' });
+      prev.appendChild(icon('arrow-left'));
+      const next = el('button', 'page-btn page-next', { type: 'button', 'aria-label': 'Próxima página' });
+      next.appendChild(icon('arrow-left'));
+      const count = el('span', 'page-count');
+      nav.append(prev, count, next);
+      scene.append(book, nav);
+      const go = (to, dir) => {
+        if (to < 0 || to >= papers.length || to === current) return;
+        const from = papers[current];
+        const target = papers[to];
+        from.classList.add(dir > 0 ? 'turn-out-left' : 'turn-out-right');
+        setTimeout(() => {
+          from.hidden = true;
+          from.classList.remove('turn-out-left', 'turn-out-right');
+          target.hidden = false;
+          target.classList.add(dir > 0 ? 'turn-in-right' : 'turn-in-left');
+          setTimeout(() => target.classList.remove('turn-in-right', 'turn-in-left'), 450);
+          current = to;
+          update();
+          relayout();
+          const top = scene.getBoundingClientRect().top + window.scrollY - 70;
+          if (window.scrollY > top) window.scrollTo({ top, behavior: 'smooth' });
+        }, 260);
+      };
+      const update = () => {
+        count.textContent = (current + 1) + ' / ' + papers.length;
+        prev.disabled = current === 0;
+        next.disabled = current === papers.length - 1;
+        if (!seen.has(current)) {
+          seen.add(current);
+          if (opts.onPage) opts.onPage(papers[current], current);
+        }
+      };
+      prev.addEventListener('click', () => go(current - 1, -1));
+      next.addEventListener('click', () => go(current + 1, 1));
+      // Deslizar o dedo para os lados também vira a página
+      let sx = null;
+      book.addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; }, { passive: true });
+      book.addEventListener('touchend', (e) => {
+        if (sx === null) return;
+        const dx = e.changedTouches[0].clientX - sx;
+        sx = null;
+        if (Math.abs(dx) > 60 && !e.target.closest('.scratch, .gallery-strip')) go(current + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.target.closest && e.target.closest('input, textarea')) return;
+        if (e.key === 'ArrowRight') go(current + 1, 1);
+        if (e.key === 'ArrowLeft') go(current - 1, -1);
+      });
+      container.replaceChildren(scene);
+      update();
+    }
+    if (papers.length === 1) {
+      container.replaceChildren(scene);
+      seen.add(0);
+      if (opts.onPage) opts.onPage(papers[0], 0);
     }
 
-    const relayout = () => layoutStickers(paper, content.stickers || []);
+    if (opts.reveal) {
+      // Os blocos aparecem um a um, como se a carta estivesse sendo desdobrada
+      papers.forEach((paper) => {
+        paper.classList.add('reveal');
+        const blocksEls = paper.querySelectorAll('.paper-inner > .lb');
+        blocksEls.forEach((n, i) => n.style.setProperty('--i', Math.min(i, 14)));
+        paper.querySelectorAll('.sticker').forEach((n, i) => n.style.setProperty('--i', Math.min(blocksEls.length, 14) + i * 0.5));
+      });
+    }
+
+    papers.forEach((paper, i) => {
+      if (window.ResizeObserver) new ResizeObserver(() => relayoutOne(i)).observe(paper.querySelector('.paper-inner'));
+      paper.querySelectorAll('img').forEach((img) => img.addEventListener('load', () => relayoutOne(i)));
+    });
     relayout();
-    if (window.ResizeObserver) new ResizeObserver(relayout).observe(inner);
     if (document.fonts) document.fonts.ready.then(relayout);
-    paper.querySelectorAll('img').forEach((img) => img.addEventListener('load', relayout));
-    return { scene, paper, relayout };
+    return {
+      scene, papers, relayout,
+      get paper() { return papers[current]; },
+    };
   }
 
   // ---------- Envelope ----------
@@ -658,7 +880,7 @@
     DOODLES, STAMPS, EFFECTS, GALLERY_LAYOUTS,
     PAPER_COLORS, INK_COLORS, ACCENT_COLORS, SIZE_MUL,
     uid, el, icon, mediaUrl, parseMusicUrl, musicEmbed, isDark, fmtTime,
-    renderGallery, renderAudio, doodleSvg, stampEl, postmarkEl, playEffect,
+    renderGallery, renderAudio, renderScratch, SCRATCH_COVERS, doodleSvg, stampEl, postmarkEl, playEffect, splitPages,
     applyPaper, applyBlockStyle, renderBlock, renderImageFigure, renderDivider, renderSignature,
     stickerEl, updateStickerBox, fillSticker, layoutStickers, anchorTop,
     renderLetter, renderEnvelope,

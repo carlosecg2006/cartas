@@ -33,31 +33,11 @@ function current_user(): ?array
     return $user;
 }
 
-function is_admin(): bool
-{
-    $user = current_user();
-    return $user !== null && $user['role'] === 'admin';
-}
-
 function require_login(): array
 {
     $user = current_user();
     if (!$user) {
         redirect('login.php');
-    }
-    return $user;
-}
-
-function require_admin(): array
-{
-    $user = require_login();
-    if ($user['role'] !== 'admin') {
-        http_response_code(403);
-        page_head('Sem acesso');
-        echo '<main class="container narrow"><div class="empty">'
-            . '<h1>Esta parte é só de quem escreve</h1><p><a class="btn" href="index.php">Voltar para a sua caixa</a></p></div></main>';
-        page_foot();
-        exit;
     }
     return $user;
 }

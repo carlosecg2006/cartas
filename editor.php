@@ -3,14 +3,14 @@ declare(strict_types=1);
 
 require __DIR__ . '/app/bootstrap.php';
 
-$admin = require_admin();
+$user = require_login();
 $letter = find_letter((int) ($_GET['id'] ?? 0));
-if (!$letter) {
+if (!$letter || letter_role($letter, $user) !== 'sender') {
     flash('Carta não encontrada.', 'error');
     redirect('index.php');
 }
 
-$friends = q_all("SELECT id, name, avatar, color FROM users WHERE role = 'friend' ORDER BY name");
+$friends = contacts_of((int) $user['id']);
 $data = [
     'letter' => [
         'id' => (int) $letter['id'],
@@ -20,8 +20,8 @@ $data = [
         'openAt' => $letter['open_at'] ? date('Y-m-d\TH:i', strtotime($letter['open_at'])) : '',
         'content' => sanitize_letter_content($letter['content']),
     ],
-    'friends' => array_map(fn($f) => ['id' => (int) $f['id'], 'name' => first_name($f['name'])], $friends),
-    'sender' => first_name($admin['name']),
+    'friends' => array_map(fn($f) => ['id' => (int) $f['id'], 'name' => $f['display']], $friends),
+    'sender' => first_name($user['name']),
     'today' => fmt_date_long(now()),
 ];
 
@@ -57,6 +57,7 @@ page_head('Editor', [
             <button type="button" role="tab" data-tab="stickers"><?= icon('sticker') ?>Adesivos</button>
             <button type="button" role="tab" data-tab="paper"><?= icon('paper') ?>Papel</button>
             <button type="button" role="tab" data-tab="envelope"><?= icon('mail') ?>Envelope</button>
+            <button type="button" role="tab" data-tab="library"><?= icon('images') ?>Biblioteca</button>
             <button type="button" role="tab" data-tab="layers"><?= icon('layers') ?>Camadas</button>
         </nav>
         <div class="panel-body" data-panel-body></div>
@@ -75,19 +76,29 @@ page_head('Editor', [
         <div class="send-step" data-send-step="choose">
             <h2>Para quem é esta carta?</h2>
             <?php if (!$friends): ?>
-                <p class="muted">Sua lista de amigos está vazia. <a href="amigos.php">Adicione alguém primeiro</a>.</p>
+                <p class="muted">Sua lista está vazia. <a href="amigos.php">Crie o acesso de alguém primeiro</a>.</p>
             <?php else: ?>
                 <div class="friend-pick">
                     <?php foreach ($friends as $f): ?>
                         <label class="friend-option">
                             <input type="radio" name="recipient" value="<?= (int) $f['id'] ?>" <?= (int) $letter['recipient_id'] === (int) $f['id'] ? 'checked' : '' ?>>
-                            <span class="friend-option-box"><?= avatar_html($f, 'md') ?><span><?= e(first_name($f['name'])) ?></span></span>
+                            <span class="friend-option-box"><?= avatar_html($f, 'md') ?><span><?= e($f['display']) ?></span></span>
                         </label>
                     <?php endforeach; ?>
                 </div>
                 <p class="small muted">Só a pessoa escolhida vai ver esta carta.</p>
             <?php endif; ?>
 
+            <label class="send-delivery">
+                <span>Entrega</span>
+                <select data-delivery>
+                    <option value="0">Agora</option>
+                    <option value="1">Correio lento: chega em 1 hora</option>
+                    <option value="6">Correio lento: chega em 6 horas</option>
+                    <option value="24">Correio lento: chega amanhã</option>
+                    <option value="72">Correio lento: chega em 3 dias</option>
+                </select>
+            </label>
             <label class="check"><input type="checkbox" data-schedule-toggle> Só pode ser aberta a partir de uma data</label>
             <div class="schedule" data-schedule hidden>
                 <input type="datetime-local" name="open_at" data-open-at>

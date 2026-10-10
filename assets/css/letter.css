@@ -465,3 +465,50 @@ button.env-seal:hover { animation-play-state: paused; transform: translate(-50%,
 .paper.reveal .sticker { animation: stickerIn .5s both cubic-bezier(.3, 1.4, .5, 1); animation-delay: calc(.35s + var(--i, 0) * 110ms); }
 @keyframes blockIn { from { opacity: 0; transform: translateY(10px); filter: blur(3px); } }
 @keyframes stickerIn { from { opacity: 0; scale: .4; } }
+
+/* ---------- imagem própria: papel e cenário ---------- */
+.paper-image { background-color: var(--paper); }
+.scene-image { position: relative; isolation: isolate; overflow: hidden; background: #2b2724; }
+.scene-image::before {
+  content: ''; position: absolute; inset: calc(var(--scene-blur, 0px) * -2); z-index: -1;
+  background: var(--scene-img) center / cover no-repeat;
+  filter: blur(var(--scene-blur, 0px));
+}
+.scene-image::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: rgba(10, 8, 6, var(--scene-dim, 0));
+}
+
+/* ---------- raspadinha ---------- */
+.scratch { position: relative; border-radius: 14px; overflow: hidden; min-height: 96px; margin: .3em 0; user-select: none; -webkit-user-select: none; }
+.scratch-content { padding: .8em 1em; display: grid; gap: .5em; justify-items: center; text-align: center; min-height: 96px; align-content: center; }
+.scratch-content img { max-width: 100%; max-height: 360px; border-radius: 8px; display: block; }
+.scratch-cover { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; transition: opacity .6s; border-radius: 14px; }
+.scratch.scratched .scratch-cover { opacity: 0; pointer-events: none; }
+.scratch.scratched .scratch-content { animation: reveal .7s ease; }
+
+/* ---------- páginas ---------- */
+.book { perspective: 1800px; }
+.paper.page { transform-origin: left center; }
+.paper.turn-out-left { animation: turnOutLeft .26s ease-in forwards; }
+.paper.turn-out-right { animation: turnOutRight .26s ease-in forwards; transform-origin: right center; }
+.paper.turn-in-right { animation: turnInRight .45s cubic-bezier(.2, .8, .2, 1); }
+.paper.turn-in-left { animation: turnInLeft .45s cubic-bezier(.2, .8, .2, 1); }
+@keyframes turnOutLeft { to { transform: rotateY(-70deg); opacity: 0; } }
+@keyframes turnOutRight { to { transform: rotateY(70deg); opacity: 0; } }
+@keyframes turnInRight { from { transform: translateX(40px) rotateY(12deg); opacity: 0; } }
+@keyframes turnInLeft { from { transform: translateX(-40px) rotateY(-12deg); opacity: 0; } }
+.page-nav { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1.2rem; }
+.page-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .12); background: rgba(255, 253, 249, .92);
+  display: grid; place-items: center; cursor: pointer; color: #1d1a16; box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+}
+.page-btn:disabled { opacity: .35; cursor: default; }
+.page-next .ic { transform: scaleX(-1); }
+.page-count {
+  font-family: 'Geist', system-ui, sans-serif; font-size: 14px; font-variant-numeric: tabular-nums;
+  background: rgba(255, 253, 249, .92); padding: .25rem .7rem; border-radius: 999px; color: #1d1a16;
+}
+
+/* texto se escrevendo */
+.w-hidden { visibility: hidden; }

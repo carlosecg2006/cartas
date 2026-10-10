@@ -90,3 +90,15 @@
   .secret-content { display: block !important; }
   .secret-cover { display: none !important; }
 }
+
+.skip-writing { position: fixed; right: 16px; bottom: 18px; z-index: 60; box-shadow: var(--shadow-lg); }
+.reply-letter {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  border-top: 1px solid var(--line); padding-top: 1.4rem;
+}
+.reply-letter .after-title { margin-bottom: .2rem; }
+.reply-letter p { margin: 0; }
+@media print {
+  .page-nav, .skip-writing { display: none !important; }
+  .paper.page[hidden] { display: flex !important; break-before: page; }
+}

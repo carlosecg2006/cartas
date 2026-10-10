@@ -3,9 +3,10 @@ declare(strict_types=1);
 
 require __DIR__ . '/app/bootstrap.php';
 
-$admin = require_admin();
-$friends = q_all("SELECT id, name FROM users WHERE role = 'friend' ORDER BY name");
+$user = require_login();
+$friends = contacts_of((int) $user['id']);
 $para = (int) ($_GET['para'] ?? 0);
+$suggested = (string) ($_GET['modelo'] ?? '');
 $recipient = null;
 foreach ($friends as $f) {
     if ((int) $f['id'] === $para) {
@@ -15,7 +16,7 @@ foreach ($friends as $f) {
 
 $previews = [];
 foreach (letter_templates() as $key => $tpl) {
-    $previews[$key] = build_template($key, $recipient['name'] ?? 'Mariana', $admin['name']);
+    $previews[$key] = build_template($key, $recipient['display'] ?? 'Você', $user['name']);
 }
 
 page_head('Nova carta', ['css' => ['assets/css/letter.css'], 'letter_fonts' => true]);
@@ -40,7 +41,7 @@ page_head('Nova carta', ['css' => ['assets/css/letter.css'], 'letter_fonts' => t
                     <select name="para">
                         <option value="">Decidir depois</option>
                         <?php foreach ($friends as $f): ?>
-                            <option value="<?= (int) $f['id'] ?>" <?= $para === (int) $f['id'] ? 'selected' : '' ?>><?= e($f['name']) ?></option>
+                            <option value="<?= (int) $f['id'] ?>" <?= $para === (int) $f['id'] ? 'selected' : '' ?>><?= e($f['display']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </label>
@@ -48,7 +49,7 @@ page_head('Nova carta', ['css' => ['assets/css/letter.css'], 'letter_fonts' => t
         <?php endif; ?>
         <div class="tpl-grid">
             <?php foreach (letter_templates() as $key => $tpl): ?>
-                <button class="tpl" name="modelo" value="<?= e($key) ?>">
+                <button class="tpl<?= $suggested === $key ? ' suggested' : '' ?>" name="modelo" value="<?= e($key) ?>">
                     <span class="tpl-preview"><span class="tpl-preview-inner" data-tpl="<?= e($key) ?>"></span></span>
                     <strong><?= e($tpl['name']) ?></strong>
                     <span><?= e($tpl['hint']) ?></span>

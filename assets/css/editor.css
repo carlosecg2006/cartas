@@ -34,7 +34,7 @@
   display: flex; flex-direction: column;
   background: var(--surface); border-right: 1px solid var(--line);
 }
-.panel-tabs { display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid var(--line); flex: none; }
+.panel-tabs { display: grid; grid-template-columns: repeat(6, 1fr); border-bottom: 1px solid var(--line); flex: none; }
 .panel-tabs button {
   display: grid; justify-items: center; gap: 3px; padding: .6rem .1rem .5rem;
   border: 0; background: none; font: inherit; font-size: .72rem; font-weight: 500; color: var(--muted); cursor: pointer;
@@ -465,4 +465,52 @@
   .versions-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .versions-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 160px; }
   .palette-hint { display: none; }
+}
+
+/* ---------- recursos da versão com várias pessoas ---------- */
+.editor-layout { grid-template-columns: 320px 1fr; }
+.panel-tabs button { font-size: .66rem; }
+.pagebreak-mark {
+  display: flex; align-items: center; gap: .8em; margin: .8em 0; font-family: var(--font-ui); font-size: 12px;
+  color: color-mix(in srgb, var(--ink) 55%, transparent); letter-spacing: .08em; text-transform: uppercase;
+}
+.pagebreak-mark::before, .pagebreak-mark::after { content: ''; flex: 1; border-top: 2px dashed color-mix(in srgb, var(--ink) 25%, transparent); }
+.scratch-edit { border: 2px dashed color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 14px; padding: .4em .8em .6em; display: grid; gap: .4em; }
+.scratch-head { display: flex; align-items: center; gap: .5em; font-family: var(--font-ui); font-size: 13px; color: color-mix(in srgb, var(--ink) 70%, transparent); }
+.scratch-label { font-weight: 600; min-width: 4em; }
+.scratch-hint { margin-left: auto; opacity: .7; font-size: 12px; }
+.scratch-img { max-width: 100%; max-height: 240px; border-radius: 8px; justify-self: center; }
+.scratch-text { text-align: center; }
+.image-controls { display: grid; gap: .3rem; margin-top: .7rem; padding: .7rem; border-radius: 10px; background: var(--bg); }
+.image-controls .btn { justify-self: start; }
+.paper-sample .ic { margin: 12px auto; display: block; color: var(--muted); }
+.paper-tile .paper-sample.paper-image { background-size: cover; background-position: center; }
+.scene-tile.scene-image { background-size: cover; background-position: center; }
+
+.library-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: .8rem; }
+.library-item { aspect-ratio: 1; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; cursor: pointer; }
+.library-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.library-item.is-sticker { background: repeating-conic-gradient(#f1ece4 0 25%, #fff 0 50%) 0 0 / 14px 14px; }
+.library-item.is-sticker img { object-fit: contain; padding: 6px; }
+.library-item:hover { border-color: var(--ink-2); }
+
+.sticker-dialog, .pick-dialog {
+  width: min(620px, calc(100vw - 24px)); border: 0; border-radius: 16px; padding: 1.4rem; background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-lg);
+}
+.sticker-dialog::backdrop, .pick-dialog::backdrop { background: rgba(29, 26, 22, .45); }
+.sd-previews { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin: .8rem 0; }
+.sd-fig { margin: 0; display: grid; gap: .3rem; justify-items: center; padding: .5rem; border: 1px solid var(--line); border-radius: 10px; }
+.sd-fig canvas { max-width: 100%; max-height: 240px; object-fit: contain; }
+.sd-fig figcaption { font-size: .8rem; color: var(--muted); }
+.checker { background: repeating-conic-gradient(#ece5da 0 25%, #fff 0 50%) 0 0 / 16px 16px; }
+.sd-tol { display: grid; gap: .3rem; font-size: .9rem; margin-bottom: 1rem; }
+.pick-dialog h2 { margin-bottom: .8rem; }
+.pick-grid { max-height: 50vh; overflow-y: auto; }
+.pick-grid .library-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+.send-delivery { display: grid; gap: .3rem; font-weight: 500; font-size: .9rem; }
+
+@media (max-width: 860px) {
+  .editor-layout { display: block; }
+  .panel-tabs button { font-size: .62rem; padding: .5rem 0 .45rem; }
 }

@@ -47,12 +47,9 @@ function page_head(string $title, array $opts = []): void
         <span><?= e(app_name()) ?></span>
     </a>
     <nav class="nav">
-        <?php if ($user['role'] === 'admin'): ?>
-            <a href="index.php" class="<?= nav_active(['index.php', 'nova.php']) ?>"><?= icon('mail') ?><span>Cartas</span></a>
-            <a href="amigos.php" class="<?= nav_active(['amigos.php']) ?>"><?= icon('users') ?><span>Amigos</span></a>
-        <?php else: ?>
-            <a href="index.php" class="<?= nav_active(['index.php']) ?>"><?= icon('inbox') ?><span>Caixa</span></a>
-        <?php endif; ?>
+        <?php $unread = unread_count((int) $user['id']); ?>
+        <a href="index.php" class="<?= nav_active(['index.php', 'nova.php']) ?>"><?= icon('mail') ?><span>Cartas</span><?php if ($unread): ?><b class="nav-badge"><?= $unread ?></b><?php endif; ?></a>
+        <a href="amigos.php" class="<?= nav_active(['amigos.php']) ?>"><?= icon('users') ?><span>Pessoas</span></a>
         <a href="conta.php" class="nav-me <?= nav_active(['conta.php']) ?>" title="Minha conta"><?= avatar_html($user, 'sm') ?></a>
     </nav>
 </header>
@@ -70,6 +67,13 @@ function page_foot(array $js = []): void
         echo '<script src="' . (str_starts_with($file, 'https://') ? e($file) : asset($file)) . '" defer></script>' . "\n";
     }
     echo "</body>\n</html>\n";
+}
+
+/** Cartas recebidas, já entregues e destravadas, que ainda não foram abertas. */
+function unread_count(int $userId): int
+{
+    return (int) q_val("SELECT COUNT(*) FROM letters l WHERE l.recipient_id = ? AND l.status = 'sent' AND l.first_opened_at IS NULL
+        AND (l.open_at IS NULL OR l.open_at <= ?) AND " . sql_delivered(), [$userId, now()]);
 }
 
 function nav_active(array $pages): string

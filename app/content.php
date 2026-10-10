@@ -11,9 +11,12 @@ declare(strict_types=1);
 
 const LETTER_FONTS = ['caveat', 'dancing', 'indie', 'patrick', 'shadows', 'homemade', 'gloria',
     'special', 'playfair', 'lora', 'nunito', 'quicksand'];
-const PAPER_STYLES = ['plain', 'lined', 'grid', 'dots', 'kraft', 'vintage', 'parchment'];
+const PAPER_STYLES = ['plain', 'lined', 'grid', 'dots', 'kraft', 'vintage', 'parchment', 'image'];
 const PAPER_BORDERS = ['none', 'simple', 'double', 'dashed', 'stamp', 'hearts', 'flowers'];
-const PAPER_SCENES = ['desk', 'pink', 'sky', 'night', 'garden', 'plain'];
+const PAPER_SCENES = ['desk', 'pink', 'sky', 'night', 'garden', 'plain', 'image'];
+const REVEAL_MODES = ['fade', 'write', 'none'];
+const SCRATCH_COVERS = ['silver', 'gold', 'pink', 'mint'];
+const IMAGE_FITS = ['cover', 'contain', 'tile'];
 const TEXT_SIZES = ['sm', 'md', 'lg'];
 const BLOCK_SIZES = ['', 'sm', 'md', 'lg', 'xl'];
 const ALIGNS = ['left', 'center', 'right'];
@@ -83,6 +86,11 @@ function plain($value, int $max): string
     }
     $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $value) ?? '';
     return mb_substr($value, 0, $max);
+}
+
+function media_or($value): string
+{
+    return is_string($value) && preg_match(MEDIA_RE, $value) ? $value : '';
 }
 
 function safe_id($value): string
@@ -251,6 +259,13 @@ function sanitize_letter_content($raw): array
             'size' => pick($p['size'] ?? null, TEXT_SIZES, 'md'),
             'border' => pick($p['border'] ?? null, PAPER_BORDERS, 'none'),
             'scene' => pick($p['scene'] ?? null, PAPER_SCENES, 'desk'),
+            'image' => media_or($p['image'] ?? ''),
+            'imageFit' => pick($p['imageFit'] ?? null, IMAGE_FITS, 'cover'),
+            'veil' => num($p['veil'] ?? 0.35, 0, 0.9, 0.35),
+            'veilDark' => !empty($p['veilDark']),
+            'sceneImage' => media_or($p['sceneImage'] ?? ''),
+            'sceneBlur' => num($p['sceneBlur'] ?? 0, 0, 24, 0),
+            'sceneDim' => num($p['sceneDim'] ?? 0, 0, 0.8, 0),
         ],
         'envelope' => [
             'color' => color_or($env['color'] ?? null, '#e9b8b0'),
@@ -261,6 +276,7 @@ function sanitize_letter_content($raw): array
             'label' => plain($env['label'] ?? '', 80),
         ],
         'effect' => pick($raw['effect'] ?? 'none', EFFECT_NAMES, 'none'),
+        'reveal' => pick($raw['reveal'] ?? 'fade', REVEAL_MODES, 'fade'),
         'blocks' => [],
         'stickers' => [],
     ];
@@ -371,6 +387,14 @@ function sanitize_block(array $b): ?array
         case 'spacer':
             $block['height'] = (int) num($b['height'] ?? 40, 8, 240, 40);
             break;
+        case 'pagebreak':
+            break;
+        case 'scratch':
+            $block['label'] = plain($b['label'] ?? '', 80) ?: 'Raspe aqui';
+            $block['html'] = sanitize_inline_html($b['html'] ?? '');
+            $block['src'] = media_or($b['src'] ?? '');
+            $block['cover'] = pick($b['cover'] ?? null, SCRATCH_COVERS, 'silver');
+            break;
         case 'gallery':
             $block['layout'] = pick($b['layout'] ?? null, GALLERY_LAYOUTS, 'scatter');
             $block['items'] = [];
@@ -474,8 +498,13 @@ function sanitize_sticker(array $s, array $blockIds): ?array
 function content_media(array $content): array
 {
     $files = [];
+    foreach (['image', 'sceneImage'] as $key) {
+        if (!empty($content['paper'][$key])) {
+            $files[] = $content['paper'][$key];
+        }
+    }
     foreach ($content['blocks'] ?? [] as $b) {
-        if (in_array($b['type'] ?? '', ['image', 'phototext', 'audio'], true) && !empty($b['src'])) {
+        if (in_array($b['type'] ?? '', ['image', 'phototext', 'audio', 'scratch'], true) && !empty($b['src'])) {
             $files[] = $b['src'];
         }
         if (($b['type'] ?? '') === 'gallery') {
@@ -506,7 +535,7 @@ function content_excerpt(array $content, int $max = 140): string
         foreach ($b['items'] ?? [] as $item) {
             $texts[] = is_array($item) ? ($item['html'] ?? '') : $item;
         }
-        if (($b['type'] ?? '') === 'secret') {
+        if (in_array($b['type'] ?? '', ['secret', 'scratch'], true)) {
             $texts = [($b['label'] ?? '')];
         }
         foreach ($texts as $t) {

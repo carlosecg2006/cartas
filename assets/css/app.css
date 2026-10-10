@@ -211,7 +211,8 @@ legend { font-weight: 500; font-size: .9rem; color: var(--ink-2); margin-bottom:
 
 .empty { text-align: center; padding: 4rem 1rem; color: var(--ink-2); }
 .empty h2 { margin-bottom: .3rem; }
-.empty-art { width: 120px; margin: 0 auto 1.2rem; opacity: .9; }
+.empty-art { width: 160px; margin: 0 auto 1.2rem; opacity: .9; }
+.empty-art .envelope { width: 100%; }
 
 /* ---------- cartas (remetente) ---------- */
 .letter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 2.2rem 1.6rem; }
@@ -365,3 +366,29 @@ legend { font-weight: 500; font-size: .9rem; color: var(--ink-2); margin-bottom:
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* ---------- versão com várias pessoas ---------- */
+.nav a { position: relative; }
+.nav-badge {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 2px;
+  border-radius: 999px; background: var(--accent); color: #fff; font-size: .7rem; font-weight: 600; line-height: 1;
+}
+.mail-from { color: var(--muted); font-size: .88rem; }
+.tag-transit { color: #6b4fa0; }
+.tag-transit::before { animation: blink 1.2s ease-in-out infinite; }
+.mail-transit .mail-env { filter: saturate(.7); }
+.mail-transit .mail-env::after {
+  content: ''; display: block; height: 2px; margin: 10px 12% 0;
+  background: repeating-linear-gradient(90deg, var(--line-2) 0 8px, transparent 8px 14px);
+  animation: road 1s linear infinite;
+}
+@keyframes road { to { background-position: 14px 0; } }
+.birthdays { display: grid; gap: .5rem; margin: -0.8rem 0 1.8rem; }
+.birthday {
+  display: flex; align-items: center; gap: .8rem; padding: .7rem .9rem; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface);
+}
+.birthday > div { flex: 1; display: grid; }
+.tpl.suggested .tpl-preview { box-shadow: 0 0 0 2px var(--ink), var(--shadow-lg); }
+.person .count { color: var(--muted); font-size: .76rem; margin-left: .15rem; }
+.toolbar { gap: .6rem 1.2rem; }

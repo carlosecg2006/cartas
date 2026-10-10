@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-// Entrega as imagens das cartas só para quem pode ver a carta
+// Entrega imagens e áudios só para o dono ou para quem pode abrir uma carta que os usa
 require __DIR__ . '/app/bootstrap.php';
 
 $user = current_user();
@@ -12,9 +12,7 @@ if (!$user || !preg_match(ANY_MEDIA_RE, $file)) {
 }
 
 $media = q_one('SELECT * FROM media WHERE filename = ?', [$file]);
-$letter = $media && $media['letter_id'] ? find_letter((int) $media['letter_id']) : null;
-$allowed = $media && ($user['role'] === 'admin'
-    || ($letter && can_view_letter($letter, $user) && !letter_locked($letter)));
+$allowed = $media && can_access_media($media, $user);
 $path = UPLOAD_DIR . '/' . $file;
 
 if (!$allowed || !is_file($path)) {

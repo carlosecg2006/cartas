@@ -35,6 +35,8 @@
     { key: 'audio', icon: 'mic', label: 'Mensagem de voz', desc: 'Grave sua voz ou envie um áudio', words: 'audio voz gravar mensagem microfone', make: () => ({ type: 'audio', src: '', label: '', duration: 0, peaks: [] }) },
     { key: 'music', icon: 'music', label: 'Música', desc: 'YouTube ou Spotify', words: 'musica youtube spotify som', make: () => ({ type: 'music', provider: '', kind: '', mid: '' }) },
     { key: 'secret', icon: 'eye-off', label: 'Segredo', desc: 'Texto escondido até tocar', words: 'segredo secreto surpresa', make: () => ({ type: 'secret', label: 'Toque para revelar um segredo', html: '' }) },
+    { key: 'scratch', icon: 'eraser', label: 'Raspadinha', desc: 'A pessoa raspa para revelar', words: 'raspadinha raspar surpresa revelar', make: () => ({ type: 'scratch', label: 'Raspe aqui', html: '', src: '', cover: 'silver' }) },
+    { key: 'pagebreak', icon: 'copy', label: 'Nova página', desc: 'A carta continua na próxima folha', words: 'pagina quebra folha virar', make: () => ({ type: 'pagebreak' }) },
     { key: 'divider', icon: 'minus', label: 'Divisória', desc: 'Separador decorado', words: 'divisoria separador linha', make: () => ({ type: 'divider', style: 'hearts' }) },
     { key: 'signature', icon: 'signature', label: 'Assinatura', desc: 'Despedida com seu nome', words: 'assinatura despedida nome', make: () => ({ type: 'signature', closing: 'Com carinho,', name: DATA.sender, date: DATA.today }) },
     { key: 'spacer', icon: 'move-v', label: 'Espaço', desc: 'Um respiro entre blocos', words: 'espaco espacamento', make: () => ({ type: 'spacer', height: 40 }) },
@@ -137,6 +139,7 @@
       layoutQueued = false;
       L.layoutStickers(paper, stickers());
       positionStickerBar();
+      $$('.pagebreak-label', inner).forEach((n, i) => { n.textContent = 'Página ' + (i + 2); });
     });
   }
   new ResizeObserver(layout).observe(inner);
@@ -470,6 +473,28 @@
       row.append(fig, text);
       body.appendChild(row);
     },
+    pagebreak(body) {
+      const sep = L.el('div', 'pagebreak-mark', { contenteditable: 'false' });
+      sep.append(L.el('span', 'pagebreak-label', { text: 'Nova página' }));
+      body.appendChild(sep);
+    },
+    scratch(body, b) {
+      const box = L.el('div', 'scratch-edit');
+      const head = L.el('div', 'scratch-head');
+      head.appendChild(L.icon('eraser', 'ic-sm'));
+      head.appendChild(plainEditable('span', 'scratch-label', b.label, 'Raspe aqui', (t) => { b.label = t; }));
+      head.appendChild(L.el('span', 'scratch-hint', { text: 'quem recebe raspa para ver' }));
+      box.appendChild(head);
+      if (b.src) {
+        const img = L.el('img', 'scratch-img', { src: L.mediaUrl(b.src), alt: '' });
+        img.addEventListener('load', layout);
+        box.appendChild(img);
+      }
+      const text = editable('div', 'lb-text scratch-text', b.html, 'A surpresa escondida…', (n) => { b.html = n.innerHTML; });
+      textBehavior(text, b);
+      box.appendChild(text);
+      body.appendChild(box);
+    },
     audio(body, b) {
       if (b.src) {
         const wrap = L.el('div', 'audio-edit');
@@ -741,6 +766,8 @@
       $('input', blockNode(nb.id))?.focus();
     } else if (nb.type === 'secret') {
       focusEditable($('.secret-content', blockNode(nb.id)), 'start');
+    } else if (nb.type === 'scratch') {
+      focusEditable($('.scratch-text', blockNode(nb.id)), 'start');
     }
   }
 
@@ -1188,6 +1215,24 @@
       menu.appendChild(s);
     }
 
+    if (b.type === 'scratch') {
+      const s = section('Cor da raspadinha');
+      s.appendChild(optionRow(Object.fromEntries(Object.entries(L.SCRATCH_COVERS).map(([k, v]) => [k, v.label])), b.cover, (v) => update(() => { b.cover = v; })));
+      const img = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: b.src ? 'Trocar foto escondida' : 'Esconder uma foto também' });
+      img.addEventListener('click', async () => {
+        closePopover();
+        const file = await pickFile();
+        if (file) setBlockImage(b, file);
+      });
+      s.appendChild(img);
+      if (b.src) {
+        const rm = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Tirar a foto' });
+        rm.addEventListener('click', () => { closePopover(); update(() => { b.src = ''; }); });
+        s.appendChild(rm);
+      }
+      menu.appendChild(s);
+    }
+
     if (b.type === 'audio' && b.src) {
       const s = section('Áudio');
       const redo = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Gravar de novo' });
@@ -1221,7 +1266,7 @@
       menu.appendChild(s);
     }
 
-    if (!['image', 'divider', 'music', 'spacer', 'gallery', 'audio'].includes(b.type)) {
+    if (!['image', 'divider', 'music', 'spacer', 'gallery', 'audio', 'pagebreak'].includes(b.type)) {
       const s = section('Alinhamento');
       s.appendChild(optionRow({ left: 'align-left', center: 'align-center', right: 'align-right' }, b.align, (v) => update(() => { b.align = v; }), {
         titles: { left: 'Esquerda', center: 'Centro', right: 'Direita' }, render: (btn, v, ic) => btn.appendChild(L.icon(ic)), className: 'opt-icons',
@@ -1566,10 +1611,12 @@
     return box;
   }
 
-  async function uploadFile(file) {
+  async function uploadFile(file, kind) {
     const fd = new FormData();
     fd.append('id', letterId);
-    fd.append('image', file);
+    fd.append('image', file, file.name || 'imagem.png');
+    if (kind) fd.append('kind', kind);
+    libraryCache = null;
     setStatus('saving', 'Enviando imagem…');
     try {
       const res = await api('upload', fd);
@@ -1581,6 +1628,160 @@
       return null;
     }
   }
+
+  // ----- figurinhas: remover o fundo da imagem automaticamente -----
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  /** Imagem → canvas (no máximo 900px), pronto para processar. */
+  function toCanvas(img) {
+    const scale = Math.min(1, 900 / Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    cv.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    return cv;
+  }
+
+  /**
+   * Apaga o fundo: parte das bordas da imagem e "inunda" os pixels parecidos com a cor do fundo,
+   * sem atravessar o desenho. Depois suaviza a borda para não ficar serrilhado.
+   */
+  function removeBackground(source, tolerance) {
+    const w = source.width;
+    const h = source.height;
+    const out = document.createElement('canvas');
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext('2d');
+    ctx.drawImage(source, 0, 0);
+    const img = ctx.getImageData(0, 0, w, h);
+    const d = img.data;
+    // cor de fundo = média dos pixels das bordas
+    let r = 0, g = 0, b = 0, n = 0;
+    const sample = (x, y) => { const i = (y * w + x) * 4; if (d[i + 3] > 10) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; } };
+    for (let x = 0; x < w; x += 2) { sample(x, 0); sample(x, h - 1); }
+    for (let y = 0; y < h; y += 2) { sample(0, y); sample(w - 1, y); }
+    if (!n) return out; // já é transparente
+    r /= n; g /= n; b /= n;
+    const tol = tolerance * tolerance * 3;
+    const dist = (i) => (d[i] - r) ** 2 + (d[i + 1] - g) ** 2 + (d[i + 2] - b) ** 2;
+    const removed = new Uint8Array(w * h);
+    const stack = [];
+    const push = (x, y) => {
+      const p = y * w + x;
+      if (removed[p]) return;
+      const i = p * 4;
+      if (d[i + 3] < 10 || dist(i) <= tol) { removed[p] = 1; stack.push(p); }
+    };
+    for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+    for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+    while (stack.length) {
+      const p = stack.pop();
+      const x = p % w;
+      const y = (p - x) / w;
+      if (x > 0) push(x - 1, y);
+      if (x < w - 1) push(x + 1, y);
+      if (y > 0) push(x, y - 1);
+      if (y < h - 1) push(x, y + 1);
+    }
+    for (let p = 0; p < w * h; p++) {
+      if (removed[p]) { d[p * 4 + 3] = 0; continue; }
+      // borda suave: pixel encostado no fundo removido fica meio transparente se for parecido com ele
+      const x = p % w;
+      const y = (p - x) / w;
+      const touches = (x > 0 && removed[p - 1]) || (x < w - 1 && removed[p + 1]) || (y > 0 && removed[p - w]) || (y < h - 1 && removed[p + w]);
+      if (touches) {
+        const k = Math.min(1, Math.sqrt(dist(p * 4)) / (tolerance * 2.2));
+        d[p * 4 + 3] = Math.round(d[p * 4 + 3] * Math.max(0.25, k));
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return out;
+  }
+
+  function canvasToFile(cv, name) {
+    return new Promise((resolve) => cv.toBlob((blob) => resolve(new File([blob], name, { type: 'image/png' })), 'image/png'));
+  }
+
+  /** Janela "Figurinha": mostra antes/depois e deixa ajustar a tolerância. Resolve com o arquivo final ou null. */
+  function stickerDialog(file) {
+    return new Promise(async (resolve) => {
+      let img;
+      const url = typeof file === 'string' ? file : URL.createObjectURL(file);
+      try {
+        img = await loadImage(url);
+      } catch (e) {
+        toast('Não consegui abrir essa imagem.', 'error');
+        resolve(null);
+        return;
+      }
+      const base = toCanvas(img);
+      const dlg = L.el('dialog', 'sticker-dialog');
+      dlg.innerHTML = '<h2>Transformar em figurinha</h2>'
+        + '<p class="muted small">Se a imagem tem um fundo liso (branco, por exemplo), dá para apagar automaticamente.</p>';
+      const previews = L.el('div', 'sd-previews');
+      const before = L.el('figure', 'sd-fig');
+      before.append(base, L.el('figcaption', '', { text: 'Original' }));
+      const after = L.el('figure', 'sd-fig checker');
+      const afterCap = L.el('figcaption', '', { text: 'Sem fundo' });
+      after.appendChild(afterCap);
+      previews.append(before, after);
+      const tolLabel = L.el('label', 'sd-tol', { text: 'Quanto do fundo apagar' });
+      const tol = L.el('input', '', { type: 'range', min: '6', max: '90', value: '34' });
+      tolLabel.appendChild(tol);
+      const row = L.el('div', 'row end wrap');
+      const cancel = L.el('button', 'btn btn-ghost', { type: 'button', text: 'Cancelar' });
+      const keep = L.el('button', 'btn', { type: 'button', text: 'Usar com o fundo' });
+      const use = L.el('button', 'btn btn-primary', { type: 'button', text: 'Usar sem fundo' });
+      row.append(cancel, keep, use);
+      dlg.append(previews, tolLabel, row);
+      document.body.appendChild(dlg);
+      let result = null;
+      const render = () => {
+        result = removeBackground(base, Number(tol.value));
+        after.querySelector('canvas')?.remove();
+        after.insertBefore(result, afterCap);
+      };
+      render();
+      tol.addEventListener('input', render);
+      const close = (value) => {
+        dlg.close();
+        dlg.remove();
+        if (typeof file !== 'string') URL.revokeObjectURL(url);
+        resolve(value);
+      };
+      cancel.addEventListener('click', () => close(null));
+      keep.addEventListener('click', async () => close(typeof file === 'string' ? await canvasToFile(base, 'figurinha.png') : file));
+      use.addEventListener('click', async () => close(await canvasToFile(result, 'figurinha.png')));
+      dlg.addEventListener('cancel', () => close(null));
+      dlg.showModal();
+    });
+  }
+
+  async function addStickerFromFile(file) {
+    const final = await stickerDialog(file);
+    if (!final) return;
+    const res = await uploadFile(final, 'sticker');
+    if (res) addSticker({ kind: 'image', src: res.src, w: 24 });
+  }
+
+  // Colar uma imagem (Ctrl+V) fora de um texto vira figurinha
+  document.addEventListener('paste', (e) => {
+    if (document.activeElement && (document.activeElement.isContentEditable || ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName))) return;
+    const file = Array.from(e.clipboardData?.files || []).find((f) => f.type.startsWith('image/'));
+    if (file) {
+      e.preventDefault();
+      addStickerFromFile(file);
+    }
+  });
 
   async function setBlockImage(b, file) {
     const res = await uploadFile(file);
@@ -2010,6 +2211,18 @@
       });
       sep();
     }
+    if (s.kind === 'image') {
+      btn('eraser', 'Remover o fundo', async () => {
+        const file = await stickerDialog(L.mediaUrl(s.src));
+        if (!file) return;
+        const res = await uploadFile(file, 'sticker');
+        if (!res) return;
+        s.src = res.src;
+        refreshStickerNode(s);
+        commit();
+      });
+      sep();
+    }
     if (s.kind === 'tape') {
       btn('sparkle', 'Trocar estampa', () => {
         s.pattern = L.TAPES[(L.TAPES.indexOf(s.pattern) + 1) % L.TAPES.length];
@@ -2266,7 +2479,7 @@
 
   function renderPanel() {
     panelBody.replaceChildren();
-    ({ blocks: panelBlocks, stickers: panelStickers, paper: panelPaper, envelope: panelEnvelope, layers: panelLayers })[activeTab]();
+    ({ blocks: panelBlocks, stickers: panelStickers, paper: panelPaper, envelope: panelEnvelope, layers: panelLayers, library: panelLibrary })[activeTab]();
   }
 
   function panelSection(title, hint) {
@@ -2355,15 +2568,15 @@
     const draw = L.el('button', 'btn btn-block', { type: 'button', text: 'Desenhar à mão livre' });
     draw.prepend(L.icon('brush'));
     draw.addEventListener('click', startDrawing);
-    const img = L.el('button', 'btn btn-block btn-ghost', { type: 'button', text: 'Imagem como adesivo' });
+    const img = L.el('button', 'btn btn-block btn-ghost', { type: 'button', text: 'Figurinha da internet' });
     img.prepend(L.icon('image'));
     img.addEventListener('click', async () => {
       const file = await pickFile();
-      if (!file) return;
-      const res = await uploadFile(file);
-      if (res) addSticker({ kind: 'image', src: res.src, w: 30 });
+      if (file) addStickerFromFile(file);
     });
-    s4.append(draw, img, L.el('p', 'panel-hint', { text: 'PNG com fundo transparente fica com cara de adesivo de verdade.' }));
+    s4.append(draw, img, L.el('p', 'panel-hint', {
+      text: 'Baixe qualquer imagem (Pinterest, Google…) e envie aqui. Se tiver fundo, eu apago para virar figurinha. Também dá para colar com Ctrl+V.',
+    }));
   }
 
   function panelPaper() {
@@ -2385,15 +2598,47 @@
       const sample = L.el('span', 'paper-sample paper paper-' + key);
       sample.style.setProperty('--paper', p.color);
       sample.style.setProperty('--ink', p.ink);
+      if (key === 'image') {
+        if (p.image) sample.style.backgroundImage = 'url("' + L.mediaUrl(p.image) + '")';
+        else sample.appendChild(L.icon('upload'));
+      }
       btn.append(sample, L.el('span', '', { text: label }));
-      btn.addEventListener('click', () => {
-        $$('.paper-tile', grid).forEach((t) => t.classList.remove('active'));
-        btn.classList.add('active');
+      btn.addEventListener('click', async () => {
+        if (key === 'image' && !p.image) {
+          const src = await pickFromLibrary('Imagem para o papel');
+          if (!src) return;
+          p.image = src;
+        }
         set('style', key);
+        renderPanel();
       });
       grid.appendChild(btn);
     });
     s1.appendChild(grid);
+    if (p.style === 'image' && p.image) {
+      const box = L.el('div', 'image-controls');
+      const change = L.el('button', 'btn btn-sm', { type: 'button', text: 'Trocar imagem' });
+      change.addEventListener('click', async () => {
+        const src = await pickFromLibrary('Imagem para o papel');
+        if (src) { p.image = src; set('style', 'image'); renderPanel(); }
+      });
+      box.appendChild(change);
+      box.appendChild(L.el('p', 'menu-label', { text: 'Encaixe' }));
+      box.appendChild(optionRow({ cover: 'Preencher', contain: 'Inteira', tile: 'Repetir' }, p.imageFit || 'cover', (v) => set('imageFit', v)));
+      box.appendChild(L.el('p', 'menu-label', { text: 'Véu para o texto aparecer' }));
+      const veil = L.el('input', '', { type: 'range', min: '0', max: '90', step: '5', value: String(Math.round((p.veil ?? 0.35) * 100)) });
+      veil.addEventListener('input', () => { p.veil = Number(veil.value) / 100; L.applyPaper(scene, paper, p); });
+      veil.addEventListener('change', commit);
+      box.appendChild(veil);
+      box.appendChild(optionRow({ light: 'Véu claro', dark: 'Véu escuro' }, p.veilDark ? 'dark' : 'light', (v) => {
+        p.veilDark = v === 'dark';
+        if (p.veilDark && L.isDark(p.ink)) p.ink = '#fdf6e9';
+        if (!p.veilDark && !L.isDark(p.ink)) p.ink = '#3b3340';
+        set('veilDark', p.veilDark, true);
+      }));
+      box.appendChild(L.el('p', 'panel-hint', { text: 'Com véu escuro, use uma tinta clara (em "Cor da tinta").' }));
+      s1.appendChild(box);
+    }
     s1.appendChild(L.el('p', 'menu-label', { text: 'Cor do papel' }));
     s1.appendChild(swatchRow(L.PAPER_COLORS, p.color, (c) => set('color', c)));
     s1.appendChild(L.el('p', 'menu-label', { text: 'Cor da tinta' }));
@@ -2425,15 +2670,39 @@
     const scenes = L.el('div', 'scene-grid');
     Object.entries(L.SCENES).forEach(([key, label]) => {
       const btn = L.el('button', 'scene-tile scene-' + key + (p.scene === key ? ' active' : ''), { type: 'button' });
+      if (key === 'image' && p.sceneImage) btn.style.backgroundImage = 'url("' + L.mediaUrl(p.sceneImage) + '")';
       btn.appendChild(L.el('span', '', { text: label }));
-      btn.addEventListener('click', () => {
-        $$('.scene-tile', scenes).forEach((t) => t.classList.remove('active'));
-        btn.classList.add('active');
+      btn.addEventListener('click', async () => {
+        if (key === 'image' && !p.sceneImage) {
+          const src = await pickFromLibrary('Imagem para o fundo');
+          if (!src) return;
+          p.sceneImage = src;
+        }
         set('scene', key);
+        renderPanel();
       });
       scenes.appendChild(btn);
     });
     s4.appendChild(scenes);
+    if (p.scene === 'image' && p.sceneImage) {
+      const box = L.el('div', 'image-controls');
+      const change = L.el('button', 'btn btn-sm', { type: 'button', text: 'Trocar imagem do fundo' });
+      change.addEventListener('click', async () => {
+        const src = await pickFromLibrary('Imagem para o fundo');
+        if (src) { p.sceneImage = src; set('scene', 'image'); renderPanel(); }
+      });
+      box.appendChild(change);
+      const slider = (label, key, max, unit) => {
+        box.appendChild(L.el('p', 'menu-label', { text: label }));
+        const r = L.el('input', '', { type: 'range', min: '0', max: String(max), step: '1', value: String(Math.round((p[key] || 0) * unit)) });
+        r.addEventListener('input', () => { p[key] = Number(r.value) / unit; L.applyPaper(scene, paper, p); });
+        r.addEventListener('change', commit);
+        box.appendChild(r);
+      };
+      slider('Desfoque', 'sceneBlur', 24, 1);
+      slider('Escurecer', 'sceneDim', 80, 100);
+      s4.appendChild(box);
+    }
   }
 
   function panelEnvelope() {
@@ -2512,6 +2781,137 @@
       commit();
       L.playEffect(v, 3000);
     }, { wrap: true }));
+
+    const s6 = panelSection('Como o texto aparece');
+    s6.appendChild(optionRow({ fade: 'Bloco a bloco', write: 'Escrevendo', none: 'Tudo de uma vez' }, state.content.reveal || 'fade', (v) => {
+      state.content.reveal = v;
+      commit();
+    }, { wrap: true }));
+    s6.appendChild(L.el('p', 'panel-hint', { text: '"Escrevendo" faz o texto surgir letra por letra, como se você estivesse escrevendo naquela hora.' }));
+  }
+
+  // ----- biblioteca pessoal -----
+  let libraryCache = null;
+  let libraryFilter = 'all';
+
+  async function fetchLibrary() {
+    if (!libraryCache) {
+      try {
+        libraryCache = (await api('library', {})).items;
+      } catch (err) {
+        toast(err.message, 'error');
+        libraryCache = [];
+      }
+    }
+    return libraryCache;
+  }
+
+  function libraryGrid(items, onPick) {
+    const grid = L.el('div', 'library-grid');
+    items.forEach((item) => {
+      const btn = L.el('button', 'library-item' + (item.kind === 'sticker' ? ' is-sticker' : ''), { type: 'button' });
+      btn.appendChild(L.el('img', '', { src: L.mediaUrl(item.src), alt: '', loading: 'lazy' }));
+      btn.addEventListener('click', (e) => onPick(item, e.currentTarget));
+      grid.appendChild(btn);
+    });
+    return grid;
+  }
+
+  async function panelLibrary() {
+    const sec = panelSection('Sua biblioteca', 'Tudo o que você já enviou fica aqui para usar de novo, em qualquer carta.');
+    const actions = L.el('div', 'row wrap');
+    const up = L.el('button', 'btn btn-sm', { type: 'button' });
+    up.append(L.icon('upload', 'ic-sm'), L.el('span', '', { text: 'Enviar fotos' }));
+    up.addEventListener('click', async () => {
+      const files = await pickFile(true);
+      for (const f of files) await uploadFile(f);
+      renderPanel();
+    });
+    const st = L.el('button', 'btn btn-sm', { type: 'button' });
+    st.append(L.icon('sticker', 'ic-sm'), L.el('span', '', { text: 'Figurinha' }));
+    st.addEventListener('click', async () => {
+      const file = await pickFile();
+      if (!file) return;
+      const final = await stickerDialog(file);
+      if (final && await uploadFile(final, 'sticker')) renderPanel();
+    });
+    actions.append(up, st);
+    sec.appendChild(actions);
+    sec.appendChild(optionRow({ all: 'Tudo', sticker: 'Figurinhas', image: 'Fotos' }, libraryFilter, (v) => { libraryFilter = v; renderPanel(); }));
+    const holder = L.el('div', '');
+    holder.appendChild(L.el('p', 'panel-hint', { text: 'Carregando…' }));
+    sec.appendChild(holder);
+    const items = (await fetchLibrary()).filter((i) => libraryFilter === 'all' || i.kind === libraryFilter);
+    if (activeTab !== 'library') return;
+    holder.replaceChildren();
+    if (!items.length) {
+      holder.appendChild(L.el('p', 'panel-hint', { text: 'Nada por aqui ainda.' }));
+      return;
+    }
+    holder.appendChild(libraryGrid(items, (item, anchor) => {
+      const menu = L.el('div', 'ctx-menu');
+      const act = (ic, label, fn, cls) => {
+        const b = L.el('button', 'ctx-item ' + (cls || ''), { type: 'button' });
+        b.append(L.icon(ic, 'ic-sm'), L.el('span', '', { text: label }));
+        b.addEventListener('click', () => { closePopover(); fn(); });
+        menu.appendChild(b);
+      };
+      const after = () => (lastFocusedId && findBlock(lastFocusedId) ? lastFocusedId : (blocks().length ? blocks()[blocks().length - 1].id : null));
+      act('sticker', 'Colar como adesivo', () => addSticker({ kind: 'image', src: item.src, w: item.kind === 'sticker' ? 22 : 30 }));
+      act('image', 'Inserir como foto', () => {
+        const nb = newBlock('image');
+        nb.src = item.src;
+        insertBlockAfter(nb, after());
+        commit();
+      });
+      act('paper', 'Usar como papel', () => {
+        Object.assign(state.content.paper, { style: 'image', image: item.src });
+        renderAll();
+        commit();
+      });
+      act('template', 'Usar como fundo', () => {
+        Object.assign(state.content.paper, { scene: 'image', sceneImage: item.src });
+        L.applyPaper(scene, paper, state.content.paper);
+        commit();
+      });
+      act('trash', 'Tirar da biblioteca', async () => {
+        await api('library_remove', { src: item.src }).catch(() => {});
+        libraryCache = null;
+        renderPanel();
+      }, 'danger');
+      openPopover(anchor, menu);
+    }));
+  }
+
+  /** Janela para escolher uma imagem da biblioteca (ou enviar uma nova). */
+  function pickFromLibrary(title) {
+    return new Promise(async (resolve) => {
+      const dlg = L.el('dialog', 'pick-dialog');
+      dlg.appendChild(L.el('h2', '', { text: title }));
+      const up = L.el('button', 'btn btn-primary', { type: 'button' });
+      up.append(L.icon('upload', 'ic-sm'), L.el('span', '', { text: 'Enviar uma imagem' }));
+      const cancel = L.el('button', 'btn btn-ghost', { type: 'button', text: 'Cancelar' });
+      const row = L.el('div', 'row wrap');
+      row.append(up, cancel);
+      dlg.appendChild(row);
+      dlg.appendChild(L.el('p', 'menu-label', { text: 'Ou escolha da sua biblioteca' }));
+      const holder = L.el('div', 'pick-grid');
+      dlg.appendChild(holder);
+      document.body.appendChild(dlg);
+      const done = (v) => { dlg.close(); dlg.remove(); resolve(v); };
+      cancel.addEventListener('click', () => done(null));
+      dlg.addEventListener('cancel', () => done(null));
+      up.addEventListener('click', async () => {
+        const file = await pickFile();
+        if (!file) return;
+        const res = await uploadFile(file);
+        if (res) done(res.src);
+      });
+      dlg.showModal();
+      const items = (await fetchLibrary()).filter((i) => i.kind !== 'sticker');
+      if (!items.length) holder.appendChild(L.el('p', 'panel-hint', { text: 'Sua biblioteca ainda está vazia.' }));
+      else holder.appendChild(libraryGrid(items, (item) => done(item.src)));
+    });
   }
 
   const KIND_LABEL = { emoji: 'Emoji', image: 'Imagem', text: 'Texto', tape: 'Fita', drawing: 'Desenho', doodle: 'Rabisco' };
@@ -2924,15 +3324,18 @@
     try {
       await flushSave();
       const when = scheduleToggle.checked && openAt.value ? openAt.value : '';
-      const res = await api('send', { id: letterId, recipient_id: Number(checked.value), open_at: when });
+      const delay = Number($('[data-delivery]').value || 0);
+      const res = await api('send', { id: letterId, recipient_id: Number(checked.value), open_at: when, delay_hours: delay });
       DATA.letter.recipientId = Number(checked.value);
       DATA.letter.openAt = when;
       DATA.letter.status = 'sent';
       $('[data-open-send] .send-label').textContent = 'Envio';
       $('[data-sent-title]').textContent = res.firstSend ? 'A caminho de ' + res.recipient : 'Envio atualizado';
-      $('[data-sent-text]').textContent = when
-        ? res.recipient + ' já vê o envelope lacrado. Ele só abre na data que você escolheu.'
-        : res.recipient + ' vai encontrar a carta na caixa da próxima vez que entrar.';
+      $('[data-sent-text]').textContent = res.arrives
+        ? 'Correio lento: ' + res.recipient + ' vê a carta a caminho e ela chega em ' + res.arrives + '.'
+        : when
+          ? res.recipient + ' já vê o envelope lacrado. Ele só abre na data que você escolheu.'
+          : res.recipient + ' vai encontrar a carta na caixa da próxima vez que entrar.';
       $('[data-sent-view]').textContent = 'Ver como ' + res.recipient + ' vai ver';
       if (DATA.letter.sentBefore !== true) L.playEffect(state.content.effect, 2600);
       DATA.letter.sentBefore = true;

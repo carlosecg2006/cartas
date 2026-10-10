@@ -4,7 +4,6 @@ declare(strict_types=1);
 require __DIR__ . '/app/bootstrap.php';
 
 $user = require_login();
-$isAdmin = $user['role'] === 'admin';
 $letter = find_letter((int) ($_GET['id'] ?? 0));
 
 if (!$letter || !can_view_letter($letter, $user)) {
@@ -17,23 +16,29 @@ if (!$letter || !can_view_letter($letter, $user)) {
     exit;
 }
 
-$locked = letter_locked($letter) && !$isAdmin;
+$uid = (int) $user['id'];
+$isSender = letter_role($letter, $user) === 'sender';
+$seal = letter_seal($letter, $user);
+$locked = $seal !== null;
 if (!$locked) {
     mark_replies_read((int) $letter['id'], $user);
 }
+$toName = $letter['recipient_id'] ? name_for($uid, ['id' => $letter['recipient_id'], 'name' => $letter['recipient_name']]) : '…';
+$fromName = name_for($uid, ['id' => $letter['sender_id'], 'name' => $letter['sender_name']]);
 
 $content = $letter['content'];
 $data = [
     'id' => (int) $letter['id'],
     'title' => $letter['title'],
-    'toName' => $letter['recipient_name'] ? first_name($letter['recipient_name']) : '…',
+    'toName' => $isSender ? first_name($toName) : first_name($user['name']),
     'envelope' => $content['envelope'],
     'paperColor' => $content['paper']['color'],
     'locked' => $locked,
     'openAt' => iso($letter['open_at']),
     'sentAt' => $letter['status'] === 'sent' ? iso($letter['sent_at']) : null,
     'effect' => $content['effect'] ?? 'none',
-    'isAdmin' => $isAdmin,
+    'isAdmin' => $isSender,
+    'transit' => $seal === 'transit',
     'content' => $locked ? null : $content,
     'reactions' => $locked ? [] : letter_reactions((int) $letter['id']),
     'reactionChoices' => REACTION_EMOJIS,
@@ -49,12 +54,14 @@ page_head($letter['title'] ?: 'Carta', [
 <script type="application/json" id="letter-data"><?= json_embed($data) ?></script>
 <div class="read-progress" data-progress hidden><span></span></div>
 <main class="viewer" data-viewer>
-    <?php if ($isAdmin): ?>
+    <?php if ($isSender): ?>
         <div class="preview-bar">
-            <span class="preview-who"><?= icon('eye', 'ic-sm') ?><?= $letter['status'] === 'sent' ? 'Assim ' . e($data['toName']) . ' vê esta carta' : 'Prévia do rascunho' ?></span>
+            <span class="preview-who"><?= icon('eye', 'ic-sm') ?><?= $letter['status'] === 'sent' ? 'Assim ' . e($toName) . ' vê esta carta' : 'Prévia do rascunho' ?></span>
             <span class="muted small">
                 <?php if ($letter['status'] !== 'sent'): ?>
                     Ainda não enviada
+                <?php elseif (letter_in_transit($letter)): ?>
+                    A caminho, chega em <?= e(fmt_date($letter['delivered_at'])) ?>
                 <?php elseif ($letter['first_opened_at']): ?>
                     Aberta <?= (int) $letter['open_count'] ?>x. Primeira vez em <?= e(fmt_date($letter['first_opened_at'])) ?>, última <?= e(time_ago($letter['last_opened_at'])) ?>.
                 <?php elseif (letter_locked($letter)): ?>
@@ -68,11 +75,14 @@ page_head($letter['title'] ?: 'Carta', [
     <?php endif; ?>
 
     <section class="envelope-stage" data-envelope-stage>
-        <p class="eyebrow"><?= $data['sentAt'] ? 'Enviada em ' . e(fmt_date_long($letter['sent_at'])) : 'Rascunho' ?></p>
-        <h1 class="stage-title"><?= e($letter['title'] ?: 'Uma carta para você') ?></h1>
+        <p class="eyebrow"><?= $isSender ? ($data['sentAt'] ? 'Enviada em ' . e(fmt_date_long($letter['sent_at'])) : 'Rascunho') : 'De ' . e($fromName) . ($seal !== 'transit' ? ' · ' . e(fmt_date_long($letter['sent_at'])) : '') ?></p>
+        <h1 class="stage-title"><?= $seal === 'transit' ? 'Uma carta está a caminho' : e($letter['title'] ?: 'Uma carta para você') ?></h1>
         <div class="envelope-holder" data-envelope></div>
         <p class="stage-hint" data-hint>
-            <?php if ($locked): ?>
+            <?php if ($seal === 'transit'): ?>
+                O correio está trazendo. Chega em <?= e(fmt_date($letter['delivered_at'])) ?>.<br>
+                <span class="countdown" data-countdown="<?= e(iso($letter['delivered_at'])) ?>" data-reload></span>
+            <?php elseif ($seal === 'date'): ?>
                 Lacrada até <?= e(fmt_date($letter['open_at'])) ?>.<br>
                 <span class="countdown" data-countdown="<?= e(iso($letter['open_at'])) ?>" data-reload></span>
             <?php else: ?>
@@ -85,18 +95,31 @@ page_head($letter['title'] ?: 'Carta', [
 
     <section class="after-letter" data-after hidden>
         <div class="after-block">
-            <p class="after-title"><?= $isAdmin ? 'Reações' : 'O que essa carta te fez sentir?' ?></p>
+            <p class="after-title"><?= $isSender ? 'Reações' : 'O que essa carta te fez sentir?' ?></p>
             <div class="reaction-row" data-reactions></div>
         </div>
 
         <div class="after-block" id="respostas">
-            <p class="after-title"><?= $isAdmin ? 'Conversa' : 'Escrever de volta' ?></p>
+            <p class="after-title"><?= $isSender ? 'Conversa' : 'Escrever de volta' ?></p>
             <div class="reply-list" data-replies></div>
             <form class="reply-form" data-reply-form>
-                <textarea name="message" rows="2" maxlength="2000" placeholder="<?= $isAdmin ? 'Responder…' : 'Escreva algo de volta…' ?>" required></textarea>
+                <textarea name="message" rows="2" maxlength="2000" placeholder="<?= $isSender ? 'Responder…' : 'Um recado rápido de volta…' ?>" required></textarea>
                 <button class="btn btn-primary"><?= icon('send', 'ic-sm') ?>Enviar</button>
             </form>
         </div>
+
+        <?php if (!$isSender): ?>
+            <form class="reply-letter" method="post" action="acoes.php">
+                <?= csrf_field() ?>
+                <input type="hidden" name="acao" value="responder">
+                <input type="hidden" name="id" value="<?= (int) $letter['id'] ?>">
+                <div>
+                    <p class="after-title">Responder com uma carta</p>
+                    <p class="muted small">Abre o editor com <?= e(first_name($fromName)) ?> como destinatário.</p>
+                </div>
+                <button class="btn btn-primary"><?= icon('pen', 'ic-sm') ?>Escrever resposta</button>
+            </form>
+        <?php endif; ?>
 
         <div class="export row center wrap">
             <button class="btn btn-ghost" type="button" data-print><?= icon('printer') ?>Salvar em PDF</button>

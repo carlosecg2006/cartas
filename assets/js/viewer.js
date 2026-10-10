@@ -46,7 +46,11 @@
   function showLetter() {
     stage.hidden = true;
     letterStage.hidden = false;
-    rendered = Letter.renderLetter(letterStage, data.content, { reveal: !reduceMotion });
+    const mode = reduceMotion ? 'none' : (data.content.reveal || 'fade');
+    rendered = Letter.renderLetter(letterStage, data.content, {
+      reveal: mode === 'fade',
+      onPage: mode === 'write' ? (paper) => writeReveal(paper) : null,
+    });
     letterStage.classList.add('appear');
     setTimeout(() => Letter.playEffect(data.content.effect), 250);
     setupProgress();
@@ -57,6 +61,65 @@
     if (location.hash === '#respostas') {
       setTimeout(() => document.getElementById('respostas').scrollIntoView({ behavior: 'smooth' }), 400);
     }
+  }
+
+  /** Texto aparecendo como se estivesse sendo escrito na hora. */
+  let skipWriting = null;
+  function writeReveal(paper) {
+    const blocks = Array.from(paper.querySelectorAll('.paper-inner > .lb'));
+    const stickers = Array.from(paper.querySelectorAll('.sticker'));
+    const jobs = blocks.map((block) => {
+      const texts = [];
+      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+        acceptNode: (n) => (n.parentElement.closest('.secret-content, .scratch-content, .voice, .music-embed') || !n.nodeValue.trim()
+          ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+      });
+      while (walker.nextNode()) texts.push({ node: walker.currentNode, full: walker.currentNode.nodeValue });
+      texts.forEach((t) => { t.node.nodeValue = ''; });
+      block.classList.add('w-hidden');
+      return { block, texts };
+    });
+    stickers.forEach((st) => st.classList.add('w-hidden'));
+
+    let cancelled = false;
+    const finishAll = () => {
+      cancelled = true;
+      jobs.forEach((j) => { j.block.classList.remove('w-hidden'); j.texts.forEach((t) => { t.node.nodeValue = t.full; }); });
+      stickers.forEach((st) => st.classList.remove('w-hidden'));
+      skipBtn.remove();
+      rendered.relayout();
+    };
+    const skipBtn = Letter.el('button', 'btn btn-sm skip-writing', { type: 'button', text: 'Mostrar tudo' });
+    skipBtn.addEventListener('click', finishAll);
+    document.body.appendChild(skipBtn);
+    skipWriting = finishAll;
+
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    (async () => {
+      await wait(500);
+      for (const job of jobs) {
+        if (cancelled) return;
+        job.block.classList.remove('w-hidden');
+        const total = job.texts.reduce((n, t) => n + t.full.length, 0);
+        if (!total) {
+          await wait(260);
+          continue;
+        }
+        const perTick = Math.max(1, Math.ceil(total / 90)); // cada bloco leva no máximo ~2,5 s
+        for (const t of job.texts) {
+          for (let i = 0; i < t.full.length; i += perTick) {
+            if (cancelled) return;
+            t.node.nodeValue = t.full.slice(0, i + perTick);
+            await wait(26);
+          }
+        }
+        await wait(180);
+      }
+      if (cancelled) return;
+      stickers.forEach((st, i) => setTimeout(() => st.classList.remove('w-hidden'), i * 120));
+      skipBtn.remove();
+      rendered.relayout();
+    })();
   }
 
   /** Pedacinhos de cera voando quando o selo quebra. */
@@ -138,7 +201,7 @@
     const meta = Letter.el('div', 'reply-meta');
     meta.appendChild(Letter.el('b', '', { text: r.name }));
     meta.appendChild(Letter.el('span', 'muted', { text: ' · ' + r.when }));
-    if (r.mine || data.isAdmin) {
+    if (r.mine) {
       const del = Letter.el('button', 'reply-del', { type: 'button', title: 'Apagar', 'aria-label': 'Apagar' });
       del.appendChild(Letter.icon('x', 'ic-sm'));
       del.addEventListener('click', async () => {

@@ -4,8 +4,12 @@ declare(strict_types=1);
 function find_letter(int $id): ?array
 {
     $letter = q_one(
-        'SELECT l.*, u.name AS recipient_name, u.avatar AS recipient_avatar, u.color AS recipient_color
-         FROM letters l LEFT JOIN users u ON u.id = l.recipient_id WHERE l.id = ?',
+        'SELECT l.*, u.name AS recipient_name, u.avatar AS recipient_avatar, u.color AS recipient_color,
+                s.name AS sender_name, s.avatar AS sender_avatar, s.color AS sender_color
+         FROM letters l
+         LEFT JOIN users u ON u.id = l.recipient_id
+         LEFT JOIN users s ON s.id = l.sender_id
+         WHERE l.id = ?',
         [$id]
     );
     if ($letter) {
@@ -14,126 +18,128 @@ function find_letter(int $id): ?array
     return $letter;
 }
 
-/** Admin vê tudo; amigo vê apenas as cartas enviadas para ele. */
-function can_view_letter(array $letter, array $user): bool
+/** 'sender' para quem escreveu, 'recipient' para quem recebeu (depois de enviada), null para o resto. */
+function letter_role(array $letter, array $user): ?string
 {
-    if ($user['role'] === 'admin') {
-        return true;
+    if ((int) $letter['sender_id'] === (int) $user['id']) {
+        return 'sender';
     }
-    return (int) $letter['recipient_id'] === (int) $user['id'] && $letter['status'] === 'sent';
+    if ((int) $letter['recipient_id'] === (int) $user['id'] && $letter['status'] === 'sent') {
+        return 'recipient';
+    }
+    return null;
 }
 
+/** Cada pessoa só vê as cartas que escreveu ou recebeu. */
+function can_view_letter(array $letter, array $user): bool
+{
+    return letter_role($letter, $user) !== null;
+}
+
+/** Lacrada até uma data escolhida por quem escreveu. */
 function letter_locked(array $letter): bool
 {
     return !empty($letter['open_at']) && strtotime($letter['open_at']) > time();
 }
 
-function create_letter(?int $recipientId, array $admin, string $template = 'branco'): int
+/** Correio lento: a carta ainda está "a caminho". */
+function letter_in_transit(array $letter): bool
 {
-    $recipient = $recipientId ? q_one("SELECT * FROM users WHERE id = ? AND role = 'friend'", [$recipientId]) : null;
-    $content = build_template($template, $recipient['name'] ?? '', $admin['name']);
-    return db_insert('letters', [
+    return !empty($letter['delivered_at']) && strtotime($letter['delivered_at']) > time();
+}
+
+/** Para quem recebe: 'transit', 'date' ou null (pode abrir). Quem escreveu sempre pode ver. */
+function letter_seal(array $letter, array $user): ?string
+{
+    if (letter_role($letter, $user) !== 'recipient') {
+        return null;
+    }
+    if (letter_in_transit($letter)) {
+        return 'transit';
+    }
+    return letter_locked($letter) ? 'date' : null;
+}
+
+/** Condição SQL: cartas que já chegaram (correio lento entregue). */
+function sql_delivered(string $alias = 'l'): string
+{
+    return "($alias.delivered_at IS NULL OR $alias.delivered_at <= '" . now() . "')";
+}
+
+function create_letter(?int $recipientId, array $sender, string $template = 'branco', ?int $replyTo = null): int
+{
+    $recipient = $recipientId && is_contact((int) $sender['id'], $recipientId) ? find_user($recipientId) : null;
+    $recipientName = $recipient ? name_for((int) $sender['id'], $recipient) : '';
+    $content = build_template($template, $recipientName, $sender['name']);
+    $title = (letter_templates()[$template]['title'] ?? '') ?: ($recipient ? 'Carta para ' . first_name($recipientName) : 'Nova carta');
+    if ($replyTo) {
+        $original = q_one('SELECT title FROM letters WHERE id = ?', [$replyTo]);
+        if ($original) {
+            $title = mb_substr('Re: ' . preg_replace('/^(Re: )+/', '', $original['title']), 0, 150);
+        }
+    }
+    $id = db_insert('letters', [
+        'sender_id' => (int) $sender['id'],
         'recipient_id' => $recipient ? (int) $recipient['id'] : null,
-        'title' => (letter_templates()[$template]['title'] ?? '') ?: ($recipient ? 'Carta para ' . first_name($recipient['name']) : 'Nova carta'),
+        'title' => $title,
         'content' => json_encode($content, JSON_UNESCAPED_UNICODE),
         'status' => 'draft',
+        'reply_to' => $replyTo,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
+    sync_letter_media($id, $content);
+    return $id;
 }
 
 function duplicate_letter(array $letter): int
 {
-    $content = $letter['content'];
     $id = db_insert('letters', [
+        'sender_id' => (int) $letter['sender_id'],
         'recipient_id' => null,
         'title' => mb_substr('Cópia de ' . $letter['title'], 0, 150),
-        'content' => '{}',
+        'content' => json_encode($letter['content'], JSON_UNESCAPED_UNICODE),
         'status' => 'draft',
         'created_at' => now(),
         'updated_at' => now(),
     ]);
-    // Cada carta tem suas próprias cópias das imagens (a privacidade é por carta)
-    $map = [];
-    foreach (content_media($content) as $file) {
-        $media = q_one('SELECT * FROM media WHERE filename = ?', [$file]);
-        if (!$media || !is_file(UPLOAD_DIR . '/' . $file)) {
-            continue;
-        }
-        $ext = pathinfo($file, PATHINFO_EXTENSION);
-        $new = bin2hex(random_bytes(16)) . '.' . $ext;
-        if (copy(UPLOAD_DIR . '/' . $file, UPLOAD_DIR . '/' . $new)) {
-            db_insert('media', [
-                'letter_id' => $id, 'filename' => $new, 'mime' => $media['mime'],
-                'width' => $media['width'], 'height' => $media['height'], 'size' => $media['size'], 'created_at' => now(),
-            ]);
-            $map[$file] = $new;
-        }
-    }
-    $content = remap_content_media($content, $map);
-    db_update('letters', $id, ['content' => json_encode($content, JSON_UNESCAPED_UNICODE)]);
+    sync_letter_media($id, $letter['content']);
     return $id;
 }
 
-/** Troca nomes de arquivos de mídia no conteúdo (usado ao duplicar). */
-function remap_content_media(array $content, array $map): array
+/** Guarda quais arquivos cada carta usa (é isso que libera o acesso de quem recebe). */
+function sync_letter_media(int $letterId, array $content): void
 {
-    $swap = fn($src) => is_string($src) && isset($map[$src]) ? $map[$src] : $src;
-    foreach ($content['blocks'] as &$b) {
-        if (isset($b['src'])) {
-            $b['src'] = $swap($b['src']);
-        }
-        if (($b['type'] ?? '') === 'gallery') {
-            foreach ($b['items'] as &$item) {
-                $item['src'] = $swap($item['src'] ?? '');
-            }
-            unset($item);
-        }
-    }
-    unset($b);
-    foreach ($content['stickers'] as &$st) {
-        if (isset($st['src'])) {
-            $st['src'] = $swap($st['src']);
-        }
-    }
-    unset($st);
-    return $content;
-}
-
-function delete_media_files(array $letterIds): void
-{
-    if (!$letterIds) {
-        return;
-    }
-    $marks = implode(',', array_fill(0, count($letterIds), '?'));
-    foreach (q_all("SELECT filename FROM media WHERE letter_id IN ($marks)", array_values($letterIds)) as $m) {
-        @unlink(UPLOAD_DIR . '/' . $m['filename']);
+    q('DELETE FROM letter_media WHERE letter_id = ?', [$letterId]);
+    foreach (content_media($content) as $file) {
+        db_insert('letter_media', ['letter_id' => $letterId, 'filename' => $file]);
     }
 }
 
+/** As imagens e áudios ficam na biblioteca de quem enviou; apagar a carta não apaga os arquivos. */
 function delete_letter(int $id): void
 {
-    delete_media_files([$id]);
+    q('UPDATE media SET letter_id = NULL WHERE letter_id = ?', [$id]);
     q('DELETE FROM letters WHERE id = ?', [$id]);
 }
 
-/** Remove arquivos enviados que a carta não usa mais. */
-function prune_letter_media(int $letterId, array $content): void
+/** Quem pode baixar um arquivo de mídia: o dono, ou quem pode abrir uma carta que usa o arquivo. */
+function can_access_media(array $media, array $user): bool
 {
-    // Também preserva o que versões antigas usam, para o histórico continuar funcionando
-    $used = array_flip(content_media($content));
-    foreach (q_all('SELECT content FROM letter_versions WHERE letter_id = ?', [$letterId]) as $v) {
-        foreach (content_media(json_decode($v['content'], true) ?: []) as $file) {
-            $used[$file] = true;
+    if ((int) $media['user_id'] === (int) $user['id']) {
+        return true;
+    }
+    $letters = q_all(
+        'SELECT l.* FROM letter_media lm JOIN letters l ON l.id = lm.letter_id
+         WHERE lm.filename = ? AND (l.sender_id = ? OR l.recipient_id = ?)',
+        [$media['filename'], (int) $user['id'], (int) $user['id']]
+    );
+    foreach ($letters as $l) {
+        if (can_view_letter($l, $user) && letter_seal($l, $user) === null) {
+            return true;
         }
     }
-    $limit = date('Y-m-d H:i:s', time() - 3600); // dá uma hora de folga para o desfazer do editor
-    foreach (q_all('SELECT id, filename, created_at FROM media WHERE letter_id = ?', [$letterId]) as $m) {
-        if (!isset($used[$m['filename']]) && $m['created_at'] < $limit) {
-            @unlink(UPLOAD_DIR . '/' . $m['filename']);
-            q('DELETE FROM media WHERE id = ?', [(int) $m['id']]);
-        }
-    }
+    return false;
 }
 
 function letter_reactions(int $letterId): array
@@ -155,9 +161,8 @@ function reply_payload(array $r, array $viewer): array
     return [
         'id' => (int) $r['id'],
         'message' => $r['message'],
-        'name' => first_name($r['name']),
+        'name' => first_name(name_for((int) $viewer['id'], ['id' => $r['user_id'], 'name' => $r['name']])),
         'mine' => (int) $r['user_id'] === (int) $viewer['id'],
-        'fromAdmin' => $r['role'] === 'admin',
         'avatar' => avatar_html($r),
         'when' => time_ago($r['created_at']),
     ];
@@ -171,7 +176,7 @@ function mark_replies_read(int $letterId, array $viewer): void
 }
 
 /** Mensagens de voz (gravadas no navegador ou enviadas como arquivo). */
-function upload_audio(array $file, int $letterId): array
+function upload_audio(array $file, int $letterId, int $userId): array
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
         throw new RuntimeException('Falha no envio do áudio.');
@@ -196,6 +201,7 @@ function upload_audio(array $file, int $letterId): array
     db_insert('media', [
         'letter_id' => $letterId, 'filename' => $name, 'mime' => $served,
         'width' => 0, 'height' => 0, 'size' => (int) $file['size'], 'created_at' => now(),
+        'user_id' => $userId, 'kind' => 'audio', 'in_library' => 1,
     ]);
     return ['src' => $name];
 }
@@ -217,7 +223,7 @@ function save_version(int $letterId, string $title, string $contentJson, bool $f
     }
 }
 
-function upload_image(array $file, int $letterId): array
+function upload_image(array $file, int $letterId, int $userId, string $kind = 'image'): array
 {
     $maxBytes = (int) config('max_upload_mb', 8) * 1024 * 1024;
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -260,7 +266,7 @@ function upload_image(array $file, int $letterId): array
         }
         $width = imagesx($src);
         $height = imagesy($src);
-        $max = 1600;
+        $max = $kind === 'sticker' ? 900 : 1800;
         $scale = min(1, $max / max($width, $height));
         $nw = max(1, (int) round($width * $scale));
         $nh = max(1, (int) round($height * $scale));
@@ -287,6 +293,7 @@ function upload_image(array $file, int $letterId): array
     db_insert('media', [
         'letter_id' => $letterId, 'filename' => $name, 'mime' => $mime,
         'width' => $width, 'height' => $height, 'size' => (int) filesize($dest), 'created_at' => now(),
+        'user_id' => $userId, 'kind' => $kind === 'sticker' ? 'sticker' : 'image', 'in_library' => 1,
     ]);
-    return ['src' => $name, 'width' => $width, 'height' => $height];
+    return ['src' => $name, 'width' => $width, 'height' => $height, 'kind' => $kind];
 }

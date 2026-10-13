@@ -4,7 +4,25 @@ declare(strict_types=1);
 require __DIR__ . '/app/bootstrap.php';
 
 $errors = [];
-$step = $GLOBALS['config'] === null ? 'config' : (db_ready() ? 'done' : 'admin');
+/** Erro do banco em linguagem simples (sem expor detalhes do servidor). */
+function db_error_hint(Throwable $e): string
+{
+    $m = $e->getMessage();
+    return match (true) {
+        (bool) preg_match('/1045|Access denied/i', $m) => 'O usuário ou a senha do banco não conferem.',
+        (bool) preg_match('/1049|Unknown database/i', $m) => 'Esse banco de dados não existe. Confira o nome (no InfinityFree ele começa com if0_).',
+        (bool) preg_match('/2002|getaddrinfo|Connection refused|timed out/i', $m) => 'Não encontrei o servidor do banco. Confira o "host" (no InfinityFree é algo como sql208.infinityfree.com).',
+        default => 'Não consegui conectar ao banco. Confira os dados.',
+    };
+}
+
+$dbError = '';
+try {
+    $step = $GLOBALS['config'] === null ? 'config' : (db_ready() ? 'done' : 'admin');
+} catch (Throwable $e) {
+    $step = 'admin';
+    $dbError = db_error_hint($e);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -34,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 redirect('install.php');
             }
         } catch (Throwable $e) {
-            $errors[] = 'Não consegui conectar ao banco: ' . $e->getMessage();
+            $errors[] = db_error_hint($e);
         }
     } elseif ($step === 'admin') {
         $name = trim((string) ($_POST['admin_name'] ?? ''));
@@ -61,13 +79,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'avatar' => '✍️',
                         'color' => '#c97b84',
                         'created_at' => now(),
+                        'terms_at' => now(),
                     ]);
                     login_user(q_one('SELECT * FROM users WHERE id = ?', [$id]), true);
                     flash('Pronto. Agora adicione seus amigos e escreva a primeira carta.');
                 }
                 redirect('index.php');
             } catch (Throwable $e) {
-                $errors[] = 'Erro ao criar as tabelas: ' . $e->getMessage();
+                error_log('[cartas] instalação: ' . $e->getMessage());
+                $errors[] = 'Não consegui criar as tabelas. ' . db_error_hint($e);
             }
         }
     }
@@ -79,7 +99,7 @@ page_head('Instalação', ['body' => 'auth-page', 'nav' => false]);
     <div class="auth-card card wide">
         <h1>Instalação</h1>
 
-        <?php foreach ($errors as $error): ?>
+        <?php if ($dbError): $errors[] = $dbError; endif; foreach ($errors as $error): ?>
             <div class="alert alert-error"><?= e($error) ?></div>
         <?php endforeach; ?>
 

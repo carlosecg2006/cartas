@@ -81,13 +81,20 @@ function db_update(string $table, int $id, array $data): void
     q('UPDATE ' . $table . ' SET ' . $sets . ' WHERE id = :__id', $data);
 }
 
-/** O banco está instalado e já existe um administrador? */
+/**
+ * O banco está instalado e já existe um administrador?
+ * Só responde "não" quando a tabela não existe. Banco fora do ar (comum em hospedagem
+ * gratuita) gera erro, para não mandar ninguém para o instalador por engano.
+ */
 function db_ready(): bool
 {
     try {
         return (int) q_val("SELECT COUNT(*) FROM users WHERE role = 'admin'") > 0;
-    } catch (Throwable $e) {
-        return false;
+    } catch (PDOException $e) {
+        if (preg_match('/no such table|doesn.t exist|42S02|Unknown database/i', $e->getMessage())) {
+            return false;
+        }
+        throw $e;
     }
 }
 
@@ -111,7 +118,14 @@ function db_schema(string $driver): array
             last_login_at DATETIME NULL,
             last_seen_at DATETIME NULL,
             created_by INT NULL,
-            birthday DATE NULL
+            birthday DATE NULL,
+            managed INT NOT NULL DEFAULT 0,
+            auth_version INT NOT NULL DEFAULT 0,
+            pw_reset_at DATETIME NULL,
+            reduce_motion INT NOT NULL DEFAULT 0,
+            terms_at DATETIME NULL,
+            welcome_done INT NOT NULL DEFAULT 0,
+            recovery_hash VARCHAR(255) NULL
         )$opts",
         "CREATE TABLE IF NOT EXISTS letters (
             id $pk,
@@ -150,7 +164,7 @@ function db_schema(string $driver): array
             id $pk,
             letter_id INT NOT NULL,
             user_id INT NOT NULL,
-            emoji VARCHAR(16) NOT NULL,
+            emoji VARCHAR(16) " . ($sqlite ? '' : 'CHARACTER SET utf8mb4 COLLATE utf8mb4_bin ') . "NOT NULL,
             created_at DATETIME NOT NULL,
             UNIQUE (letter_id, user_id, emoji),
             FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE CASCADE,
@@ -242,7 +256,7 @@ function db_schema(string $driver): array
     ];
 }
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /** Atualiza o banco de instalações antigas uma única vez, sem perder dados. */
 function ensure_schema(): void
@@ -251,8 +265,18 @@ function ensure_schema(): void
     if (is_file($flag)) {
         return;
     }
+    // A versão também fica no banco: funciona mesmo se a pasta storage não aceitar escrita
+    try {
+        if ((int) setting('schema_version') >= SCHEMA_VERSION) {
+            @file_put_contents($flag, date('c'));
+            return;
+        }
+    } catch (PDOException $e) {
+        // tabela settings ainda não existe
+    }
     db_install();
     db_migrate();
+    set_setting('schema_version', (string) SCHEMA_VERSION);
     @file_put_contents($flag, date('c'));
 }
 
@@ -265,7 +289,11 @@ function setting(string $name): ?string
 function set_setting(string $name, string $value): void
 {
     q('DELETE FROM settings WHERE name = ?', [$name]);
-    db_insert('settings', ['name' => $name, 'value' => $value]);
+    try {
+        db_insert('settings', ['name' => $name, 'value' => $value]);
+    } catch (PDOException $e) {
+        // outro pedido gravou ao mesmo tempo: fica o valor dele
+    }
 }
 
 /** Funciona em qualquer MySQL/MariaDB/SQLite: se a coluna não existe, a consulta falha. */
@@ -281,14 +309,33 @@ function column_exists(string $table, string $column): bool
 
 function add_column(string $table, string $column, string $definition): void
 {
-    if (!column_exists($table, $column)) {
+    if (column_exists($table, $column)) {
+        return;
+    }
+    try {
         db()->exec('ALTER TABLE ' . $table . ' ADD COLUMN ' . $column . ' ' . $definition);
+    } catch (PDOException $e) {
+        // dois pedidos ao mesmo tempo: se a coluna já apareceu, está tudo certo
+        if (!column_exists($table, $column)) {
+            throw $e;
+        }
     }
 }
 
-/** Versão 3: cada pessoa escreve e tem sua lista; biblioteca de mídia por pessoa. */
+function try_exec(string $sql): void
+{
+    try {
+        db()->exec($sql);
+    } catch (PDOException $e) {
+        // índice já existe, etc.
+    }
+}
+
 function db_migrate(): void
 {
+    // Instalações de antes da versão 3 (um só remetente) ainda não têm sender_id
+    $legacy = !column_exists('letters', 'sender_id');
+
     add_column('users', 'created_by', 'INT NULL');
     add_column('users', 'birthday', 'DATE NULL');
     add_column('letters', 'sender_id', 'INT NULL');
@@ -297,28 +344,58 @@ function db_migrate(): void
     add_column('media', 'user_id', 'INT NULL');
     add_column('media', 'kind', "VARCHAR(10) NOT NULL DEFAULT 'image'");
     add_column('media', 'in_library', 'INT NOT NULL DEFAULT 1');
-    foreach (['CREATE INDEX idx_letter_media_file ON letter_media (filename)', 'CREATE INDEX idx_letters_sender ON letters (sender_id, status)', 'CREATE INDEX idx_media_user ON media (user_id)'] as $sql) {
-        try {
-            db()->exec($sql);
-        } catch (PDOException $e) {
-            // já existe
+    // versão 5
+    add_column('users', 'managed', 'INT NOT NULL DEFAULT 0');
+    add_column('users', 'auth_version', 'INT NOT NULL DEFAULT 0');
+    add_column('users', 'pw_reset_at', 'DATETIME NULL');
+    add_column('users', 'reduce_motion', 'INT NOT NULL DEFAULT 0');
+    add_column('users', 'terms_at', 'DATETIME NULL');
+    add_column('users', 'welcome_done', 'INT NOT NULL DEFAULT 0');
+    add_column('users', 'recovery_hash', 'VARCHAR(255) NULL');
+    add_column('contacts', 'blocked', 'INT NOT NULL DEFAULT 0');
+    add_column('contacts', 'note', "VARCHAR(500) NOT NULL DEFAULT ''");
+    add_column('letters', 'search_text', db_driver() === 'sqlite' ? 'TEXT NULL' : 'MEDIUMTEXT NULL');
+    add_column('letters', 'meta', 'TEXT NULL');
+    foreach (['CREATE INDEX idx_letter_media_file ON letter_media (filename)', 'CREATE INDEX idx_letters_sender ON letters (sender_id, status)',
+        'CREATE INDEX idx_media_user ON media (user_id)', 'CREATE INDEX idx_replies_letter ON replies (letter_id, read_at)',
+        'CREATE INDEX idx_login_attempts_time ON login_attempts (attempted_at)', 'CREATE INDEX idx_letters_recipient ON letters (recipient_id, status)'] as $sql) {
+        try_exec($sql);
+    }
+
+    if ($legacy) {
+        // Tudo o que existia antes foi escrito por quem instalou o site
+        $admin = q_one("SELECT * FROM users WHERE role = 'admin' ORDER BY id LIMIT 1");
+        if ($admin) {
+            q('UPDATE letters SET sender_id = ? WHERE sender_id IS NULL', [(int) $admin['id']]);
+            q('UPDATE users SET created_by = ? WHERE created_by IS NULL AND id <> ?', [(int) $admin['id'], (int) $admin['id']]);
+            foreach (q_all('SELECT * FROM users WHERE id <> ?', [(int) $admin['id']]) as $u) {
+                add_contact((int) $admin['id'], (int) $u['id']);
+                add_contact((int) $u['id'], (int) $admin['id']);
+            }
+        }
+        q('UPDATE media SET user_id = (SELECT sender_id FROM letters WHERE letters.id = media.letter_id) WHERE user_id IS NULL');
+        q("UPDATE media SET kind = 'audio' WHERE mime LIKE 'audio/%'");
+        foreach (q_all('SELECT id, content FROM letters') as $l) {
+            sync_letter_media((int) $l['id'], json_decode((string) $l['content'], true) ?: []);
         }
     }
 
-    // Tudo o que existia antes foi escrito por quem instalou o site
-    $admin = q_one("SELECT * FROM users WHERE role = 'admin' ORDER BY id LIMIT 1");
-    if ($admin) {
-        q('UPDATE letters SET sender_id = ? WHERE sender_id IS NULL', [(int) $admin['id']]);
-        q("UPDATE users SET created_by = ? WHERE created_by IS NULL AND id <> ?", [(int) $admin['id'], (int) $admin['id']]);
-        foreach (q_all('SELECT * FROM users WHERE id <> ?', [(int) $admin['id']]) as $u) {
-            add_contact((int) $admin['id'], (int) $u['id']);
-            add_contact((int) $u['id'], (int) $admin['id']);
+    if (setting('v5_done') === null) {
+        // Só contas criadas com senha por outra pessoa ficam "gerenciadas" por ela.
+        // Quem entrou por convite escolheu a própria senha: ninguém mais mexe na conta.
+        q("UPDATE users SET managed = 1 WHERE created_by IS NOT NULL AND id NOT IN
+            (SELECT user_id FROM invites WHERE kind = 'invite' AND user_id IS NOT NULL)");
+        if (db_driver() === 'mysql') {
+            // emojis diferentes eram considerados iguais pela comparação padrão
+            try_exec('ALTER TABLE reactions MODIFY emoji VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL');
         }
-    }
-    q('UPDATE media SET user_id = (SELECT sender_id FROM letters WHERE letters.id = media.letter_id) WHERE user_id IS NULL');
-    q("UPDATE media SET kind = 'audio' WHERE mime LIKE 'audio/%'");
-    foreach (q_all('SELECT id, content FROM letters') as $l) {
-        sync_letter_media((int) $l['id'], json_decode((string) $l['content'], true) ?: []);
+        foreach (q_all('SELECT id FROM letters') as $row) {
+            // uma por vez: cartas grandes não estouram a memória
+            $l = q_one('SELECT id, title, content FROM letters WHERE id = ?', [(int) $row['id']]);
+            $d = letter_derived((string) $l['title'], json_decode((string) $l['content'], true) ?: []);
+            q('UPDATE letters SET search_text = ?, meta = ? WHERE id = ?', [$d['search_text'], $d['meta'], (int) $l['id']]);
+        }
+        set_setting('v5_done', date('c'));
     }
 }
 

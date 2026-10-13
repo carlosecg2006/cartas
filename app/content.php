@@ -133,7 +133,12 @@ function sanitize_inline_html($html, int $max = 20000): string
         $out .= sanitize_node($child);
     }
     $out = preg_replace('/(<br>)+$/', '', $out) ?? $out;
-    return mb_substr($out, 0, $max);
+    if (mb_strlen($out) > $max) {
+        // cortar no meio de uma tag quebraria o bloco: nesse caso fica só o texto
+        $text = html_entity_decode(strip_tags(str_replace('<br>', "\n", $out)), ENT_QUOTES, 'UTF-8');
+        return nl2br(e(mb_substr($text, 0, (int) ($max * 0.8))), false);
+    }
+    return $out;
 }
 
 function sanitize_node(DOMNode $node): string
@@ -571,3 +576,50 @@ function content_excerpt(array $content, int $max = 140): string
     $text = implode(' · ', $parts);
     return mb_strlen($text) > $max ? rtrim(mb_substr($text, 0, $max - 1)) . '…' : $text;
 }
+
+/** Colunas derivadas do conteúdo, gravadas a cada salvamento (listas e busca não precisam abrir a carta inteira). */
+function letter_derived(string $title, array $content): array
+{
+    return [
+        'search_text' => letter_search_text($title, $content),
+        'meta' => json_encode([
+            'envelope' => $content['envelope'] ?? [],
+            'paper' => $content['paper']['color'] ?? '#fffdf6',
+            'excerpt' => content_excerpt($content, 160),
+            'bgm' => ($content['bgm']['kind'] ?? 'none') !== 'none',
+        ], JSON_UNESCAPED_UNICODE),
+    ];
+}
+
+/** Texto puro da carta usado na busca (segredos e raspadinhas ficam de fora). */
+function letter_search_text(string $title, array $content): string
+{
+    $text = trim($title . ' ' . ($content['envelope']['label'] ?? '') . ' ' . content_excerpt($content, 20000));
+    return mb_substr($text, 0, 20000);
+}
+
+/** Tira da carta os arquivos listados (apagados da biblioteca ou de outra pessoa). */
+function strip_media(array $content, array $files): array
+{
+    $bad = array_flip($files);
+    foreach (['image', 'sceneImage'] as $k) {
+        if (isset($bad[$content['paper'][$k] ?? ''])) {
+            $content['paper'][$k] = '';
+        }
+    }
+    if (isset($bad[$content['bgm']['src'] ?? ''])) {
+        $content['bgm'] = ['kind' => 'none'];
+    }
+    foreach ($content['blocks'] as &$b) {
+        if (isset($b['src']) && isset($bad[$b['src']])) {
+            $b['src'] = '';
+        }
+        if (isset($b['items']) && ($b['type'] ?? '') === 'gallery') {
+            $b['items'] = array_values(array_filter($b['items'], fn($i) => !isset($bad[$i['src'] ?? ''])));
+        }
+    }
+    unset($b);
+    $content['stickers'] = array_values(array_filter($content['stickers'], fn($s) => !(($s['kind'] ?? '') === 'image' && isset($bad[$s['src'] ?? '']))));
+    return $content;
+}
+

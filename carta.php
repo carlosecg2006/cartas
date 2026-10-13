@@ -31,7 +31,7 @@ $otherId = $isSender ? (int) $letter['recipient_id'] : (int) $letter['sender_id'
 $isFav = (bool) q_val('SELECT 1 FROM favorites WHERE user_id = ? AND letter_id = ?', [$uid, (int) $letter['id']]);
 $data = [
     'id' => (int) $letter['id'],
-    'title' => $letter['title'],
+    'title' => $seal === 'transit' ? '' : $letter['title'],
     'toName' => $isSender ? first_name($toName) : first_name($user['name']),
     'envelope' => $content['envelope'],
     'paperColor' => $content['paper']['color'],
@@ -45,9 +45,12 @@ $data = [
     'reactions' => $locked ? [] : letter_reactions((int) $letter['id']),
     'reactionChoices' => REACTION_EMOJIS,
     'replies' => $locked ? [] : array_map(fn($r) => reply_payload($r, $user), letter_replies((int) $letter['id'])),
+    // abertura completa só na primeira vez; releituras são mais rápidas
+    'firstOpen' => !$isSender && !$letter['first_opened_at'],
+    'reduceMotion' => (int) ($user['reduce_motion'] ?? 0) === 1,
 ];
 
-page_head($letter['title'] ?: 'Carta', [
+page_head($seal === 'transit' ? 'Carta a caminho' : ($letter['title'] ?: 'Carta'), [
     'css' => ['assets/css/letter.css', 'assets/css/viewer.css'],
     'letter_fonts' => true,
     'body' => 'page-viewer',

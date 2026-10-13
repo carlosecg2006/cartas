@@ -66,6 +66,27 @@ function sql_delivered(string $alias = 'l'): string
     return "($alias.delivered_at IS NULL OR $alias.delivered_at <= '" . now() . "')";
 }
 
+/** Colunas para listas (sem o conteúdo inteiro, que pode ser grande). */
+const LETTER_LIST_COLS = 'l.id, l.sender_id, l.recipient_id, l.title, l.status, l.open_at, l.sent_at, l.delivered_at, '
+    . 'l.first_opened_at, l.last_opened_at, l.open_count, l.created_at, l.updated_at, l.meta';
+
+/** Completa uma linha de lista com envelope, cor do papel e trecho (vindos da coluna meta). */
+function hydrate_meta(array $l): array
+{
+    $meta = json_decode((string) ($l['meta'] ?? ''), true);
+    if (!is_array($meta)) {
+        // carta antiga ainda sem meta: calcula uma vez e guarda
+        $content = json_decode((string) q_val('SELECT content FROM letters WHERE id = ?', [(int) $l['id']]), true) ?: [];
+        $d = letter_derived((string) $l['title'], $content);
+        q('UPDATE letters SET search_text = ?, meta = ? WHERE id = ?', [$d['search_text'], $d['meta'], (int) $l['id']]);
+        $meta = json_decode($d['meta'], true);
+    }
+    $l['content'] = ['envelope' => $meta['envelope'] ?? [], 'paper' => ['color' => $meta['paper'] ?? '#fffdf6']];
+    $l['excerpt'] = (string) ($meta['excerpt'] ?? '');
+    $l['has_music'] = !empty($meta['bgm']);
+    return $l;
+}
+
 function create_letter(?int $recipientId, array $sender, string $template = 'branco', ?int $replyTo = null): int
 {
     $recipient = $recipientId && is_contact((int) $sender['id'], $recipientId) ? find_user($recipientId) : null;
@@ -87,7 +108,7 @@ function create_letter(?int $recipientId, array $sender, string $template = 'bra
         'reply_to' => $replyTo,
         'created_at' => now(),
         'updated_at' => now(),
-    ]);
+    ] + letter_derived($title, $content));
     sync_letter_media($id, $content);
     return $id;
 }
@@ -102,7 +123,7 @@ function duplicate_letter(array $letter): int
         'status' => 'draft',
         'created_at' => now(),
         'updated_at' => now(),
-    ]);
+    ] + letter_derived('Cópia de ' . $letter['title'], $letter['content']));
     sync_letter_media($id, $letter['content']);
     return $id;
 }
@@ -110,9 +131,56 @@ function duplicate_letter(array $letter): int
 /** Guarda quais arquivos cada carta usa (é isso que libera o acesso de quem recebe). */
 function sync_letter_media(int $letterId, array $content): void
 {
+    $want = content_media($content);
+    $have = array_column(q_all('SELECT filename FROM letter_media WHERE letter_id = ?', [$letterId]), 'filename');
+    sort($want);
+    sort($have);
+    if ($want === $have) {
+        return; // nada mudou: evita reescrever a cada salvamento automático
+    }
     q('DELETE FROM letter_media WHERE letter_id = ?', [$letterId]);
-    foreach (content_media($content) as $file) {
-        db_insert('letter_media', ['letter_id' => $letterId, 'filename' => $file]);
+    foreach ($want as $file) {
+        try {
+            db_insert('letter_media', ['letter_id' => $letterId, 'filename' => $file]);
+        } catch (PDOException $e) {
+            // outro salvamento ao mesmo tempo já inseriu
+        }
+    }
+}
+
+/** Apaga arquivos que a pessoa tirou da biblioteca e nenhuma carta usa mais. */
+function gc_hidden_media(int $userId): void
+{
+    $rows = q_all('SELECT m.id, m.filename FROM media m WHERE m.user_id = ? AND m.in_library = 0
+        AND NOT EXISTS (SELECT 1 FROM letter_media lm WHERE lm.filename = m.filename)', [$userId]);
+    foreach ($rows as $m) {
+        @unlink(UPLOAD_DIR . '/' . $m['filename']);
+        q('DELETE FROM media WHERE id = ?', [(int) $m['id']]);
+    }
+}
+
+/** Tamanho máximo de envio que a hospedagem aceita, em bytes. */
+function upload_limit_bytes(): int
+{
+    $parse = static function ($v): int {
+        $v = trim((string) $v);
+        if ($v === '' || $v === '-1') {
+            return PHP_INT_MAX;
+        }
+        $n = (float) $v;
+        return (int) match (strtolower(substr($v, -1))) { 'g' => $n * 1073741824, 'm' => $n * 1048576, 'k' => $n * 1024, default => $n };
+    };
+    return max(1048576, min($parse(ini_get('upload_max_filesize')), $parse(ini_get('post_max_size')) - 65536, 12 * 1048576));
+}
+
+/** Espaço total que cada pessoa pode ocupar com fotos e áudios. */
+const USER_STORAGE_MB = 400;
+
+function check_storage_quota(int $userId, int $incoming): void
+{
+    $used = (int) q_val('SELECT COALESCE(SUM(size), 0) FROM media WHERE user_id = ?', [$userId]);
+    if ($used + $incoming > USER_STORAGE_MB * 1048576) {
+        throw new RuntimeException('Sua biblioteca chegou ao limite de ' . USER_STORAGE_MB . ' MB. Apague arquivos que não usa mais na aba Biblioteca.');
     }
 }
 
@@ -178,12 +246,16 @@ function mark_replies_read(int $letterId, array $viewer): void
 /** Mensagens de voz (gravadas no navegador ou enviadas como arquivo). */
 function upload_audio(array $file, int $letterId, int $userId): array
 {
+    $limitMb = (int) floor(upload_limit_bytes() / 1048576);
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-        throw new RuntimeException('Falha no envio do áudio.');
+        throw new RuntimeException(in_array($file['error'] ?? 0, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+            ? 'O áudio passa de ' . $limitMb . ' MB, o máximo que a hospedagem aceita.'
+            : 'Falha no envio do áudio.');
     }
-    if ($file['size'] > 12 * 1024 * 1024) {
-        throw new RuntimeException('O áudio passa de 12 MB. Tente uma gravação mais curta.');
+    if ($file['size'] > upload_limit_bytes()) {
+        throw new RuntimeException('O áudio passa de ' . $limitMb . ' MB, o máximo que a hospedagem aceita.');
     }
+    check_storage_quota($userId, (int) $file['size']);
     $mime = function_exists('finfo_open') ? (string) finfo_file(finfo_open(FILEINFO_MIME_TYPE), $file['tmp_name']) : '';
     $types = [
         'audio/webm' => 'webm', 'video/webm' => 'webm', 'audio/ogg' => 'ogg', 'application/ogg' => 'ogg',
@@ -225,7 +297,7 @@ function save_version(int $letterId, string $title, string $contentJson, bool $f
 
 function upload_image(array $file, int $letterId, int $userId, string $kind = 'image'): array
 {
-    $maxBytes = (int) config('max_upload_mb', 8) * 1024 * 1024;
+    $maxBytes = min((int) config('max_upload_mb', 8) * 1024 * 1024, upload_limit_bytes());
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
         $messages = [
             UPLOAD_ERR_INI_SIZE => 'A imagem é maior do que a hospedagem permite.',
@@ -235,12 +307,31 @@ function upload_image(array $file, int $letterId, int $userId, string $kind = 'i
         throw new RuntimeException($messages[$file['error'] ?? UPLOAD_ERR_NO_FILE] ?? 'Falha no envio da imagem.');
     }
     if ($file['size'] > $maxBytes) {
-        throw new RuntimeException('A imagem passa de ' . config('max_upload_mb', 8) . ' MB.');
+        throw new RuntimeException('A imagem passa de ' . (int) floor($maxBytes / 1048576) . ' MB.');
     }
+    check_storage_quota($userId, (int) $file['size']);
     $info = @getimagesize($file['tmp_name']);
     $types = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_GIF => 'gif', IMAGETYPE_WEBP => 'webp'];
     if (!$info || !isset($types[$info[2]])) {
         throw new RuntimeException('Formato não suportado. Use JPG, PNG, GIF ou WEBP.');
+    }
+    // Imagem pequena em bytes mas enorme em pixels esgotaria a memória do servidor
+    if ($info[0] * $info[1] > 40000000 || max($info[0], $info[1]) > 12000) {
+        throw new RuntimeException('Essa imagem tem resolução grande demais. Tente uma versão menor.');
+    }
+    if ($info[2] === IMAGETYPE_WEBP && !function_exists('imagecreatefromwebp')) {
+        throw new RuntimeException('Esta hospedagem não aceita WEBP. Use JPG ou PNG.');
+    }
+    if (function_exists('imagecreatetruecolor') && $info[2] !== IMAGETYPE_GIF) {
+        // GD precisa de ~5 bytes por pixel; garante memória antes de abrir
+        $need = (int) ($info[0] * $info[1] * 5.5) + 32 * 1048576;
+        $limit = upload_memory_limit();
+        if ($limit > 0 && $need > $limit) {
+            @ini_set('memory_limit', (string) min($need, 512 * 1048576));
+            if (upload_memory_limit() > 0 && $need > upload_memory_limit()) {
+                throw new RuntimeException('Essa foto é grande demais para a hospedagem processar. Tente uma versão menor.');
+            }
+        }
     }
     $ext = $types[$info[2]];
     $name = bin2hex(random_bytes(16)) . '.' . $ext;
@@ -261,7 +352,9 @@ function upload_image(array $file, int $letterId, int $userId, string $kind = 'i
             $exif = @exif_read_data($file['tmp_name']);
             $rotate = [3 => 180, 6 => -90, 8 => 90][(int) ($exif['Orientation'] ?? 1)] ?? 0;
             if ($rotate) {
-                $src = imagerotate($src, $rotate, 0);
+                $rotated = imagerotate($src, $rotate, 0);
+                imagedestroy($src);
+                $src = $rotated;
             }
         }
         $width = imagesx($src);
@@ -276,11 +369,13 @@ function upload_image(array $file, int $letterId, int $userId, string $kind = 'i
             imagesavealpha($dst, true);
         }
         imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $width, $height);
+        imagedestroy($src);
         $ok = match ($ext) {
             'jpg' => imagejpeg($dst, $dest, 84),
             'png' => imagepng($dst, $dest, 7),
             'webp' => imagewebp($dst, $dest, 84),
         };
+        imagedestroy($dst);
         if (!$ok) {
             throw new RuntimeException('Não consegui salvar a imagem.');
         }
@@ -297,3 +392,14 @@ function upload_image(array $file, int $letterId, int $userId, string $kind = 'i
     ]);
     return ['src' => $name, 'width' => $width, 'height' => $height, 'kind' => $kind];
 }
+
+function upload_memory_limit(): int
+{
+    $v = trim((string) ini_get('memory_limit'));
+    if ($v === '' || $v === '-1') {
+        return -1;
+    }
+    $n = (int) $v;
+    return match (strtolower(substr($v, -1))) { 'g' => $n * 1073741824, 'm' => $n * 1048576, 'k' => $n * 1024, default => $n };
+}
+

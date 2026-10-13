@@ -26,6 +26,43 @@ function json_out($data, int $status = 200): never
     exit;
 }
 
+/** Responde já e continua trabalhando depois (avisos no celular não atrasam o envio). */
+function json_out_then(array $data, callable $after): never
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+    ignore_user_abort(true);
+    $body = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    http_response_code(200);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    header('Content-Length: ' . strlen($body));
+    header('Connection: close');
+    echo $body;
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    } else {
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        flush();
+    }
+    try {
+        $after();
+    } catch (Throwable $e) {
+        error_log('[cartas] depois da resposta: ' . $e->getMessage());
+    }
+    exit;
+}
+
+/** Texto vindo de formulário; listas (name[]=x) viram texto vazio. */
+function input(string $key, string $default = ''): string
+{
+    $v = $_POST[$key] ?? $default;
+    return is_string($v) ? $v : $default;
+}
+
 function json_error(string $message, int $status = 400): never
 {
     json_out(['ok' => false, 'error' => $message], $status);
@@ -180,5 +217,19 @@ function color_label(string $hex): string
         '#d9a5a0' => 'Rosa', '#e2b98f' => 'Pêssego', '#d8c37e' => 'Mostarda', '#a9c4a0' => 'Sálvia',
         '#9fbfd6' => 'Azul', '#b9a8d6' => 'Lavanda', '#d6a3bd' => 'Orquídea', '#9cc8bf' => 'Menta', '#c97b84' => 'Vinho',
     ][strtolower($hex)] ?? $hex;
+}
+
+/** Contato de quem cuida do site (para dúvidas e pedidos da LGPD). */
+function site_contact(): array
+{
+    $mail = '';
+    try {
+        $mail = (string) (setting('contact_email') ?? '');
+    } catch (Throwable $e) {
+        // banco ainda não instalado
+    }
+    $mail = $mail !== '' ? $mail : (string) config('contact_email', '');
+    $admin = q_one("SELECT name FROM users WHERE role = 'admin' ORDER BY id LIMIT 1");
+    return ['email' => filter_var($mail, FILTER_VALIDATE_EMAIL) ? $mail : '', 'name' => $admin['name'] ?? ''];
 }
 

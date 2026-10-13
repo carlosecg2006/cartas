@@ -17,8 +17,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (too_many_attempts($username)) {
         $error = 'Muitas tentativas seguidas. Tente de novo em alguns minutos.';
     } else {
-        $user = q_one('SELECT * FROM users WHERE username = ?', [$username]);
-        if ($user && password_verify($password, $user['password_hash'])) {
+        $user = q_one("SELECT * FROM users WHERE username = ? AND role <> 'deleted'", [$username]);
+        // Sempre verifica um hash, para o tempo de resposta não revelar se o usuário existe
+        $hash = $user['password_hash'] ?? '$2y$10$VeeoxnjjYXcUZ.i6PqnvvO3jLCd3ML.bD8lXsGXVKVUrFmZc9kjLC';
+        if (password_verify($password, $hash) && $user) {
             clear_attempts($username);
             if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
                 db_update('users', (int) $user['id'], ['password_hash' => password_hash($password, PASSWORD_DEFAULT)]);
@@ -50,6 +52,7 @@ page_head('Entrar', ['body' => 'auth-page', 'nav' => false, 'css' => ['assets/cs
             <label class="check"><input type="checkbox" name="remember" value="1" checked> Lembrar de mim neste aparelho</label>
             <button class="btn btn-primary btn-block">Entrar</button>
         </form>
+        <p class="small center auth-links"><a href="recuperar.php">Esqueci minha senha</a></p>
     </div>
 </main>
 <?php

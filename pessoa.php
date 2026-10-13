@@ -24,7 +24,7 @@ $pid = (int) $person['id'];
 $pname = first_name($person['display']);
 
 $rows = q_all(
-    "SELECT l.* FROM letters l WHERE l.status = 'sent' AND (
+    'SELECT ' . LETTER_LIST_COLS . " FROM letters l WHERE l.status = 'sent' AND (
         (l.sender_id = ? AND l.recipient_id = ?) OR (l.sender_id = ? AND l.recipient_id = ? AND " . sql_delivered() . ')
      ) ORDER BY l.sent_at ASC',
     [$uid, $pid, $pid, $uid]
@@ -32,7 +32,7 @@ $rows = q_all(
 $letters = [];
 $sent = $got = 0;
 foreach ($rows as $l) {
-    $l['content'] = json_decode($l['content'], true) ?: [];
+    $l = hydrate_meta($l);
     $l['mine'] = (int) $l['sender_id'] === $uid;
     $l['mine'] ? $sent++ : $got++;
     $letters[] = $l;
@@ -99,7 +99,7 @@ page_head($person['display'], ['body' => 'page-person', 'css' => ['assets/css/le
                             <?php if ($locked): ?>
                                 <span class="tag tag-scheduled">Abre em <?= e(fmt_date($l['open_at'])) ?></span>
                             <?php else: ?>
-                                <p class="found-snippet"><?= e(content_excerpt($l['content'], 120)) ?></p>
+                                <p class="found-snippet"><?= e(mb_strimwidth($l['excerpt'], 0, 120, '…')) ?></p>
                             <?php endif; ?>
                         </div>
                     </a>

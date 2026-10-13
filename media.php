@@ -5,6 +5,8 @@ declare(strict_types=1);
 require __DIR__ . '/app/bootstrap.php';
 
 $user = current_user();
+// Libera a sessão: fotos e áudios carregam em paralelo e não travam o salvamento
+session_write_close();
 $file = (string) ($_GET['f'] ?? '');
 if (!$user || !preg_match(ANY_MEDIA_RE, $file)) {
     http_response_code(404);
@@ -24,7 +26,9 @@ header_remove('Pragma');
 header_remove('Expires');
 $etag = '"' . $file . '"';
 header('Content-Type: ' . $media['mime']);
-header('Cache-Control: private, max-age=604800, immutable');
+header('Cache-Control: private, max-age=86400');
+header("Content-Security-Policy: default-src 'none'; sandbox");
+header('Content-Disposition: inline');
 header('ETag: ' . $etag);
 if (($_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $etag) {
     http_response_code(304);

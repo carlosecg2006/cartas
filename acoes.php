@@ -10,21 +10,28 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 csrf_check();
 
-$action = (string) ($_POST['acao'] ?? '');
+$action = input('acao');
 $letter = !empty($_POST['id']) ? find_letter((int) $_POST['id']) : null;
 $mine = $letter && letter_role($letter, $user) === 'sender';
+
+// Limite generoso de cartas novas por dia (protege a hospedagem gratuita de abusos)
+if (in_array($action, ['criar', 'responder', 'duplicar'], true)
+    && (int) q_val('SELECT COUNT(*) FROM letters WHERE sender_id = ? AND created_at > ?', [(int) $user['id'], date('Y-m-d H:i:s', time() - 86400)]) >= 100) {
+    flash('Você já começou 100 cartas hoje. Continue amanhã, ou termine as que estão nos rascunhos.', 'error');
+    redirect('index.php?aba=escritas&status=draft');
+}
 
 switch ($action) {
     case 'criar':
         $para = !empty($_POST['para']) ? (int) $_POST['para'] : null;
-        $id = create_letter($para, $user, (string) ($_POST['modelo'] ?? 'branco'));
+        $id = create_letter($para, $user, input('modelo', 'branco'));
         redirect('editor.php?id=' . $id);
 
     case 'responder':
         // Responder com uma carta: quem escreveu já está na lista de quem recebeu
         if ($letter && letter_role($letter, $user) === 'recipient') {
             add_contact((int) $user['id'], (int) $letter['sender_id']);
-            $id = create_letter((int) $letter['sender_id'], $user, (string) ($_POST['modelo'] ?? 'branco'), (int) $letter['id']);
+            $id = create_letter((int) $letter['sender_id'], $user, input('modelo', 'branco'), (int) $letter['id']);
             redirect('editor.php?id=' . $id);
         }
         break;

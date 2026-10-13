@@ -18,12 +18,18 @@ function page_head(string $title, array $opts = []): void
     $css = array_merge(['assets/css/app.css'], $opts['css'] ?? []);
     ?>
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-now="<?= e(iso(now())) ?>"<?= $user && (int) ($user['reduce_motion'] ?? 0) === 1 ? ' data-reduce-motion="1"' : '' ?>>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
 <meta name="robots" content="noindex, nofollow">
+<meta property="og:site_name" content="<?= e(app_name()) ?>">
+<meta property="og:title" content="<?= e($opts['og_title'] ?? app_name()) ?>">
+<meta property="og:description" content="<?= e($opts['og_description'] ?? 'Cartas digitais para quem você gosta.') ?>">
+<meta property="og:image" content="<?= e(base_url() . 'assets/og.png') ?>">
+<meta property="og:type" content="website">
+<meta name="description" content="<?= e($opts['og_description'] ?? 'Cartas digitais para quem você gosta.') ?>">
 <meta name="theme-color" content="#f6f1ea" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#171513" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
@@ -53,6 +59,7 @@ function page_head(string $title, array $opts = []): void
         <?php $unread = unread_count((int) $user['id']); ?>
         <a href="index.php" aria-label="Cartas<?= $unread ? ' (' . $unread . ' nova' . ($unread > 1 ? 's' : '') . ')' : '' ?>" class="<?= nav_active(['index.php', 'nova.php']) ?>"><?= icon('mail') ?><span>Cartas</span><?php if ($unread): ?><b class="nav-badge"><?= $unread ?></b><?php endif; ?></a>
         <a href="amigos.php" aria-label="Pessoas" class="<?= nav_active(['amigos.php', 'pessoa.php']) ?>"><?= icon('users') ?><span>Pessoas</span></a>
+        <a href="ajuda.php" class="nav-help <?= nav_active(['ajuda.php']) ?>" aria-label="Ajuda" title="Ajuda"><?= icon('help') ?></a>
         <a href="conta.php" class="nav-me <?= nav_active(['conta.php']) ?>" title="Minha conta" aria-label="Minha conta"><?= avatar_html($user, 'sm') ?></a>
     </nav>
 </header>
@@ -63,8 +70,11 @@ function page_head(string $title, array $opts = []): void
 <?php
 }
 
-function page_foot(array $js = []): void
+function page_foot(array $js = [], array $opts = []): void
 {
+    if ($opts['footer'] ?? true) {
+        echo '<footer class="site-foot"><a href="ajuda.php">Ajuda</a><span aria-hidden="true">·</span><a href="privacidade.php">Privacidade</a></footer>' . "\n";
+    }
     $js = array_merge(['assets/js/app.js'], $js);
     foreach ($js as $file) {
         echo '<script src="' . (str_starts_with($file, 'https://') ? e($file) : asset($file)) . '" defer></script>' . "\n";

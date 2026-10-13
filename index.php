@@ -5,7 +5,12 @@ require __DIR__ . '/app/bootstrap.php';
 
 $user = require_login();
 $uid = (int) $user['id'];
-$search = trim(mb_substr((string) ($_GET['q'] ?? ''), 0, 80));
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && input('acao') === 'boasvindas_ok') {
+    csrf_check();
+    db_update('users', $uid, ['welcome_done' => 1]);
+    redirect('index.php');
+}
+$search = is_string($_GET['q'] ?? null) ? trim(mb_substr($_GET['q'], 0, 80)) : '';
 $tab = $search !== '' ? 'busca' : (in_array($_GET['aba'] ?? '', ['escritas', 'favoritas'], true) ? $_GET['aba'] : 'recebidas');
 $contacts = contacts_of($uid);
 $names = array_column($contacts, 'display', 'id');
@@ -13,7 +18,7 @@ $nameOf = fn($id, $fallback) => $names[(int) $id] ?? (string) $fallback;
 
 // ---------- Recebidas ----------
 $received = q_all(
-    "SELECT l.*, s.name AS sender_name, s.avatar AS sender_avatar, s.color AS sender_color,
+    'SELECT ' . LETTER_LIST_COLS . ", s.name AS sender_name, s.avatar AS sender_avatar, s.color AS sender_color,
         (SELECT COUNT(*) FROM replies p WHERE p.letter_id = l.id AND p.read_at IS NULL AND p.user_id <> ?) AS unread_replies
      FROM letters l LEFT JOIN users s ON s.id = l.sender_id
      WHERE l.recipient_id = ? AND l.status = 'sent' ORDER BY l.sent_at DESC",
@@ -22,7 +27,7 @@ $received = q_all(
 $transit = $openWhen = $inbox = [];
 $newCount = 0;
 foreach ($received as $l) {
-    $l['content'] = json_decode($l['content'], true) ?: [];
+    $l = hydrate_meta($l);
     $l['from'] = $nameOf($l['sender_id'], $l['sender_name']);
     if (letter_in_transit($l)) {
         $transit[] = $l;
@@ -52,7 +57,7 @@ if (isset($statusSql[$filterStatus])) {
     $where[] = $statusSql[$filterStatus];
 }
 $written = q_all(
-    "SELECT l.*, u.name AS recipient_name, u.avatar, u.color,
+    'SELECT ' . LETTER_LIST_COLS . ", u.name AS recipient_name, u.avatar, u.color,
         (SELECT GROUP_CONCAT(emoji) FROM reactions r WHERE r.letter_id = l.id) AS reaction_list,
         (SELECT COUNT(*) FROM replies p WHERE p.letter_id = l.id) AS reply_count,
         (SELECT COUNT(*) FROM replies p WHERE p.letter_id = l.id AND p.read_at IS NULL AND p.user_id <> ?) AS unread_replies
@@ -64,36 +69,30 @@ $wc = q_one("SELECT COUNT(*) AS total,
         SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
         SUM(CASE WHEN status = 'sent' AND first_opened_at IS NULL THEN 1 ELSE 0 END) AS unread
     FROM letters WHERE sender_id = ?" . ($filterPerson ? ' AND recipient_id = ?' : ''), $filterPerson ? [$uid, $filterPerson] : [$uid]);
-$newReplies = (int) q_val('SELECT COUNT(*) FROM replies p JOIN letters l ON l.id = p.letter_id
-    WHERE (l.sender_id = ? OR l.recipient_id = ?) AND p.read_at IS NULL AND p.user_id <> ?', [$uid, $uid, $uid]);
+// só respostas em cartas que a pessoa ainda consegue abrir
+$newReplies = (int) q_val("SELECT COUNT(*) FROM replies p JOIN letters l ON l.id = p.letter_id
+    WHERE (l.sender_id = ? OR (l.recipient_id = ? AND l.status = 'sent')) AND p.read_at IS NULL AND p.user_id <> ?", [$uid, $uid, $uid]);
 
-$birthdays = upcoming_birthdays($uid, 21);
+$birthdays = upcoming_birthdays($uid, 21, $contacts);
 
 // ---------- Favoritas e busca ----------
-$favIds = array_map('intval', array_column(q_all('SELECT letter_id FROM favorites WHERE user_id = ?', [$uid]), 'letter_id'));
+$visibleSql = "(l.sender_id = ? OR (l.recipient_id = ? AND l.status = 'sent' AND " . sql_delivered() . ' AND (l.open_at IS NULL OR l.open_at <= ?)))';
+$visibleParams = [$uid, $uid, now()];
+$favIds = array_map('intval', array_column(q_all('SELECT f.letter_id FROM favorites f JOIN letters l ON l.id = f.letter_id
+    WHERE f.user_id = ? AND ' . $visibleSql, array_merge([$uid], $visibleParams)), 'letter_id'));
 
-/** Cartas que eu posso ler agora: as que escrevi e as recebidas que já podem ser abertas. */
-function readable_letters(int $uid, string $extraWhere = '', array $extraParams = []): array
+/** Cartas que eu posso ler agora: as que escrevi e as recebidas que já podem ser abertas (lacradas ficam de fora). */
+function readable_letters(string $visibleSql, array $visibleParams, string $extraWhere = '', array $extraParams = [], bool $withText = false): array
 {
     $rows = q_all(
-        "SELECT l.*, s.name AS sender_name, s.avatar AS sender_avatar, s.color AS sender_color,
+        'SELECT ' . LETTER_LIST_COLS . ($withText ? ', l.search_text' : '') . ", s.name AS sender_name, s.avatar AS sender_avatar, s.color AS sender_color,
             r.name AS recipient_name, r.avatar AS recipient_avatar, r.color AS recipient_color
          FROM letters l LEFT JOIN users s ON s.id = l.sender_id LEFT JOIN users r ON r.id = l.recipient_id
-         WHERE (l.sender_id = ? OR (l.recipient_id = ? AND l.status = 'sent' AND " . sql_delivered() . '))' . $extraWhere . '
-         ORDER BY COALESCE(l.sent_at, l.updated_at) DESC',
-        array_merge([$uid, $uid], $extraParams)
+         WHERE " . $visibleSql . $extraWhere . '
+         ORDER BY COALESCE(l.sent_at, l.updated_at) DESC LIMIT 80',
+        array_merge($visibleParams, $extraParams)
     );
-    $out = [];
-    foreach ($rows as $l) {
-        $mine = (int) $l['sender_id'] === $uid;
-        if (!$mine && letter_locked($l)) {
-            continue; // lacrada: nem aparece na busca
-        }
-        $l['content'] = json_decode($l['content'], true) ?: [];
-        $l['mine'] = $mine;
-        $out[] = $l;
-    }
-    return $out;
+    return array_map(fn($l) => hydrate_meta($l) + ['mine' => (int) $l['sender_id'] === $GLOBALS['uid']], $rows);
 }
 
 /** Trecho do texto em volta do que foi buscado, com o termo marcado. */
@@ -112,25 +111,55 @@ function search_snippet(string $text, string $term): string
 
 $results = [];
 if ($tab === 'busca') {
-    foreach (readable_letters($uid) as $l) {
-        $other = $l['mine'] ? ($l['recipient_id'] ? $nameOf($l['recipient_id'], $l['recipient_name']) : '') : $nameOf($l['sender_id'], $l['sender_name']);
-        $text = content_excerpt($l['content'], 100000);
-        $hay = $l['title'] . ' ' . $other . ' ' . ($l['content']['envelope']['label'] ?? '') . ' ' . $text;
-        if (mb_stripos($hay, $search) !== false) {
-            $l['other'] = $other;
-            $l['snippet'] = search_snippet(mb_stripos($text, $search) !== false ? $text : $l['title'], $search);
-            $results[] = $l;
-        }
+    $like = '%' . strtr($search, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+    // também acha pelo apelido que VOCÊ dá às pessoas
+    $people = array_keys(array_filter($names, fn($n) => mb_stripos($n, $search) !== false));
+    $peopleSql = $people ? ' OR l.sender_id IN (' . implode(',', array_map('intval', $people)) . ') OR l.recipient_id IN (' . implode(',', array_map('intval', $people)) . ')' : '';
+    $rows = readable_letters($visibleSql, $visibleParams,
+        " AND (l.search_text LIKE ? ESCAPE '!' OR l.title LIKE ? ESCAPE '!'" . $peopleSql . ')', [$like, $like], true);
+    foreach ($rows as $l) {
+        $l['other'] = $l['mine'] ? ($l['recipient_id'] ? $nameOf($l['recipient_id'], $l['recipient_name']) : '') : $nameOf($l['sender_id'], $l['sender_name']);
+        $text = (string) $l['search_text'];
+        $l['snippet'] = search_snippet(mb_stripos($text, $search) !== false ? $text : ($l['excerpt'] ?: $l['title']), $search);
+        unset($l['search_text']);
+        $results[] = $l;
     }
 }
 $favorites = [];
 if ($tab === 'favoritas' && $favIds) {
-    $favorites = readable_letters($uid, ' AND l.id IN (' . implode(',', $favIds) . ')');
+    $favorites = readable_letters($visibleSql, $visibleParams, ' AND l.id IN (' . implode(',', $favIds) . ')');
     foreach ($favorites as &$f) {
         $f['other'] = $f['mine'] ? ($f['recipient_id'] ? $nameOf($f['recipient_id'], $f['recipient_name']) : '') : $nameOf($f['sender_id'], $f['sender_name']);
-        $f['snippet'] = e(content_excerpt($f['content'], 130));
+        $f['snippet'] = e($f['excerpt']);
     }
     unset($f);
+}
+
+// ---------- Neste dia: cartas trocadas nesta mesma data em anos anteriores ----------
+$memories = [];
+if ($tab === 'recebidas') {
+    $memories = readable_letters($visibleSql, $visibleParams,
+        " AND l.status = 'sent' AND SUBSTR(l.sent_at, 6, 5) = ? AND l.sent_at < ?", [date('m-d'), date('Y') . '-01-01 00:00:00']);
+    foreach ($memories as &$m) {
+        $m['other'] = $m['mine'] ? $nameOf($m['recipient_id'], $m['recipient_name']) : $nameOf($m['sender_id'], $m['sender_name']);
+        $m['years'] = (int) date('Y') - (int) substr((string) $m['sent_at'], 0, 4);
+    }
+    unset($m);
+}
+
+// ---------- Primeiros passos (some quando tudo estiver feito ou quando a pessoa dispensar) ----------
+$steps = [];
+if ((int) $user['welcome_done'] === 0 && $tab === 'recebidas') {
+    $steps = [
+        ['Guardar seu código de recuperação', !empty($user['recovery_hash']) || (int) $user['managed'] === 1, 'conta.php#recuperacao'],
+        ['Ter alguém na sua lista', (bool) $contacts, 'amigos.php'],
+        ['Escrever sua primeira carta', (int) $wc['sent'] > 0, 'nova.php'],
+        ['Abrir uma carta recebida', (bool) array_filter($received, fn($l) => $l['first_opened_at']), $received ? 'carta.php?id=' . (int) $received[0]['id'] : 'index.php'],
+        ['Ativar os avisos no celular', null, 'conta.php#avisos'],
+    ];
+    if (!array_filter($steps, fn($st) => $st[1] === false)) {
+        $steps = []; // tudo pronto
+    }
 }
 
 // ---------- Lembrete gentil: alguém da lista para quem você não escreve há tempo ----------
@@ -152,7 +181,7 @@ if ($tab === 'recebidas' && $contacts) {
             continue;
         }
         // nunca escreveu: só lembra se a pessoa já te escreveu, ou se está na lista há uma semana
-        $since = q_val('SELECT created_at FROM contacts WHERE owner_id = ? AND contact_id = ?', [$uid, (int) $c['id']]);
+        $since = $c['contact_since'];
         if ($days === null && empty($lastGot[(int) $c['id']]) && $since && strtotime((string) $since) > time() - 7 * 86400) {
             continue;
         }
@@ -281,6 +310,47 @@ page_head('Cartas', ['body' => 'page-home', 'css' => ['assets/css/letter.css']])
         </div>
     <?php endif; ?>
 
+    <?php if ($steps): ?>
+        <section class="welcome card">
+            <div class="welcome-head">
+                <div>
+                    <h2>Primeiros passos</h2>
+                    <p class="muted small"><?= count(array_filter($steps, fn($st) => $st[1] === true)) ?> de <?= count($steps) ?> feitos</p>
+                </div>
+                <form method="post">
+                    <?= csrf_field() ?>
+                    <button class="btn btn-sm btn-ghost" name="acao" value="boasvindas_ok">Dispensar</button>
+                </form>
+            </div>
+            <ol class="steps">
+                <?php foreach ($steps as [$label, $done, $href]): ?>
+                    <li class="<?= $done ? 'done' : '' ?>" <?= $done === null ? 'data-step-push' : '' ?>>
+                        <span class="step-dot" aria-hidden="true"><?= $done ? icon('check', 'ic-sm') : '' ?></span>
+                        <?php if ($done): ?><span><?= e($label) ?></span><?php else: ?><a href="<?= e($href) ?>"><?= e($label) ?></a><?php endif; ?>
+                    </li>
+                <?php endforeach; ?>
+            </ol>
+        </section>
+    <?php endif; ?>
+
+    <?php if ($memories): ?>
+        <section class="memories">
+            <div class="section-title"><h2>Neste dia</h2><span class="muted small">Cartas trocadas em <?= (int) date('j') ?> de <?= e(MESES_LONGOS[(int) date('n') - 1]) ?>, em outros anos</span></div>
+            <div class="found-list">
+                <?php foreach (array_slice($memories, 0, 3) as $m): ?>
+                    <a class="found-item memory" href="carta.php?id=<?= (int) $m['id'] ?>">
+                        <div class="mail-env" data-envelope="<?= envelope_json($m, first_name($m['mine'] ? $m['other'] : $user['name']), false) ?>"></div>
+                        <div class="found-info">
+                            <span class="tl-dir">Há <?= $m['years'] ?> ano<?= $m['years'] > 1 ? 's' : '' ?> · <?= $m['mine'] ? 'você escreveu para ' . e($m['other']) : e($m['other']) . ' te escreveu' ?></span>
+                            <strong><?= e($m['title'] ?: 'Uma carta') ?></strong>
+                            <p class="found-snippet"><?= e(mb_strimwidth($m['excerpt'], 0, 120, '…')) ?></p>
+                        </div>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        </section>
+    <?php endif; ?>
+
     <?php if ($birthdays): ?>
         <section class="birthdays">
             <?php foreach ($birthdays as $b): ?>
@@ -375,7 +445,7 @@ page_head('Cartas', ['body' => 'page-home', 'css' => ['assets/css/letter.css']])
         <?php else: ?>
             <div class="letter-grid">
                 <?php foreach ($written as $l):
-                    $l['content'] = json_decode($l['content'], true) ?: [];
+                    $l = hydrate_meta($l);
                     $locked = letter_locked($l);
                     $transit = $l['status'] === 'sent' && letter_in_transit($l);
                     $to = $l['recipient_id'] ? $nameOf($l['recipient_id'], $l['recipient_name']) : '';
@@ -384,7 +454,7 @@ page_head('Cartas', ['body' => 'page-home', 'css' => ['assets/css/letter.css']])
                         <a class="lc-visual" href="editor.php?id=<?= (int) $l['id'] ?>" data-envelope="<?= envelope_json($l, first_name($to), $locked) ?>" aria-label="Editar <?= e($l['title']) ?>"></a>
                         <div class="lc-meta">
                             <div class="lc-title"><a href="editor.php?id=<?= (int) $l['id'] ?>"><?= e($l['title'] ?: 'Sem título') ?></a></div>
-                            <p class="lc-excerpt"><?= e(content_excerpt($l['content'], 110)) ?></p>
+                            <p class="lc-excerpt"><?= e(mb_strimwidth($l['excerpt'], 0, 110, '…')) ?></p>
                             <div class="lc-line">
                                 <?php if ($l['recipient_id']): ?>
                                     <span class="lc-to"><?= avatar_html(['name' => $to, 'avatar' => $l['avatar'], 'color' => $l['color']], 'xs') ?><?= e($to) ?></span>

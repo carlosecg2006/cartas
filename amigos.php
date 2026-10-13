@@ -23,14 +23,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = (string) ($_POST['acao'] ?? '');
     $contact = !empty($_POST['id']) ? my_contact($uid, (int) $_POST['id']) : null;
-    $createdByMe = $contact && (int) $contact['created_by'] === $uid;
+    // Só contas que VOCÊ criou com senha ficam sob seus cuidados, e só até a pessoa entrar pela primeira vez.
+    // Depois disso você pode, no máximo, gerar um link para ela mesma escolher uma senha nova.
+    $managed = $contact && (int) $contact['created_by'] === $uid && (int) $contact['managed'] === 1;
+    $untouched = $managed && empty($contact['last_login_at']);
 
-    if ($action === 'criar' || ($action === 'editar' && $createdByMe)) {
-        $name = trim((string) ($_POST['name'] ?? ''));
-        $username = mb_strtolower(trim((string) ($_POST['username'] ?? '')));
-        $avatar = mb_substr(trim((string) ($_POST['avatar'] ?? '')), 0, 4);
-        $color = color_or($_POST['color'] ?? '', $colors[0]);
-        $birthday = parse_birthday($_POST['birthday'] ?? '');
+    if ($action === 'criar' || ($action === 'editar' && $untouched)) {
+        $name = trim(input('name'));
+        $username = mb_strtolower(trim(input('username')));
+        $avatar = mb_substr(trim(input('avatar')), 0, 4);
+        $color = color_or(input('color'), $colors[0]);
+        $birthday = parse_birthday(input('birthday'));
         if ($username === '') {
             $username = slugify_username($name);
         }
@@ -54,9 +57,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('amigos.php');
         }
     } elseif ($action === 'convidar') {
-        $name = mb_substr(trim((string) ($_POST['name'] ?? '')), 0, 80);
+        $name = mb_substr(trim(input('name')), 0, 80);
         if ($name === '') {
             $errors[] = 'Escreva o nome de quem você quer convidar.';
+        } elseif ((int) q_val('SELECT COUNT(*) FROM invites WHERE created_by = ? AND created_at > ?', [$uid, date('Y-m-d H:i:s', time() - 86400)]) >= 20) {
+            $errors[] = 'Você já gerou muitos convites hoje. Tente amanhã.';
         } else {
             $_SESSION['invite_link'] = ['name' => $name, 'url' => invite_url(create_invite($user, $name)), 'kind' => 'invite'];
             redirect('amigos.php');
@@ -65,25 +70,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         q('DELETE FROM invites WHERE id = ? AND created_by = ? AND used_at IS NULL', [(int) ($_POST['convite'] ?? 0), $uid]);
         flash('Convite cancelado. O link não funciona mais.');
         redirect('amigos.php');
-    } elseif ($action === 'link_senha' && $createdByMe) {
+    } elseif ($action === 'link_senha' && $managed) {
         $_SESSION['invite_link'] = ['name' => $contact['display'], 'url' => invite_url(create_invite($user, $contact['name'], 'reset', (int) $contact['id'])), 'kind' => 'reset'];
         redirect('amigos.php');
     } elseif ($action === 'apelido' && $contact) {
-        $nick = mb_substr(trim((string) ($_POST['nickname'] ?? '')), 0, 80);
-        q('UPDATE contacts SET nickname = ? WHERE owner_id = ? AND contact_id = ?', [$nick, $uid, (int) $contact['id']]);
-        flash($nick !== '' ? 'Agora você chama ' . $contact['name'] . ' de "' . $nick . '".' : 'Apelido removido.');
-        redirect('amigos.php');
-    } elseif ($action === 'nova_senha' && $createdByMe) {
+        $nick = mb_substr(trim(input('nickname')), 0, 80);
+        $note = mb_substr(trim(input('note')), 0, 500);
+        q('UPDATE contacts SET nickname = ?, note = ? WHERE owner_id = ? AND contact_id = ?', [$nick, $note, $uid, (int) $contact['id']]);
+        flash($nick !== '' ? 'Agora você chama ' . $contact['name'] . ' de "' . $nick . '".' : 'Salvo.');
+        redirect(input('volta') === 'pessoa' ? 'pessoa.php?id=' . (int) $contact['id'] : 'amigos.php');
+    } elseif ($action === 'nova_senha' && $untouched) {
         $password = random_password();
         db_update('users', (int) $contact['id'], ['password_hash' => password_hash($password, PASSWORD_DEFAULT)]);
-        q('DELETE FROM remember_tokens WHERE user_id = ?', [(int) $contact['id']]);
+        password_changed((int) $contact['id'], false);
         $_SESSION['credentials'] = ['name' => $contact['name'], 'username' => $contact['username'], 'password' => $password, 'new' => false];
+        redirect('amigos.php');
+    } elseif ($action === 'bloquear' && $contact) {
+        q('UPDATE contacts SET blocked = 1 WHERE owner_id = ? AND contact_id = ?', [$uid, (int) $contact['id']]);
+        flash($contact['display'] . ' foi bloqueado(a): não aparece mais na sua lista e não consegue te mandar cartas. Dá para desfazer no fim desta página.');
+        redirect('amigos.php');
+    } elseif ($action === 'desbloquear') {
+        q('UPDATE contacts SET blocked = 0 WHERE owner_id = ? AND contact_id = ?', [$uid, (int) input('id')]);
+        flash('Desbloqueado.');
         redirect('amigos.php');
     } elseif ($action === 'tirar' && $contact) {
         q('DELETE FROM contacts WHERE owner_id = ? AND contact_id = ?', [$uid, (int) $contact['id']]);
-        flash($contact['display'] . ' saiu da sua lista. Se essa pessoa te escrever de novo, volta automaticamente.');
+        flash($contact['display'] . ' saiu da sua lista. Se essa pessoa te escrever de novo, volta automaticamente (para impedir isso, use "Bloquear").');
         redirect('amigos.php');
-    } elseif ($action === 'excluir_conta' && $createdByMe) {
+    } elseif ($action === 'excluir_conta' && $untouched) {
         delete_account((int) $contact['id']);
         flash('A conta de ' . $contact['display'] . ' foi apagada.');
         redirect('amigos.php');
@@ -104,15 +118,16 @@ foreach (q_all("SELECT l.sender_id AS other, COUNT(*) AS n FROM letters l WHERE 
     $stats[(int) $r['other']]['received'] = (int) $r['n'];
 }
 
-$editing = isset($_GET['editar']) ? my_contact($uid, (int) $_GET['editar']) : null;
-if ($editing && (int) $editing['created_by'] !== $uid) {
+$editing = isset($_GET['editar']) ? my_contact($uid, (int) $_GET['editar']) : (input('acao') === 'editar' ? my_contact($uid, (int) input('id')) : null);
+if ($editing && !((int) $editing['created_by'] === $uid && (int) $editing['managed'] === 1 && empty($editing['last_login_at']))) {
     $editing = null;
 }
 $nicking = isset($_GET['apelido']) ? my_contact($uid, (int) $_GET['apelido']) : null;
-$form = $editing ?: [
-    'name' => $_POST['name'] ?? '', 'username' => $_POST['username'] ?? '', 'avatar' => $_POST['avatar'] ?? '',
-    'color' => $_POST['color'] ?? $colors[array_rand($colors)], 'birthday' => $_POST['birthday'] ?? '',
-];
+$posted = ['name' => input('name'), 'username' => input('username'), 'avatar' => input('avatar'),
+    'color' => input('color') ?: $colors[array_rand($colors)], 'birthday' => input('birthday')];
+// Se o formulário voltou com erro, mostra o que a pessoa digitou (e não o que está salvo)
+$form = $editing ? ($errors ? $posted + $editing : $editing) : $posted;
+$blocked = blocked_contacts($uid);
 
 page_head('Pessoas', ['body' => 'page-friends']);
 ?>
@@ -173,6 +188,9 @@ page_head('Pessoas', ['body' => 'page-friends']);
                     <input type="hidden" name="acao" value="apelido">
                     <input type="hidden" name="id" value="<?= (int) $nicking['id'] ?>">
                     <label>Apelido <input name="nickname" maxlength="80" value="<?= e($nicking['nickname']) ?>" placeholder="<?= e($nicking['name']) ?>" autofocus></label>
+                    <label>Anotações (só você vê)
+                        <textarea name="note" rows="3" maxlength="500" placeholder="Gosta de girassóis, se conheceram no 1º ano, lembrar do aniversário de namoro…"><?= e($nicking['note'] ?? '') ?></textarea>
+                    </label>
                     <div class="row">
                         <button class="btn btn-primary">Salvar</button>
                         <a class="btn btn-ghost" href="amigos.php">Cancelar</a>
@@ -261,7 +279,8 @@ page_head('Pessoas', ['body' => 'page-friends']);
             <?php else: ?>
                 <div class="friend-list">
                     <?php foreach ($contacts as $f):
-                        $mine = (int) $f['created_by'] === $uid;
+                        $managedByMe = (int) $f['created_by'] === $uid && (int) $f['managed'] === 1;
+                        $untouched = $managedByMe && empty($f['last_login_at']);
                         $st = $stats[(int) $f['id']] ?? [];
                         ?>
                         <article class="friend-row">
@@ -275,7 +294,7 @@ page_head('Pessoas', ['body' => 'page-friends']);
                                 <p class="friend-stats">
                                     <span><?= (int) ($st['sent'] ?? 0) ?> enviada<?= ($st['sent'] ?? 0) == 1 ? '' : 's' ?></span>
                                     <span><?= (int) ($st['received'] ?? 0) ?> recebida<?= ($st['received'] ?? 0) == 1 ? '' : 's' ?></span>
-                                    <?php if ($mine): ?><span>visto <?= e(time_ago($f['last_seen_at'])) ?></span><?php endif; ?>
+                                    <?php if ($untouched): ?><span>ainda não entrou</span><?php endif; ?>
                                 </p>
                             </div>
                             <div class="friend-actions">
@@ -284,19 +303,21 @@ page_head('Pessoas', ['body' => 'page-friends']);
                                     <summary class="btn btn-sm btn-ghost btn-icon" aria-label="Mais ações"><?= icon('more') ?></summary>
                                     <div class="menu-list">
                                         <a href="pessoa.php?id=<?= (int) $f['id'] ?>"><?= icon('mail', 'ic-sm') ?>Cartas trocadas</a>
-                                        <a href="amigos.php?apelido=<?= (int) $f['id'] ?>"><?= icon('user', 'ic-sm') ?>Dar um apelido</a>
-                                        <?php if ($mine): ?>
+                                        <a href="amigos.php?apelido=<?= (int) $f['id'] ?>"><?= icon('user', 'ic-sm') ?>Apelido e anotações</a>
+                                        <?php if ($untouched): ?>
                                             <a href="amigos.php?editar=<?= (int) $f['id'] ?>"><?= icon('pen', 'ic-sm') ?>Editar dados</a>
                                         <?php endif; ?>
                                         <form method="post">
                                             <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $f['id'] ?>">
-                                            <?php if ($mine): ?>
+                                            <?php if ($managedByMe): ?>
                                                 <button name="acao" value="link_senha"><?= icon('lock', 'ic-sm') ?>Link para escolher senha nova</button>
-                                                <button name="acao" value="nova_senha" data-confirm="Gerar uma senha nova para <?= e($f['display']) ?>? A antiga para de funcionar."><?= icon('lock', 'ic-sm') ?>Gerar senha nova</button>
-                                                <button name="acao" value="excluir_conta" class="danger" data-confirm="Apagar a conta de <?= e($f['display']) ?>? Todas as cartas dela, enviadas e recebidas, somem. Não dá para desfazer."><?= icon('trash', 'ic-sm') ?>Apagar conta</button>
-                                            <?php else: ?>
-                                                <button name="acao" value="tirar" class="danger" data-confirm="Tirar <?= e($f['display']) ?> da sua lista? As cartas que vocês já trocaram continuam."><?= icon('x', 'ic-sm') ?>Tirar da lista</button>
                                             <?php endif; ?>
+                                            <?php if ($untouched): ?>
+                                                <button name="acao" value="nova_senha" data-confirm="Gerar uma senha nova para <?= e($f['display']) ?>? A antiga para de funcionar."><?= icon('lock', 'ic-sm') ?>Gerar senha nova</button>
+                                                <button name="acao" value="excluir_conta" class="danger" data-confirm="Apagar o acesso de <?= e($f['display']) ?>? A pessoa ainda não entrou, então nada se perde."><?= icon('trash', 'ic-sm') ?>Apagar acesso</button>
+                                            <?php endif; ?>
+                                            <button name="acao" value="tirar" class="danger" data-confirm="Tirar <?= e($f['display']) ?> da sua lista? As cartas que vocês já trocaram continuam."><?= icon('x', 'ic-sm') ?>Tirar da lista</button>
+                                            <button name="acao" value="bloquear" class="danger" data-confirm="Bloquear <?= e($f['display']) ?>? A pessoa sai da sua lista e não consegue mais te mandar cartas. Ela não é avisada."><?= icon('eye-off', 'ic-sm') ?>Bloquear</button>
                                         </form>
                                     </div>
                                 </details>
@@ -304,6 +325,19 @@ page_head('Pessoas', ['body' => 'page-friends']);
                         </article>
                     <?php endforeach; ?>
                 </div>
+            <?php endif; ?>
+
+            <?php if ($blocked): ?>
+                <details class="more-options blocked-list">
+                    <summary>Pessoas bloqueadas (<?= count($blocked) ?>)</summary>
+                    <?php foreach ($blocked as $b): ?>
+                        <form method="post" class="pending-row">
+                            <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $b['id'] ?>">
+                            <span><?= e($b['nickname'] !== '' ? $b['nickname'] : $b['name']) ?></span>
+                            <button class="btn btn-sm btn-ghost" name="acao" value="desbloquear">Desbloquear</button>
+                        </form>
+                    <?php endforeach; ?>
+                </details>
             <?php endif; ?>
         </section>
     </div>

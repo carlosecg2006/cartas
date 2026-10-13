@@ -12,11 +12,13 @@ if (!$user) {
     exit;
 }
 $uid = (int) $user['id'];
+session_write_close();
 
 $letter = q_one("SELECT l.id, l.title, l.sender_id, l.open_at, s.name AS sender_name FROM letters l JOIN users s ON s.id = l.sender_id
     WHERE l.recipient_id = ? AND l.status = 'sent' AND l.first_opened_at IS NULL AND " . sql_delivered() . ' ORDER BY l.sent_at DESC LIMIT 1', [$uid]);
 $reply = q_one('SELECT p.letter_id, p.message, p.created_at, u.id AS uid, u.name FROM replies p JOIN letters l ON l.id = p.letter_id JOIN users u ON u.id = p.user_id
-    WHERE (l.sender_id = ? OR l.recipient_id = ?) AND p.user_id <> ? AND p.read_at IS NULL ORDER BY p.id DESC LIMIT 1', [$uid, $uid, $uid]);
+    WHERE (l.sender_id = ? OR (l.recipient_id = ? AND l.status = \'sent\' AND (l.open_at IS NULL OR l.open_at <= ?)))
+      AND p.user_id <> ? AND p.read_at IS NULL ORDER BY p.id DESC LIMIT 1', [$uid, $uid, now(), $uid]);
 
 $out = ['title' => 'Novidade nas suas cartas', 'body' => 'Toque para ver.', 'url' => './index.php'];
 if ($reply && (!$letter || $reply['created_at'] >= q_val('SELECT sent_at FROM letters WHERE id = ?', [(int) $letter['id']]))) {

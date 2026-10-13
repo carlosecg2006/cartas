@@ -3,15 +3,21 @@ declare(strict_types=1);
 
 require __DIR__ . '/app/bootstrap.php';
 
+// Envio maior do que a hospedagem aceita: o PHP descarta tudo e chegaria aqui "vazio"
+if (empty($_POST) && empty($_FILES) && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0
+    && !str_starts_with((string) ($_SERVER['CONTENT_TYPE'] ?? ''), 'application/json')) {
+    json_error('O arquivo é maior do que a hospedagem aceita (máximo ' . (int) floor(upload_limit_bytes() / 1048576) . ' MB).', 413);
+}
 $user = current_user();
 if (!$user) {
-    json_error('Sua sessão expirou. Entre de novo.', 401);
+    json_error('Sua sessão terminou. Entre de novo em outra aba e volte aqui: o que você escreveu continua nesta página.', 401);
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     json_error('Método não permitido.', 405);
 }
 if (!csrf_valid()) {
-    json_error('Sessão expirada. Recarregue a página.', 419);
+    // devolve um token novo para a página continuar funcionando sem recarregar
+    json_out(['ok' => false, 'error' => 'Sessão renovada. Tente de novo.', 'csrf' => csrf_token()], 419);
 }
 
 $action = (string) ($_GET['action'] ?? '');
@@ -37,23 +43,34 @@ switch ($action) {
     case 'save':
         $letter = load_letter_for($user, $in['id'] ?? 0, 'sender');
         $content = sanitize_letter_content($in['content'] ?? []);
-        // Só arquivos da própria biblioteca podem entrar na carta
-        $own = array_flip(array_column(q_all('SELECT filename FROM media WHERE user_id = ?', [$uid]), 'filename'));
-        foreach (content_media($content) as $file) {
-            if (!isset($own[$file]) && !q_val('SELECT 1 FROM letter_media WHERE letter_id = ? AND filename = ?', [(int) $letter['id'], $file])) {
-                json_error('A carta usa um arquivo que não é seu.', 403);
+        // Só arquivos da própria biblioteca (ou que a carta já usava) podem entrar.
+        // Arquivo apagado ou de outra pessoa é tirado da carta em vez de travar o salvamento.
+        $files = content_media($content);
+        if ($files) {
+            $ph = implode(',', array_fill(0, count($files), '?'));
+            $ok = array_column(q_all("SELECT filename FROM media WHERE user_id = ? AND filename IN ($ph)", array_merge([$uid], $files)), 'filename');
+            $ok = array_merge($ok, array_column(q_all("SELECT filename FROM letter_media WHERE letter_id = ? AND filename IN ($ph)", array_merge([(int) $letter['id']], $files)), 'filename'));
+            $bad = array_diff($files, $ok);
+            if ($bad) {
+                $content = strip_media($content, $bad);
             }
         }
         $title = plain($in['title'] ?? '', 150);
         $json = json_encode($content, JSON_UNESCAPED_UNICODE);
+        if (strlen($json) > 1500000) {
+            json_error('A carta ficou grande demais (muitos desenhos ou textos enormes). Divida em duas cartas.', 413);
+        }
+        if ($json === json_encode($letter['content'], JSON_UNESCAPED_UNICODE) && $title === $letter['title'] && empty($in['checkpoint'])) {
+            json_out(['ok' => true, 'savedAt' => date('H:i'), 'unchanged' => true]);
+        }
         db_update('letters', (int) $letter['id'], [
             'title' => $title,
             'content' => $json,
             'updated_at' => now(),
-        ]);
+        ] + letter_derived($title, $content));
         sync_letter_media((int) $letter['id'], $content);
         save_version((int) $letter['id'], $title, $json, !empty($in['checkpoint']));
-        json_out(['ok' => true, 'savedAt' => date('H:i')]);
+        json_out(['ok' => true, 'savedAt' => date('H:i'), 'stripped' => !empty($bad)]);
 
     case 'send':
         $letter = load_letter_for($user, $in['id'] ?? 0, 'sender');
@@ -61,6 +78,9 @@ switch ($action) {
         $recipient = $recipientId && is_contact($uid, $recipientId) ? find_user($recipientId) : null;
         if (!$recipient) {
             json_error('Escolha alguém da sua lista.');
+        }
+        if (q_val('SELECT blocked FROM contacts WHERE owner_id = ? AND contact_id = ?', [(int) $recipient['id'], $uid])) {
+            json_error('Não foi possível enviar para essa pessoa.', 403);
         }
         $openAt = null;
         if (!empty($in['open_at'])) {
@@ -81,6 +101,10 @@ switch ($action) {
             $data['sent_at'] = now();
             $data['delivered_at'] = null;
             if ((int) $letter['recipient_id'] !== (int) $recipient['id']) {
+                // A conversa, as reações e as favoritas eram de outra pessoa: não podem ir junto
+                q('DELETE FROM replies WHERE letter_id = ?', [(int) $letter['id']]);
+                q('DELETE FROM reactions WHERE letter_id = ?', [(int) $letter['id']]);
+                q('DELETE FROM favorites WHERE letter_id = ? AND user_id <> ?', [(int) $letter['id'], $uid]);
                 $data['first_opened_at'] = null;
                 $data['last_opened_at'] = null;
                 $data['open_count'] = 0;
@@ -89,14 +113,16 @@ switch ($action) {
         db_update('letters', (int) $letter['id'], $data);
         // Quem recebe passa a ter quem escreveu na lista, para poder responder
         add_contact((int) $recipient['id'], $uid);
-        if ($firstSend) {
-            notify_quietly((int) $recipient['id']);
-        }
-        json_out([
+        $notify = $firstSend ? (int) $recipient['id'] : 0;
+        json_out_then([
             'ok' => true,
             'recipient' => first_name(name_for($uid, $recipient)),
             'firstSend' => $firstSend,
-        ]);
+        ], function () use ($notify) {
+            if ($notify) {
+                notify_quietly($notify);
+            }
+        });
 
     case 'upload':
         $letter = load_letter_for($user, $in['id'] ?? 0, 'sender');
@@ -117,6 +143,9 @@ switch ($action) {
 
     case 'library_remove':
         $file = (string) ($in['src'] ?? '');
+        if (!preg_match(ANY_MEDIA_RE, $file)) {
+            json_error('Arquivo inválido.');
+        }
         q('UPDATE media SET in_library = 0 WHERE filename = ? AND user_id = ?', [$file, $uid]);
         // Se nenhuma carta usa o arquivo, ele pode ir embora de vez
         if (!q_val('SELECT 1 FROM letter_media WHERE filename = ?', [$file])
@@ -181,14 +210,17 @@ switch ($action) {
         if (!$letter['recipient_id'] || $letter['status'] !== 'sent') {
             json_error('A carta ainda não foi enviada.');
         }
+        if (letter_locked($letter) || letter_in_transit($letter)) {
+            json_error('Dá para conversar depois que a carta puder ser aberta.', 403);
+        }
         $message = trim(plain($in['message'] ?? '', 2000));
         if ($message === '') {
             json_error('Escreva alguma coisa.');
         }
         $id = db_insert('replies', ['letter_id' => (int) $letter['id'], 'user_id' => $uid, 'message' => $message, 'created_at' => now()]);
         $reply = q_one('SELECT r.*, u.name, u.role, u.avatar, u.color FROM replies r JOIN users u ON u.id = r.user_id WHERE r.id = ?', [$id]);
-        notify_quietly((int) ($uid === (int) $letter['sender_id'] ? $letter['recipient_id'] : $letter['sender_id']));
-        json_out(['ok' => true, 'reply' => reply_payload($reply, $user)]);
+        $other = (int) ($uid === (int) $letter['sender_id'] ? $letter['recipient_id'] : $letter['sender_id']);
+        json_out_then(['ok' => true, 'reply' => reply_payload($reply, $user)], fn() => notify_quietly($other));
 
     case 'delete_reply':
         $reply = q_one('SELECT * FROM replies WHERE id = ?', [(int) ($in['reply_id'] ?? 0)]);
@@ -225,7 +257,16 @@ switch ($action) {
         }
         $hash = hash('sha256', $endpoint);
         q('DELETE FROM push_subscriptions WHERE endpoint_hash = ?', [$hash]);
-        db_insert('push_subscriptions', ['user_id' => $uid, 'endpoint_hash' => $hash, 'endpoint' => $endpoint, 'created_at' => now()]);
+        try {
+            db_insert('push_subscriptions', ['user_id' => $uid, 'endpoint_hash' => $hash, 'endpoint' => $endpoint, 'created_at' => now()]);
+        } catch (PDOException $e) {
+            // o mesmo aparelho se cadastrou duas vezes ao mesmo tempo
+        }
+        // no máximo 5 aparelhos por pessoa (os mais recentes)
+        $keep = array_column(q_all('SELECT id FROM push_subscriptions WHERE user_id = ? ORDER BY id DESC LIMIT 5', [$uid]), 'id');
+        if (count($keep) === 5) {
+            q('DELETE FROM push_subscriptions WHERE user_id = ? AND id < ?', [$uid, (int) min($keep)]);
+        }
         json_out(['ok' => true]);
 
     case 'push_unsubscribe':
@@ -234,12 +275,17 @@ switch ($action) {
         json_out(['ok' => true]);
 
     case 'push_test':
+        if (($_SESSION['push_test_at'] ?? 0) > time() - 15) {
+            json_error('Espere alguns segundos antes de testar de novo.', 429);
+        }
+        $_SESSION['push_test_at'] = time();
+        session_write_close();
         [$sent, $error] = notify_user($uid);
         json_out(['ok' => true, 'sent' => $sent, 'error' => $error]);
 
     case 'mailbox':
-        $count = (int) q_val("SELECT COUNT(*) FROM letters l WHERE l.recipient_id = ? AND l.status = 'sent' AND " . sql_delivered(), [$uid]);
-        json_out(['ok' => true, 'count' => $count]);
+        $row = q_one("SELECT COUNT(*) AS n, MAX(l.id) AS latest FROM letters l WHERE l.recipient_id = ? AND l.status = 'sent' AND " . sql_delivered(), [$uid]);
+        json_out(['ok' => true, 'count' => (int) $row['n'], 'latest' => (int) $row['latest']]);
 }
 
 json_error('Ação desconhecida.', 404);

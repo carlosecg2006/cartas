@@ -13,4 +13,5 @@ return [
         'sqlite_path' => 'storage/cartas.sqlite',
     ],
     'max_upload_mb' => 8,
+    'contact_email' => '',            // e-mail para dúvidas e pedidos sobre dados (aparece na página de privacidade)
 ];

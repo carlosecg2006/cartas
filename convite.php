@@ -12,23 +12,28 @@ $colors = ['#d9a5a0', '#e2b98f', '#d8c37e', '#a9c4a0', '#9fbfd6', '#b9a8d6', '#d
 
 if ($invite && $_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
-    $action = (string) ($_POST['acao'] ?? '');
+    $action = input('acao');
+    /** Marca o convite como usado antes de qualquer coisa: dois cliques ao mesmo tempo não criam duas contas. */
+    $claim = function () use ($invite): bool {
+        return q('UPDATE invites SET used_at = ? WHERE id = ? AND used_at IS NULL', [now(), (int) $invite['id']])->rowCount() === 1;
+    };
 
     if ($invite['kind'] === 'invite' && $action === 'conectar' && $me) {
         // Já tem conta: só conecta as duas pessoas
-        if ((int) $me['id'] !== (int) $invite['created_by']) {
+        if ((int) $me['id'] !== (int) $invite['created_by'] && $claim()) {
             add_contact((int) $me['id'], (int) $invite['created_by']);
+            q('UPDATE contacts SET blocked = 0 WHERE owner_id = ? AND contact_id = ?', [(int) $me['id'], (int) $invite['created_by']]);
             add_contact((int) $invite['created_by'], (int) $me['id'], $invite['name']);
-            db_update('invites', (int) $invite['id'], ['used_at' => now(), 'user_id' => (int) $me['id']]);
+            db_update('invites', (int) $invite['id'], ['user_id' => (int) $me['id']]);
             flash('Pronto! Agora vocês podem trocar cartas.');
         }
         redirect('amigos.php');
     }
 
     if ($invite['kind'] === 'invite' && $action === 'criar' && !$me) {
-        $name = trim((string) ($_POST['name'] ?? ''));
-        $username = mb_strtolower(trim((string) ($_POST['username'] ?? '')));
-        $password = (string) ($_POST['password'] ?? '');
+        $name = trim(input('name'));
+        $username = mb_strtolower(trim(input('username')));
+        $password = input('password');
         if ($name === '' || mb_strlen($name) > 80) {
             $errors[] = 'Escreva seu nome.';
         }
@@ -37,40 +42,58 @@ if ($invite && $_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (q_val('SELECT id FROM users WHERE username = ?', [$username])) {
             $errors[] = 'O usuário "' . $username . '" já existe. Tente outro.';
         }
-        if (mb_strlen($password) < 6) {
-            $errors[] = 'A senha precisa de pelo menos 6 caracteres.';
+        if (mb_strlen($password) < 8) {
+            $errors[] = 'A senha precisa de pelo menos 8 caracteres.';
+        }
+        if (!input('aceito')) {
+            $errors[] = 'Para criar a conta, confirme que leu como seus dados são tratados.';
+        }
+        if (!$errors && !$claim()) {
+            $errors[] = 'Esse convite acabou de ser usado. Peça um novo para quem te enviou.';
         }
         if (!$errors) {
-            $id = db_insert('users', [
-                'name' => $name,
-                'username' => $username,
-                'password_hash' => password_hash($password, PASSWORD_DEFAULT),
-                'role' => 'friend',
-                'avatar' => mb_substr(trim((string) ($_POST['avatar'] ?? '')), 0, 4),
-                'color' => color_or($_POST['color'] ?? '', $colors[0]),
-                'birthday' => parse_birthday($_POST['birthday'] ?? ''),
-                'created_at' => now(),
-                'created_by' => (int) $invite['created_by'],
-            ]);
+            try {
+                $id = db_insert('users', [
+                    'name' => $name,
+                    'username' => $username,
+                    'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                    'role' => 'friend',
+                    'avatar' => mb_substr(trim(input('avatar')), 0, 4),
+                    'color' => color_or(input('color'), $colors[0]),
+                    'birthday' => parse_birthday(input('birthday')),
+                    'created_at' => now(),
+                    'created_by' => (int) $invite['created_by'],
+                    'managed' => 0, // escolheu a própria senha: ninguém mais mexe nesta conta
+                    'terms_at' => now(),
+                ]);
+            } catch (PDOException $e) {
+                // alguém pegou o mesmo usuário no mesmo segundo: devolve o convite
+                q('UPDATE invites SET used_at = NULL WHERE id = ?', [(int) $invite['id']]);
+                $id = 0;
+                $errors[] = 'O usuário "' . $username . '" acabou de ser usado. Tente outro.';
+            }
+        }
+        if (!$errors) {
             add_contact($id, (int) $invite['created_by']);
             // quem convidou continua chamando a pessoa do jeito que escreveu no convite
             add_contact((int) $invite['created_by'], $id, $invite['name'] !== $name ? $invite['name'] : '');
-            db_update('invites', (int) $invite['id'], ['used_at' => now(), 'user_id' => $id]);
+            db_update('invites', (int) $invite['id'], ['user_id' => $id]);
             login_user(find_user($id), true);
-            flash('Bem-vindo(a)! Sua caixa de cartas está pronta.');
-            redirect('index.php');
+            $_SESSION['recovery_code'] = new_recovery_code($id);
+            flash('Bem-vindo(a)! Antes de tudo, guarde seu código de recuperação.');
+            redirect('conta.php?novo=1#recuperacao');
         }
     }
 
     if ($invite['kind'] === 'reset' && $action === 'senha') {
-        $password = (string) ($_POST['password'] ?? '');
-        if (mb_strlen($password) < 6) {
-            $errors[] = 'A senha precisa de pelo menos 6 caracteres.';
+        $password = input('password');
+        if (mb_strlen($password) < 8) {
+            $errors[] = 'A senha precisa de pelo menos 8 caracteres.';
+        } elseif (!$claim()) {
+            $errors[] = 'Esse link acabou de ser usado.';
         } else {
-            db_update('users', (int) $invite['user_id'], ['password_hash' => password_hash($password, PASSWORD_DEFAULT)]);
-            q('DELETE FROM remember_tokens WHERE user_id = ?', [(int) $invite['user_id']]);
-            db_update('invites', (int) $invite['id'], ['used_at' => now()]);
-            login_user(find_user((int) $invite['user_id']), true);
+            db_update('users', (int) $invite['user_id'], ['password_hash' => password_hash($password, PASSWORD_DEFAULT), 'pw_reset_at' => now()]);
+            password_changed((int) $invite['user_id'], true);
             flash('Senha nova salva.');
             redirect('index.php');
         }
@@ -78,7 +101,11 @@ if ($invite && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $creator = $invite ? ['name' => $invite['creator_name'], 'avatar' => $invite['creator_avatar'], 'color' => $invite['creator_color']] : null;
-page_head($invite && $invite['kind'] === 'reset' ? 'Senha nova' : 'Convite', ['body' => 'auth-page', 'nav' => false, 'css' => ['assets/css/letter.css']]);
+page_head($invite && $invite['kind'] === 'reset' ? 'Senha nova' : 'Convite', [
+    'body' => 'auth-page', 'nav' => false, 'css' => ['assets/css/letter.css'],
+    'og_title' => $invite && $invite['kind'] === 'invite' ? first_name($invite['creator_name']) . ' quer trocar cartas com você 💌' : app_name(),
+    'og_description' => 'Abra o link para criar sua conta e receber cartas.',
+]);
 ?>
 <main class="auth-wrap">
     <div class="auth-card card wide">
@@ -95,7 +122,7 @@ page_head($invite && $invite['kind'] === 'reset' ? 'Senha nova' : 'Convite', ['b
                 <?= csrf_field() ?>
                 <input type="hidden" name="t" value="<?= e($token) ?>">
                 <input type="hidden" name="acao" value="senha">
-                <label>Senha nova (mínimo 6 caracteres) <input type="password" name="password" required minlength="6" autocomplete="new-password" autofocus></label>
+                <label>Senha nova (mínimo 8 caracteres) <input type="password" name="password" required minlength="8" autocomplete="new-password" autofocus></label>
                 <button class="btn btn-primary btn-block">Salvar e entrar</button>
             </form>
 
@@ -121,13 +148,13 @@ page_head($invite && $invite['kind'] === 'reset' ? 'Senha nova' : 'Convite', ['b
                     <?= csrf_field() ?>
                     <input type="hidden" name="t" value="<?= e($token) ?>">
                     <input type="hidden" name="acao" value="criar">
-                    <label>Seu nome <input name="name" required maxlength="80" value="<?= e($_POST['name'] ?? $invite['name']) ?>" data-name-input></label>
+                    <label>Seu nome <input name="name" required maxlength="80" value="<?= e(input('name', $invite['name'])) ?>" data-name-input></label>
                     <label>Usuário para entrar
-                        <input name="username" required pattern="[a-z0-9._\-]{3,40}" value="<?= e($_POST['username'] ?? slugify_username(first_name($invite['name'] ?: 'eu'))) ?>" autocapitalize="none" data-username-input>
+                        <input name="username" required pattern="[a-z0-9._\-]{3,40}" value="<?= e(input('username', slugify_username(first_name($invite['name'] ?: 'eu')))) ?>" autocapitalize="none" data-username-input>
                         <small>Só letras minúsculas, números e ponto.</small>
                     </label>
-                    <label>Sua senha (mínimo 6 caracteres) <input type="password" name="password" required minlength="6" autocomplete="new-password"></label>
-                    <label>Aniversário (opcional) <input type="date" name="birthday" value="<?= e($_POST['birthday'] ?? '') ?>"></label>
+                    <label>Sua senha (mínimo 8 caracteres) <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+                    <label>Aniversário (opcional) <input type="date" name="birthday" value="<?= e(input('birthday')) ?>"></label>
                     <fieldset>
                         <legend>Sua cor</legend>
                         <div class="swatches">
@@ -136,6 +163,7 @@ page_head($invite && $invite['kind'] === 'reset' ? 'Senha nova' : 'Convite', ['b
                             <?php endforeach; ?>
                         </div>
                     </fieldset>
+                    <label class="check"><input type="checkbox" name="aceito" value="1" required> Li <a href="privacidade.php" target="_blank">como meus dados são guardados</a> e concordo.</label>
                     <button class="btn btn-primary btn-block">Criar minha conta</button>
                     <p class="small muted center">Já tem conta? <a href="login.php">Entre</a> e abra o link de novo para se conectar.</p>
                 </form>

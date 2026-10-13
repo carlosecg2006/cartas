@@ -32,9 +32,14 @@ function vapid_keys(): ?array
     openssl_pkey_export($key, $pem);
     $d = openssl_pkey_get_details($key)['ec'];
     $raw = "\x04" . str_pad($d['x'], 32, "\0", STR_PAD_LEFT) . str_pad($d['y'], 32, "\0", STR_PAD_LEFT);
-    set_setting('vapid_private', $pem);
-    set_setting('vapid_public', b64url($raw));
-    return ['private' => $pem, 'public' => b64url($raw)];
+    // Dois pedidos ao mesmo tempo poderiam criar pares diferentes: só grava se ninguém gravou antes
+    if (!setting('vapid_private')) {
+        set_setting('vapid_private', $pem);
+        set_setting('vapid_public', b64url($raw));
+    }
+    $pem = setting('vapid_private');
+    $pub = setting('vapid_public');
+    return $pem && $pub ? ['private' => $pem, 'public' => $pub] : null;
 }
 
 /** Assinatura DER do openssl → 64 bytes (R||S), como o JWT ES256 exige. */
@@ -51,12 +56,23 @@ function der_to_raw(string $der): string
     return $r . $s;
 }
 
+/** Contato exigido pelos serviços de push (a Apple recusa endereços inventados). */
+function vapid_subject(): string
+{
+    $mail = site_contact()['email'];
+    if ($mail !== '') {
+        return 'mailto:' . $mail;
+    }
+    $url = base_url();
+    return str_starts_with($url, 'https://') ? rtrim($url, '/') : 'mailto:cartas@example.com';
+}
+
 function vapid_header(string $endpoint, array $keys): ?string
 {
     $parts = parse_url($endpoint);
     $aud = $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
     $header = b64url(json_encode(['typ' => 'JWT', 'alg' => 'ES256']));
-    $claims = b64url(json_encode(['aud' => $aud, 'exp' => time() + 12 * 3600, 'sub' => 'mailto:avisos@cartasdaalma.invalid']));
+    $claims = b64url(json_encode(['aud' => $aud, 'exp' => time() + 12 * 3600, 'sub' => vapid_subject()]));
     $signed = '';
     if (!openssl_sign($header . '.' . $claims, $signed, $keys['private'], OPENSSL_ALGO_SHA256)) {
         return null;
@@ -77,7 +93,7 @@ function push_ping(string $endpoint, array $keys, string &$error = ''): int
         $ch = curl_init($endpoint);
         curl_setopt_array($ch, [
             CURLOPT_POST => true, CURLOPT_POSTFIELDS => '', CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 6, CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 4, CURLOPT_CONNECTTIMEOUT_MS => 2000,
         ]);
         curl_exec($ch);
         $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -87,7 +103,8 @@ function push_ping(string $endpoint, array $keys, string &$error = ''): int
         curl_close($ch);
         return $code;
     }
-    $ctx = stream_context_create(['http' => ['method' => 'POST', 'header' => implode("\r\n", $headers), 'content' => '', 'timeout' => 6, 'ignore_errors' => true]]);
+    ini_set('default_socket_timeout', '3');
+    $ctx = stream_context_create(['http' => ['method' => 'POST', 'header' => implode("\r\n", $headers), 'content' => '', 'timeout' => 3, 'ignore_errors' => true]]);
     $res = @file_get_contents($endpoint, false, $ctx);
     if ($res === false && empty($http_response_header)) {
         $error = 'Sem conexão com o serviço de avisos.';
@@ -110,9 +127,18 @@ function notify_user(int $userId): array
     }
     $ok = 0;
     $lastError = '';
+    $started = microtime(true);
     foreach ($subs as $sub) {
+        if (microtime(true) - $started > 8) {
+            break; // nunca segura o servidor por muito tempo
+        }
         $err = '';
         $code = push_ping($sub['endpoint'], $keys, $err);
+        if ($code === 0) {
+            // sem conexão de saída: os outros aparelhos também falhariam
+            $lastError = $err ?: 'Sem conexão com o serviço de avisos.';
+            break;
+        }
         if ($code >= 200 && $code < 300) {
             $ok++;
         } elseif ($code === 404 || $code === 410) {

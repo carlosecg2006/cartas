@@ -9,6 +9,13 @@ declare(strict_types=1);
  *  - essa pessoa te manda uma carta (para você poder responder).
  */
 
+/** Pessoas que você bloqueou (não aparecem na lista e não conseguem te escrever). */
+function blocked_contacts(int $ownerId): array
+{
+    return q_all('SELECT u.id, u.name, u.avatar, u.color, c.nickname FROM contacts c JOIN users u ON u.id = c.contact_id
+        WHERE c.owner_id = ? AND c.blocked = 1 ORDER BY u.name', [$ownerId]);
+}
+
 function add_contact(int $ownerId, int $contactId, string $nickname = ''): void
 {
     if ($ownerId === $contactId) {
@@ -27,15 +34,16 @@ function add_contact(int $ownerId, int $contactId, string $nickname = ''): void
 
 function is_contact(int $ownerId, int $contactId): bool
 {
-    return (bool) q_val('SELECT id FROM contacts WHERE owner_id = ? AND contact_id = ?', [$ownerId, $contactId]);
+    return (bool) q_val('SELECT id FROM contacts WHERE owner_id = ? AND contact_id = ? AND blocked = 0', [$ownerId, $contactId]);
 }
 
 /** Lista de contatos de alguém, já com o nome que essa pessoa usa para cada um. */
 function contacts_of(int $ownerId): array
 {
     $rows = q_all(
-        'SELECT u.id, u.name, u.username, u.avatar, u.color, u.birthday, u.created_by, u.last_seen_at, c.nickname, c.id AS contact_row
-         FROM contacts c JOIN users u ON u.id = c.contact_id WHERE c.owner_id = ?',
+        "SELECT u.id, u.name, u.username, u.avatar, u.color, u.birthday, u.created_by, u.managed, u.last_seen_at, u.last_login_at,
+                c.nickname, c.note, c.id AS contact_row, c.created_at AS contact_since
+         FROM contacts c JOIN users u ON u.id = c.contact_id WHERE c.owner_id = ? AND c.blocked = 0 AND u.role <> 'deleted'",
         [$ownerId]
     );
     foreach ($rows as &$r) {
@@ -52,8 +60,12 @@ function name_for(int $viewerId, ?array $person): string
     if (!$person || empty($person['id'])) {
         return '';
     }
-    $nick = q_val('SELECT nickname FROM contacts WHERE owner_id = ? AND contact_id = ?', [$viewerId, (int) $person['id']]);
-    return is_string($nick) && $nick !== '' ? $nick : (string) $person['name'];
+    static $nicks = [];
+    if (!isset($nicks[$viewerId])) {
+        $nicks[$viewerId] = array_column(q_all("SELECT contact_id, nickname FROM contacts WHERE owner_id = ? AND nickname <> ''", [$viewerId]), 'nickname', 'contact_id');
+    }
+    $nick = $nicks[$viewerId][(int) $person['id']] ?? '';
+    return $nick !== '' ? (string) $nick : (string) $person['name'];
 }
 
 function find_user(int $id): ?array
@@ -73,6 +85,7 @@ function create_account(array $creator, string $name, string $username, string $
         'username' => $username,
         'password_hash' => password_hash($password, PASSWORD_DEFAULT),
         'role' => 'friend',
+        'managed' => 1,
         'avatar' => $avatar,
         'color' => $color,
         'created_at' => now(),
@@ -84,19 +97,65 @@ function create_account(array $creator, string $name, string $username, string $
     return [$id, $password];
 }
 
-/** Apaga uma conta: as cartas que ela escreveu, as que recebeu e a biblioteca dela. */
-function delete_account(int $userId): void
+/**
+ * Apaga uma conta.
+ * - Cartas que outras pessoas escreveram para ela voltam para quem escreveu, como rascunho.
+ * - Cartas que ela escreveu: são apagadas, ou ($keepSent) ficam com quem recebeu,
+ *   e a conta vira um registro sem login, só para essas cartas continuarem abrindo.
+ */
+function delete_account(int $userId, bool $keepSent = false): void
 {
-    foreach (q_all('SELECT id FROM letters WHERE sender_id = ? OR recipient_id = ?', [$userId, $userId]) as $l) {
-        delete_letter((int) $l['id']);
+    // O site precisa sempre de um "admin" (é como ele sabe que já foi instalado)
+    if (q_val('SELECT role FROM users WHERE id = ?', [$userId]) === 'admin') {
+        $heir = q_val("SELECT id FROM users WHERE id <> ? AND role = 'friend' ORDER BY id LIMIT 1", [$userId]);
+        if ($heir) {
+            q("UPDATE users SET role = 'admin' WHERE id = ?", [(int) $heir]);
+        }
     }
+    $received = array_map('intval', array_column(q_all('SELECT id FROM letters WHERE recipient_id = ?', [$userId]), 'id'));
+    foreach ($received as $lid) {
+        q('DELETE FROM replies WHERE letter_id = ?', [$lid]);
+        q('DELETE FROM reactions WHERE letter_id = ?', [$lid]);
+        q('DELETE FROM favorites WHERE letter_id = ? AND user_id = ?', [$lid, $userId]);
+    }
+    q("UPDATE letters SET recipient_id = NULL, status = 'draft', first_opened_at = NULL, last_opened_at = NULL, open_count = 0 WHERE recipient_id = ?", [$userId]);
+    q('DELETE FROM replies WHERE user_id = ?', [$userId]);
+    q('DELETE FROM reactions WHERE user_id = ?', [$userId]);
+
+    if (!$keepSent) {
+        foreach (q_all('SELECT id FROM letters WHERE sender_id = ?', [$userId]) as $l) {
+            delete_letter((int) $l['id']);
+        }
+    } else {
+        q("DELETE FROM letters WHERE sender_id = ? AND status <> 'sent'", [$userId]);
+    }
+    // Arquivos: apaga tudo o que nenhuma carta restante usa
     foreach (q_all('SELECT id, filename FROM media WHERE user_id = ?', [$userId]) as $m) {
+        if ($keepSent && q_val('SELECT 1 FROM letter_media WHERE filename = ? LIMIT 1', [$m['filename']])) {
+            q('UPDATE media SET in_library = 0 WHERE id = ?', [(int) $m['id']]);
+            continue;
+        }
         @unlink(UPLOAD_DIR . '/' . $m['filename']);
         q('DELETE FROM media WHERE id = ?', [(int) $m['id']]);
     }
-    q('UPDATE users SET created_by = NULL WHERE created_by = ?', [$userId]);
-    q("DELETE FROM invites WHERE kind = 'reset' AND user_id = ?", [$userId]);
-    q('DELETE FROM users WHERE id = ?', [$userId]);
+    q('UPDATE users SET created_by = NULL, managed = 0 WHERE created_by = ?', [$userId]);
+    q('DELETE FROM invites WHERE created_by = ? OR user_id = ?', [$userId, $userId]);
+    q('DELETE FROM remember_tokens WHERE user_id = ?', [$userId]);
+    q('DELETE FROM push_subscriptions WHERE user_id = ?', [$userId]);
+    q('DELETE FROM favorites WHERE user_id = ?', [$userId]);
+    q('DELETE FROM contacts WHERE owner_id = ? OR contact_id = ?', [$userId, $userId]);
+
+    $stillSent = $keepSent && q_val("SELECT 1 FROM letters WHERE sender_id = ? AND status = 'sent' LIMIT 1", [$userId]);
+    if ($stillSent) {
+        db_update('users', $userId, [
+            'username' => 'apagada-' . $userId . '-' . bin2hex(random_bytes(3)),
+            'password_hash' => password_hash(bin2hex(random_bytes(24)), PASSWORD_DEFAULT),
+            'birthday' => null, 'role' => 'deleted', 'auth_version' => random_int(1000, 999999),
+            'last_seen_at' => null, 'managed' => 0,
+        ]);
+    } else {
+        q('DELETE FROM users WHERE id = ?', [$userId]);
+    }
 }
 
 function parse_birthday($value): ?string
@@ -137,10 +196,10 @@ function birthday_label(?string $birthday): string
 }
 
 /** Contatos com aniversário nos próximos $days dias, do mais próximo ao mais distante. */
-function upcoming_birthdays(int $ownerId, int $days = 30): array
+function upcoming_birthdays(int $ownerId, int $days = 30, ?array $contacts = null): array
 {
     $list = [];
-    foreach (contacts_of($ownerId) as $c) {
+    foreach ($contacts ?? contacts_of($ownerId) as $c) {
         $left = days_until_birthday($c['birthday']);
         if ($left !== null && $left <= $days) {
             $c['days_left'] = $left;

@@ -2,8 +2,11 @@
 Options -Indexes
 DirectoryIndex index.php
 
+# Pastas internas (ex.: .git, se alguém subir a pasta inteira) nunca são servidas
+RedirectMatch 404 /\.(git|svn|hg)(/|$)
+
 # Bloqueia arquivos que não precisam ser públicos
-<FilesMatch "^(\.|config\.example\.php$|router\.php$|README\.md$)">
+<FilesMatch "^(\.|config\.example\.php$|router\.php$|README\.md$|.*\.(sql|sqlite|log|bak|zip)$)">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>

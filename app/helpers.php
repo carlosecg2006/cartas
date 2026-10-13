@@ -172,3 +172,13 @@ function icon(string $name, string $class = ''): string
 {
     return '<svg class="ic' . ($class !== '' ? ' ' . e($class) : '') . '" aria-hidden="true"><use href="assets/icons.svg#' . e($name) . '"></use></svg>';
 }
+
+/** Nome falado das cores de avatar (para leitores de tela). */
+function color_label(string $hex): string
+{
+    return [
+        '#d9a5a0' => 'Rosa', '#e2b98f' => 'Pêssego', '#d8c37e' => 'Mostarda', '#a9c4a0' => 'Sálvia',
+        '#9fbfd6' => 'Azul', '#b9a8d6' => 'Lavanda', '#d6a3bd' => 'Orquídea', '#9cc8bf' => 'Menta', '#c97b84' => 'Vinho',
+    ][strtolower($hex)] ?? $hex;
+}
+

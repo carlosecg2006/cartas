@@ -50,7 +50,7 @@ page_head('Nova carta', ['css' => ['assets/css/letter.css'], 'letter_fonts' => t
         <div class="tpl-grid">
             <?php foreach (letter_templates() as $key => $tpl): ?>
                 <button class="tpl<?= $suggested === $key ? ' suggested' : '' ?>" name="modelo" value="<?= e($key) ?>">
-                    <span class="tpl-preview"><span class="tpl-preview-inner" data-tpl="<?= e($key) ?>"></span></span>
+                    <span class="tpl-preview" aria-hidden="true"><span class="tpl-preview-inner" data-tpl="<?= e($key) ?>" inert></span></span>
                     <strong><?= e($tpl['name']) ?></strong>
                     <span><?= e($tpl['hint']) ?></span>
                 </button>

@@ -51,9 +51,9 @@ function page_head(string $title, array $opts = []): void
     </a>
     <nav class="nav">
         <?php $unread = unread_count((int) $user['id']); ?>
-        <a href="index.php" class="<?= nav_active(['index.php', 'nova.php']) ?>"><?= icon('mail') ?><span>Cartas</span><?php if ($unread): ?><b class="nav-badge"><?= $unread ?></b><?php endif; ?></a>
-        <a href="amigos.php" class="<?= nav_active(['amigos.php']) ?>"><?= icon('users') ?><span>Pessoas</span></a>
-        <a href="conta.php" class="nav-me <?= nav_active(['conta.php']) ?>" title="Minha conta"><?= avatar_html($user, 'sm') ?></a>
+        <a href="index.php" aria-label="Cartas<?= $unread ? ' (' . $unread . ' nova' . ($unread > 1 ? 's' : '') . ')' : '' ?>" class="<?= nav_active(['index.php', 'nova.php']) ?>"><?= icon('mail') ?><span>Cartas</span><?php if ($unread): ?><b class="nav-badge"><?= $unread ?></b><?php endif; ?></a>
+        <a href="amigos.php" aria-label="Pessoas" class="<?= nav_active(['amigos.php', 'pessoa.php']) ?>"><?= icon('users') ?><span>Pessoas</span></a>
+        <a href="conta.php" class="nav-me <?= nav_active(['conta.php']) ?>" title="Minha conta" aria-label="Minha conta"><?= avatar_html($user, 'sm') ?></a>
     </nav>
 </header>
 <?php endif; ?>

@@ -132,7 +132,7 @@ page_head($invite && $invite['kind'] === 'reset' ? 'Senha nova' : 'Convite', ['b
                         <legend>Sua cor</legend>
                         <div class="swatches">
                             <?php foreach ($colors as $i => $c): ?>
-                                <label class="swatch" style="--c: <?= e($c) ?>"><input type="radio" name="color" value="<?= e($c) ?>" <?= $i === 0 ? 'checked' : '' ?>><span></span></label>
+                                <label class="swatch" style="--c: <?= e($c) ?>"><input type="radio" name="color" aria-label="<?= e(color_label($c)) ?>" value="<?= e($c) ?>" <?= $i === 0 ? 'checked' : '' ?>><span></span></label>
                             <?php endforeach; ?>
                         </div>
                     </fieldset>

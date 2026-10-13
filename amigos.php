@@ -238,7 +238,7 @@ page_head('Pessoas', ['body' => 'page-friends']);
                             <div class="swatches">
                                 <?php foreach ($colors as $c): ?>
                                     <label class="swatch" style="--c: <?= e($c) ?>">
-                                        <input type="radio" name="color" value="<?= e($c) ?>" <?= $form['color'] === $c ? 'checked' : '' ?>>
+                                        <input type="radio" name="color" aria-label="<?= e(color_label($c)) ?>" value="<?= e($c) ?>" <?= $form['color'] === $c ? 'checked' : '' ?>>
                                         <span></span>
                                     </label>
                                 <?php endforeach; ?>

@@ -133,3 +133,9 @@
 .bgm-player.show-frame .bgm-frame { position: static; width: 100%; height: auto; aspect-ratio: 16 / 9; opacity: 1; pointer-events: auto; border-radius: 10px; order: 3; }
 @media (prefers-reduced-motion: reduce) { .bgm-player.is-playing .bgm-eq i, .bgm-player.needs-tap .bgm-toggle { animation: none; } }
 @media print { .bgm-player { display: none !important; } }
+
+/* releitura: abertura mais curta */
+.envelope-stage.quick { transition-duration: .3s; }
+.envelope.quick .env-flap { transition: transform .35s cubic-bezier(.4, .1, .3, 1), z-index 0s linear .17s; }
+.envelope.quick .env-letter { transition-duration: .45s; }
+.envelope-stage.animating { cursor: pointer; }

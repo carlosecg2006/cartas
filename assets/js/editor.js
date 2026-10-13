@@ -205,16 +205,155 @@
   }
 
   function pastePlain(e) {
-    const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith('image/'));
-    if (files.length) {
-      e.preventDefault();
-      const host = e.currentTarget.closest('.eb');
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const target = e.currentTarget;
+    const text = cd.getData('text/plain') || '';
+    // Word/Docs colocam também um PNG do trecho: se veio texto, vale o texto
+    const files = Array.from(cd.files || []).filter((f) => f.type.startsWith('image/'));
+    e.preventDefault();
+    if (files.length && !text.trim()) {
+      const host = target.closest('.eb');
       insertImageFromFile(files[0], host ? host.dataset.id : null);
       return;
     }
-    e.preventDefault();
-    const text = e.clipboardData.getData('text/plain');
-    document.execCommand('insertText', false, text);
+    if (!target.dataset.rich) {
+      document.execCommand('insertText', false, text);
+      return;
+    }
+    const html = cd.getData('text/html');
+    const chunks = (html ? htmlChunks(html) : null) || textChunks(text);
+    if (!chunks.length) return;
+    const host = target.closest('.eb');
+    const b = host ? findBlock(host.dataset.id) : null;
+    if (chunks.length === 1 || !b || b.type !== 'paragraph' || !target.matches('.lb-text')) {
+      document.execCommand('insertHTML', false, chunks.join('<br>'));
+      return;
+    }
+    // Vários parágrafos num texto simples: o 1º fica aqui, os outros viram blocos novos
+    const rest = splitAtCaret(target);
+    target.insertAdjacentHTML('beforeend', chunks[0]);
+    b.html = target.innerHTML;
+    updateEmpty(target);
+    let after = b.id;
+    let last = null;
+    chunks.slice(1).forEach((c, i, arr) => {
+      const nb = newBlock('paragraph');
+      Object.assign(nb, { align: b.align, font: b.font, size: b.size, color: b.color });
+      nb.html = i === arr.length - 1 ? c + '<span data-caret></span>' + rest : c;
+      insertBlockAfter(nb, after);
+      after = nb.id;
+      last = nb;
+    });
+    const node = $('[data-rich]', blockNode(last.id));
+    caretToMarker(node);
+    last.html = node.innerHTML;
+    updateEmpty(node);
+    updateWordCount();
+    commit();
+  }
+
+  /** Põe o cursor onde está o <span data-caret> e tira o marcador. */
+  function caretToMarker(node) {
+    const marker = $('[data-caret]', node);
+    if (!marker) return focusEditable(node, 'end');
+    node.focus({ preventScroll: true });
+    const range = document.createRange();
+    range.setStartBefore(marker);
+    range.collapse(true);
+    marker.remove();
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const rect = node.getBoundingClientRect();
+    if (rect.top < 70 || rect.bottom > window.innerHeight - 20) node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  const escHtml = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  /** Texto simples → parágrafos (linhas em branco separam; sem elas, cada linha é um parágrafo). */
+  function textChunks(text) {
+    text = text.replace(/\r\n?/g, '\n');
+    const parts = /\n[ \t]*\n/.test(text) ? text.split(/\n[ \t]*\n+/) : text.split('\n');
+    return parts.map((t) => escHtml(t.replace(/^\n+|\n+$/g, '')).replace(/\n/g, '<br>')).filter((h) => h.trim() !== '');
+  }
+
+  const PASTE_BLOCKS = /^(P|DIV|H[1-6]|LI|UL|OL|BLOCKQUOTE|PRE|TR|TABLE|SECTION|ARTICLE|HEADER|FOOTER|ASIDE|NAV|FIGURE|FIGCAPTION|DL|DT|DD|HR|ADDRESS|MAIN)$/;
+  const PASTE_SKIP = /^(SCRIPT|STYLE|HEAD|TITLE|META|LINK|TEMPLATE|IFRAME|OBJECT|EMBED|SVG|MATH|NOSCRIPT|BUTTON|SELECT|TEXTAREA|INPUT|IMG|VIDEO|AUDIO|CANVAS)$/;
+
+  /**
+   * HTML colado → pedaços (um por parágrafo) só com b, i, u, s, links e quebras de linha.
+   * O servidor limpa de novo ao salvar.
+   */
+  function htmlChunks(html) {
+    let doc;
+    try {
+      doc = new DOMParser().parseFromString(html, 'text/html');
+    } catch (e) {
+      return null;
+    }
+    const chunks = [];
+    let cur = '';
+    const flush = () => {
+      const h = cur.replace(/^(\s|<br>)+|(\s|<br>)+$/g, '');
+      if (h.replace(/<[^>]*>|&nbsp;|\s/g, '') !== '') chunks.push(h);
+      cur = '';
+    };
+    const pre = (n) => !!(n.parentElement && n.parentElement.closest('pre'));
+    const walk = (node) => {
+      node.childNodes.forEach((n) => {
+        if (n.nodeType === 3) {
+          let t = n.nodeValue;
+          if (pre(n)) {
+            cur += escHtml(t).replace(/\n/g, '<br>');
+            return;
+          }
+          t = t.replace(/[\s\u00a0]+/g, ' ');
+          if (/(^|<br>| )$/.test(cur) || cur === '') t = t.replace(/^ /, '');
+          cur += escHtml(t);
+          return;
+        }
+        if (n.nodeType !== 1) return;
+        const tag = n.tagName.toUpperCase();
+        if (PASTE_SKIP.test(tag)) return;
+        if (tag === 'BR') {
+          // duas quebras seguidas = parágrafo novo
+          if (/<br>\s*$/.test(cur)) {
+            cur = cur.replace(/<br>\s*$/, '');
+            flush();
+          } else cur += '<br>';
+          return;
+        }
+        if (PASTE_BLOCKS.test(tag)) {
+          flush();
+          walk(n);
+          flush();
+          return;
+        }
+        const st = n.getAttribute('style') || '';
+        const wrap = [];
+        if (tag === 'A') {
+          const href = (n.getAttribute('href') || '').trim();
+          if (/^(https?:|mailto:)/i.test(href)) wrap.push(['a', ' href="' + escHtml(href) + '"']);
+        } else if ((tag === 'B' || tag === 'STRONG') && !/font-weight:\s*(normal|[1-5]00)/i.test(st)) wrap.push(['b', '']);
+        else if (tag === 'I' || tag === 'EM') wrap.push(['i', '']);
+        else if (tag === 'U') wrap.push(['u', '']);
+        else if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') wrap.push(['s', '']);
+        else if (tag === 'SPAN') {
+          // Google Docs marca negrito/itálico com estilo
+          if (/font-weight:\s*(bold|[6-9]00)/i.test(st)) wrap.push(['b', '']);
+          if (/font-style:\s*italic/i.test(st)) wrap.push(['i', '']);
+          if (/text-decoration[^;]*underline/i.test(st)) wrap.push(['u', '']);
+          if (/text-decoration[^;]*line-through/i.test(st)) wrap.push(['s', '']);
+        }
+        wrap.forEach(([t, attrs]) => { cur += '<' + t + attrs + '>'; });
+        walk(n);
+        wrap.slice().reverse().forEach(([t]) => { cur += '</' + t + '>'; });
+      });
+    };
+    walk(doc.body || doc.documentElement);
+    flush();
+    return chunks.length ? chunks : null;
   }
 
   const BUILDERS = {
@@ -245,18 +384,27 @@
       };
       list.addEventListener('input', () => { sync(); typed(); });
       list.addEventListener('paste', pastePlain);
-      list.addEventListener('keydown', (e) => {
+      /** Enter em item vazio no fim sai da lista; Backspace no único item vazio vira parágrafo. */
+      const special = (kind) => {
         const li = closestLi(list);
-        if (e.key === 'Enter' && !e.shiftKey && li && li.textContent.trim() === '' && !li.nextElementSibling) {
-          // Enter em item vazio no fim: sai da lista
-          e.preventDefault();
+        if (kind === 'enter' && li && li.textContent.trim() === '' && !li.nextElementSibling) {
           li.remove();
           sync();
           exitToParagraph(b);
-        } else if (e.key === 'Backspace' && li && li.textContent.trim() === '' && list.children.length === 1) {
-          e.preventDefault();
-          replaceBlock(b, convertBlock(b, 'paragraph'), 'start');
+          return true;
         }
+        if (kind === 'back' && li && li.textContent.trim() === '' && list.children.length === 1) {
+          replaceBlock(b, convertBlock(b, 'paragraph'), 'start');
+          return true;
+        }
+        return false;
+      };
+      list.addEventListener('keydown', (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if ((e.key === 'Enter' && !e.shiftKey && special('enter')) || (e.key === 'Backspace' && special('back'))) e.preventDefault();
+      });
+      list.addEventListener('beforeinput', (e) => {
+        if ((e.inputType === 'insertParagraph' && special('enter')) || (e.inputType === 'deleteContentBackward' && special('back'))) e.preventDefault();
       });
       body.appendChild(list);
     },
@@ -272,8 +420,8 @@
           commit();
         });
         const text = editable('span', 'check-text', item.html, 'Algo para fazermos juntos', (n) => { item.html = n.innerHTML; });
-        text.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
+        const checkKey = (e, key) => {
+          if (key === 'Enter') {
             e.preventDefault();
             if (text.textContent.trim() === '' && i === b.items.length - 1) {
               b.items.splice(i, 1);
@@ -288,7 +436,7 @@
             rerenderBlock(b);
             focusEditable($$('.check-text', blockNode(b.id))[i + 1], 'start');
             commit();
-          } else if (e.key === 'Backspace' && caretAtStart(text) && text.textContent === '') {
+          } else if (key === 'Backspace' && caretAtStart(text) && text.textContent === '') {
             e.preventDefault();
             if (b.items.length === 1) return replaceBlock(b, convertBlock(b, 'paragraph'), 'start');
             b.items.splice(i, 1);
@@ -296,6 +444,15 @@
             focusEditable($$('.check-text', blockNode(b.id))[Math.max(0, i - 1)], 'end');
             commit();
           }
+        };
+        text.addEventListener('keydown', (e) => {
+          if (e.isComposing || e.keyCode === 229) return;
+          if (e.key === 'Enter' && e.shiftKey) return;
+          checkKey(e, e.key);
+        });
+        text.addEventListener('beforeinput', (e) => {
+          if (e.inputType === 'insertParagraph') checkKey(e, 'Enter');
+          else if (e.inputType === 'deleteContentBackward') checkKey(e, 'Backspace');
         });
         li.append(box, text);
         list.appendChild(li);
@@ -549,56 +706,81 @@
   // ---------------------------------------------------------------- comportamento de texto
 
   function textBehavior(node, b) {
+    const plain = TEXT_TYPES.includes(b.type); // parágrafo, título, citação
+
+    /** Enter: blocos de texto se dividem; caixas (destaque, segredo…) só quebram a linha. */
+    const enter = () => {
+      if (!plain) {
+        document.execCommand('insertLineBreak');
+        return;
+      }
+      const rest = splitAtCaret(node);
+      node.dispatchEvent(new Event('input'));
+      const nb = newBlock('paragraph');
+      nb.html = rest;
+      if (b.type === 'paragraph') {
+        Object.assign(nb, { align: b.align, font: b.font, size: b.size, color: b.color });
+      }
+      insertBlockAfter(nb, b.id);
+      focusBlock(nb.id, 'start');
+      commit();
+    };
+
+    /** Backspace no começo do bloco. Devolve true se tratou (senão fica o comportamento do navegador). */
+    const backspaceAtStart = () => {
+      if (!plain) return false;
+      if (b.type !== 'paragraph') {
+        replaceBlock(b, convertBlock(b, 'paragraph'), 'start');
+        return true;
+      }
+      const idx = blockIndex(b.id);
+      const prev = blocks()[idx - 1];
+      if (node.textContent === '' && !node.querySelector('img')) {
+        removeBlock(b.id);
+        if (prev) focusBlock(prev.id, 'end');
+        commit();
+        return true;
+      }
+      if (prev && TEXT_TYPES.includes(prev.type)) {
+        const prevNode = $('[data-rich]', blockNode(prev.id));
+        prevNode.innerHTML = cleanTrailingBr(prevNode.innerHTML) + '<span data-caret></span>' + node.innerHTML;
+        caretToMarker(prevNode);
+        prev.html = prevNode.innerHTML;
+        updateEmpty(prevNode);
+        removeBlock(b.id);
+        commit();
+        return true;
+      }
+      return false;
+    };
+
     node.addEventListener('keydown', (e) => {
       if (slash.open && slash.blockId === b.id && slashKeydown(e)) return;
-      if (e.isComposing) return;
+      if (e.isComposing || e.keyCode === 229) return;
 
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        const rest = splitAtCaret(node);
-        node.dispatchEvent(new Event('input'));
-        const nb = newBlock('paragraph');
-        nb.html = rest;
-        if (b.type === 'paragraph') {
-          Object.assign(nb, { align: b.align, font: b.font, size: b.size, color: b.color });
-        }
-        insertBlockAfter(nb, b.id);
-        focusBlock(nb.id, 'start');
-        commit();
+        enter();
         return;
       }
 
       if (e.key === 'Backspace' && caretAtStart(node) && getSelection().isCollapsed) {
-        if (b.type !== 'paragraph') {
-          e.preventDefault();
-          replaceBlock(b, convertBlock(b, 'paragraph'), 'start');
+        if (backspaceAtStart()) e.preventDefault();
+      }
+    });
+
+    // Teclados do Android (IME) não mandam keydown útil: tratamos o mesmo pelo beforeinput.
+    // Quando o keydown já tratou, ele cancelou o evento e o beforeinput nem chega.
+    node.addEventListener('beforeinput', (e) => {
+      if (e.inputType === 'insertParagraph') {
+        e.preventDefault();
+        if (slash.open && slash.blockId === b.id && slash.items.length) {
+          chooseSlash(slash.items[slash.index].dataset.key);
           return;
         }
-        const idx = blockIndex(b.id);
-        const prev = blocks()[idx - 1];
-        if (node.textContent === '' && !node.querySelector('img')) {
-          e.preventDefault();
-          removeBlock(b.id);
-          if (prev) focusBlock(prev.id, 'end');
-          commit();
-        } else if (prev && TEXT_TYPES.includes(prev.type)) {
-          e.preventDefault();
-          const prevNode = $('[data-rich]', blockNode(prev.id));
-          prevNode.innerHTML = cleanTrailingBr(prevNode.innerHTML) + '<span data-caret></span>' + node.innerHTML;
-          const marker = $('[data-caret]', prevNode);
-          const range = document.createRange();
-          range.setStartBefore(marker);
-          range.collapse(true);
-          marker.remove();
-          prevNode.focus();
-          const sel = getSelection();
-          sel.removeAllRanges();
-          sel.addRange(range);
-          prev.html = prevNode.innerHTML;
-          updateEmpty(prevNode);
-          removeBlock(b.id);
-          commit();
-        }
+        enter();
+      } else if (e.inputType === 'deleteContentBackward' && getSelection().isCollapsed && caretAtStart(node)) {
+        if (backspaceAtStart()) e.preventDefault();
       }
     });
 
@@ -879,15 +1061,24 @@
     popover.style.left = Math.max(8, left) + 'px';
     popover.style.top = Math.max(8, top) + 'px';
     popover._anchor = anchor;
+    popover._returnTo = anchor.isConnected && anchor.tabIndex >= 0 ? anchor : document.activeElement;
     popover.addEventListener('pointerdown', (e) => e.stopPropagation());
+    // leva o foco para dentro (menos nos da barra de formatação, que precisam da seleção do texto)
+    if (!opts.keepFocus) {
+      const first = popover.querySelector('button:not([disabled]), input, select, [tabindex]:not([tabindex="-1"])');
+      if (first) first.focus({ preventScroll: true });
+    }
     return popover;
   }
 
+  /** Fecha o popover; se o foco estava dentro dele, devolve para quem o abriu. */
   function closePopover() {
-    if (popover) {
-      popover.remove();
-      popover = null;
-    }
+    if (!popover) return;
+    const back = popover._returnTo;
+    const hadFocus = popover.contains(document.activeElement);
+    popover.remove();
+    popover = null;
+    if (hadFocus && back && back.isConnected && back !== document.body) back.focus({ preventScroll: true });
   }
 
   document.addEventListener('pointerdown', (e) => {
@@ -1015,6 +1206,10 @@
 
   // ----- menu do bloco -----
   function setupHandle(handle, b) {
+    // teclado (Enter/Espaço geram um clique com detail 0): abre o menu do bloco
+    handle.addEventListener('click', (e) => {
+      if (e.detail === 0) openBlockMenu(handle, b);
+    });
     handle.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
@@ -1375,7 +1570,7 @@
         afterFormat(host);
         closePopover();
       }, { allowNone: true, noneLabel: cmd === 'color' ? 'Cor da tinta' : 'Sem marca-texto', custom: cmd === 'color' }));
-      openPopover(btn, box);
+      openPopover(btn, box, { keepFocus: true });
       return;
     }
     if (cmd === 'size') {
@@ -1388,7 +1583,7 @@
         afterFormat(host);
         closePopover();
       }));
-      openPopover(btn, box);
+      openPopover(btn, box, { keepFocus: true });
       return;
     }
     if (cmd === 'link') {
@@ -1449,8 +1644,20 @@
     left = Math.max(8, Math.min(vw - w - 8, left));
     let top = rect.top - fmtBar.offsetHeight - 10;
     if (top < 60) top = rect.bottom + 10;
+    const vv = window.visualViewport;
+    if (isMobile() && vv) {
+      // no celular a barra fica logo acima do teclado (parte visível da tela)
+      let limit = vv.offsetTop + vv.height;
+      const pt = panel.getBoundingClientRect().top; // abas do painel, quando ficam acima do teclado
+      if (pt > vv.offsetTop + 60 && pt < limit) limit = pt;
+      top = limit - fmtBar.offsetHeight - 10;
+    }
     fmtBar.style.left = left + 'px';
-    fmtBar.style.top = top + 'px';
+    fmtBar.style.top = Math.max(8, top) + 'px';
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', positionFormatBar);
+    window.visualViewport.addEventListener('scroll', positionFormatBar);
   }
 
   // ---------------------------------------------------------------- emojis
@@ -1484,30 +1691,62 @@
   // ---------------------------------------------------------------- imagens
 
   const fileInput = $('[data-file]');
+  let cancelPick = null;
+  /** Abre o seletor de arquivos. Cancelar devolve null ([] com multiple); abrir outro cancela o anterior. */
   function pickFile(multiple, accept) {
+    if (cancelPick) cancelPick();
     return new Promise((resolve) => {
       fileInput.value = '';
       fileInput.multiple = !!multiple;
       fileInput.accept = accept || 'image/jpeg,image/png,image/gif,image/webp';
-      const done = () => {
-        fileInput.removeEventListener('change', done);
-        const files = Array.from(fileInput.files);
+      const finish = (files) => {
+        fileInput.removeEventListener('change', onChange);
+        fileInput.removeEventListener('cancel', onCancel);
+        if (cancelPick === onCancel) cancelPick = null;
         resolve(multiple ? files : files[0] || null);
       };
-      fileInput.addEventListener('change', done);
+      const onChange = () => finish(Array.from(fileInput.files || []));
+      const onCancel = () => finish([]);
+      fileInput.addEventListener('change', onChange, { once: true });
+      fileInput.addEventListener('cancel', onCancel, { once: true });
+      cancelPick = onCancel;
       fileInput.click();
     });
   }
 
-  async function addGalleryFiles(b, files) {
-    for (const file of files.slice(0, 24 - b.items.length)) {
-      const res = await uploadFile(file);
-      if (res) {
-        b.items.push({ src: res.src, caption: '' });
-        rerenderBlock(b);
+  // ----- envios em andamento -----
+  // Salvar e enviar a carta esperam terminar; ao terminar, o bloco é procurado de novo pelo id
+  // (desfazer ou restaurar uma versão troca os objetos do estado).
+  const uploads = new Set();
+  function tracked(promise) {
+    uploads.add(promise);
+    const drop = () => uploads.delete(promise);
+    promise.then(drop, drop);
+    return promise;
+  }
+
+  function currentBlock(b) {
+    const cur = findBlock(b.id);
+    if (!cur) toast('A foto foi para a sua biblioteca.');
+    return cur;
+  }
+
+  function addGalleryFiles(b, files) {
+    return tracked((async () => {
+      let changed = false;
+      for (const file of files.slice(0, 24 - b.items.length)) {
+        const res = await uploadFile(file);
+        if (!res) continue;
+        const cur = currentBlock(b);
+        if (!cur || cur.type !== 'gallery') break;
+        if (cur.items.length >= 24) break;
+        cur.items.push({ src: res.src, caption: '' });
+        rerenderBlock(cur);
+        b = cur;
+        changed = true;
       }
-    }
-    commit();
+      if (changed) commit();
+    })());
   }
 
   // ----- gravação de voz -----
@@ -1533,21 +1772,29 @@
     }
   }
 
-  async function saveAudio(b, blob, filename) {
-    const fd = new FormData();
-    fd.append('id', letterId);
-    fd.append('audio', blob, filename);
-    setStatus('saving', 'Enviando áudio…');
-    const info = await audioPeaks(blob, 48);
-    try {
-      const res = await api('upload', fd);
-      Object.assign(b, { src: res.src, peaks: info.peaks, duration: Math.round(info.duration * 10) / 10 });
-      rerenderBlock(b);
-      commit();
-    } catch (err) {
-      setStatus('error');
-      toast(err.message, 'error');
-    }
+  function saveAudio(b, blob, filename) {
+    return tracked((async () => {
+      const fd = new FormData();
+      fd.append('id', letterId);
+      fd.append('audio', blob, filename);
+      setStatus('saving', 'Enviando áudio…');
+      const info = await audioPeaks(blob, 48);
+      try {
+        const res = await api('upload', fd);
+        setStatus(dirty ? 'pending' : 'saved');
+        const cur = findBlock(b.id);
+        if (!cur) {
+          toast('O áudio foi enviado, mas o bloco não existe mais.');
+          return;
+        }
+        Object.assign(cur, { src: res.src, peaks: info.peaks, duration: Math.round(info.duration * 10) / 10 });
+        rerenderBlock(cur);
+        commit();
+      } catch (err) {
+        setStatus('error');
+        toast(err.message, 'error');
+      }
+    })());
   }
 
   function buildRecorder(b) {
@@ -1619,7 +1866,7 @@
     libraryCache = null;
     setStatus('saving', 'Enviando imagem…');
     try {
-      const res = await api('upload', fd);
+      const res = await tracked(api('upload', fd));
       setStatus(dirty ? 'pending' : 'saved');
       return res;
     } catch (err) {
@@ -1751,8 +1998,20 @@
         after.insertBefore(result, afterCap);
       };
       render();
-      tol.addEventListener('input', render);
+      // o cálculo é pesado: no máximo uma vez por quadro
+      let frame = 0;
+      tol.addEventListener('input', () => {
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          render();
+        });
+      });
       const close = (value) => {
+        if (frame) {
+          cancelAnimationFrame(frame);
+          render();
+        }
         dlg.close();
         dlg.remove();
         if (typeof file !== 'string') URL.revokeObjectURL(url);
@@ -1769,8 +2028,10 @@
   async function addStickerFromFile(file) {
     const final = await stickerDialog(file);
     if (!final) return;
-    const res = await uploadFile(final, 'sticker');
-    if (res) addSticker({ kind: 'image', src: res.src, w: 24 });
+    await tracked((async () => {
+      const res = await uploadFile(final, 'sticker');
+      if (res) addSticker({ kind: 'image', src: res.src, w: 24 });
+    })());
   }
 
   // Colar uma imagem (Ctrl+V) fora de um texto vira figurinha
@@ -1783,12 +2044,16 @@
     }
   });
 
-  async function setBlockImage(b, file) {
-    const res = await uploadFile(file);
-    if (!res) return;
-    b.src = res.src;
-    rerenderBlock(b);
-    commit();
+  function setBlockImage(b, file) {
+    return tracked((async () => {
+      const res = await uploadFile(file);
+      if (!res) return;
+      const cur = currentBlock(b);
+      if (!cur || !('src' in cur)) return;
+      cur.src = res.src;
+      rerenderBlock(cur);
+      commit();
+    })());
   }
 
   async function insertImageFromFile(file, afterId) {
@@ -1826,15 +2091,36 @@
     return layer.querySelector('.sticker[data-id="' + id + '"]');
   }
 
+  function stickerLabel(s) {
+    if (s.kind === 'text') return 'Texto solto: ' + (s.text || '').slice(0, 40);
+    if (s.kind === 'emoji') return 'Emoji ' + (s.char || '');
+    if (s.kind === 'doodle') return 'Rabisco: ' + ((L.DOODLES[s.name] || {}).label || '');
+    return { image: 'Figurinha', tape: 'Fita washi', drawing: 'Desenho' }[s.kind] || 'Adesivo';
+  }
+
   function buildSticker(s) {
     const node = L.stickerEl(s);
     node.tabIndex = 0;
+    node.setAttribute('role', 'img');
+    node.setAttribute('aria-label', stickerLabel(s));
+    node.addEventListener('pointerdown', (e) => longPress(e, s, node));
     node.addEventListener('pointerdown', (e) => stickerPointerDown(e, s, node));
     node.addEventListener('dblclick', () => { if (!s.lk) editStickerText(s); });
     node.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (Date.now() - (node._longPressAt || 0) < 1000) return; // o toque longo já abriu
       selectSticker(s.id);
       openStickerContext(e, s);
+    });
+    // teclado: focar seleciona; Enter edita o texto
+    node.addEventListener('focus', () => { if (selectedSticker !== s.id) selectSticker(s.id); });
+    node.addEventListener('keydown', (e) => {
+      if (e.target !== node || e.key !== 'Enter' || s.lk) return;
+      if (s.kind === 'text') {
+        e.preventDefault();
+        e.stopPropagation();
+        editStickerText(s);
+      }
     });
     if (s.kind === 'image') node.querySelector('img')?.addEventListener('load', layout);
     return node;
@@ -1911,12 +2197,47 @@
     } else guides.h.remove();
   }
 
+  /** Toque longo (500 ms) no celular abre o menu do adesivo. */
+  function longPress(e, s, node) {
+    if (e.pointerType !== 'touch') return;
+    node._longPressed = false;
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const pageX = e.pageX;
+    const pageY = e.pageY;
+    const stop = () => {
+      clearTimeout(timer);
+      node.removeEventListener('pointermove', move);
+      node.removeEventListener('pointerup', stop);
+      node.removeEventListener('pointercancel', stop);
+    };
+    const move = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) stop(); };
+    const timer = setTimeout(() => {
+      stop();
+      if (pinch) return;
+      node._longPressed = true;
+      node._longPressAt = Date.now();
+      selectSticker(s.id);
+      openStickerContext({ pageX, pageY }, s);
+    }, 500);
+    node.addEventListener('pointermove', move);
+    node.addEventListener('pointerup', stop);
+    node.addEventListener('pointercancel', stop);
+  }
+
   function stickerPointerDown(e, s, node) {
     if (e.button !== 0 || node.querySelector('[contenteditable="true"], [contenteditable="plaintext-only"]')) return;
+    const wasSelected = selectedSticker === s.id;
+    // no toque, o primeiro toque só seleciona: assim dá para rolar a página passando por cima
+    if (e.pointerType === 'touch' && !wasSelected) {
+      e.stopPropagation();
+      if (document.activeElement && document.activeElement.isContentEditable) document.activeElement.blur();
+      selectSticker(s.id);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     if (document.activeElement && document.activeElement.isContentEditable) document.activeElement.blur();
-    const wasSelected = selectedSticker === s.id;
     selectSticker(s.id);
     if (s.lk) return; // travado: só seleciona
     const pr = paper.getBoundingClientRect();
@@ -1933,6 +2254,7 @@
     node.classList.add('moving');
 
     const move = (ev) => {
+      if (pinch) return; // dois dedos: quem manda é o gesto de pinça
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
       if (!moved && Math.hypot(dx, dy) < 3) return;
@@ -1958,7 +2280,7 @@
         reanchor(s, parseFloat(node.style.top) || 0);
         layout();
         commit();
-      } else if (wasSelected && s.kind === 'text') {
+      } else if (wasSelected && s.kind === 'text' && !node._longPressed && !pinchedAt(e)) {
         editStickerText(s);
       }
     };
@@ -2006,6 +2328,45 @@
     target.addEventListener('pointerup', up);
     target.addEventListener('pointercancel', up);
   }
+
+  // ----- pinça com dois dedos: muda tamanho e giro do adesivo selecionado -----
+  let pinch = null;
+  let lastPinchAt = 0;
+  const pinchedAt = () => !!pinch || Date.now() - lastPinchAt < 400;
+  const touchGeom = (t) => {
+    const [a, b] = [t[0], t[1]];
+    return { d: Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY) || 1, a: Math.atan2(b.clientY - a.clientY, b.clientX - a.clientX) };
+  };
+  paper.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 2 || !selectedSticker) return;
+    const s = stickers().find((x) => x.id === selectedSticker);
+    const node = s && stickerNode(s.id);
+    if (!node || s.lk || !Array.from(e.touches).some((t) => node.contains(t.target))) return;
+    e.preventDefault();
+    const g = touchGeom(e.touches);
+    pinch = { s, node, d0: g.d, a0: g.a, w0: s.w, r0: s.r || 0 };
+  }, { passive: false });
+  paper.addEventListener('touchmove', (e) => {
+    if (!pinch || e.touches.length < 2) return;
+    e.preventDefault();
+    const g = touchGeom(e.touches);
+    const { s, node } = pinch;
+    s.w = round(Math.max(2, Math.min(100, (pinch.w0 * g.d) / pinch.d0)));
+    let r = pinch.r0 + ((g.a - pinch.a0) * 180) / Math.PI;
+    r = ((r + 540) % 360) - 180;
+    s.r = round(r);
+    L.updateStickerBox(node, s);
+    positionStickerBar();
+  }, { passive: false });
+  const endPinch = (e) => {
+    if (!pinch || e.touches.length >= 2) return;
+    pinch = null;
+    lastPinchAt = Date.now();
+    layout();
+    commit();
+  };
+  paper.addEventListener('touchend', endPinch);
+  paper.addEventListener('touchcancel', endPinch);
 
   function round(n) {
     return Math.round(n * 100) / 100;
@@ -2068,20 +2429,31 @@
     if (t.contentEditable !== 'plaintext-only') t.contentEditable = 'true';
     node.classList.add('editing-text');
     focusEditable(t, 'end');
+    // cada letra já vai para o estado (e para o salvamento), não só ao sair
+    const onInput = () => {
+      const cur = stickers().find((x) => x.id === s.id);
+      if (cur) cur.text = t.innerText.replace(/\n{3,}/g, '\n\n').slice(0, 300);
+      layout();
+      typed();
+    };
     const finish = () => {
       t.removeEventListener('blur', finish);
+      t.removeEventListener('input', onInput);
       t.contentEditable = 'false';
       node.classList.remove('editing-text');
-      s.text = t.innerText.replace(/\n{3,}/g, '\n\n').trim().slice(0, 300);
-      if (!s.text) {
-        deleteSticker(s.id);
+      const cur = stickers().find((x) => x.id === s.id);
+      if (!cur) return; // desfeito enquanto editava
+      cur.text = t.innerText.replace(/\n{3,}/g, '\n\n').trim().slice(0, 300);
+      if (!cur.text) {
+        deleteSticker(cur.id);
         return;
       }
+      node.setAttribute('aria-label', stickerLabel(cur));
       layout();
       commit();
     };
     t.addEventListener('blur', finish);
-    t.addEventListener('input', layout);
+    t.addEventListener('input', onInput);
   }
 
   // ----- ações dos adesivos (barra, menu de contexto, atalhos e camadas) -----
@@ -2215,11 +2587,18 @@
       btn('eraser', 'Remover o fundo', async () => {
         const file = await stickerDialog(L.mediaUrl(s.src));
         if (!file) return;
-        const res = await uploadFile(file, 'sticker');
-        if (!res) return;
-        s.src = res.src;
-        refreshStickerNode(s);
-        commit();
+        await tracked((async () => {
+          const res = await uploadFile(file, 'sticker');
+          if (!res) return;
+          const cur = stickers().find((x) => x.id === s.id);
+          if (!cur) {
+            toast('A figurinha foi para a sua biblioteca.');
+            return;
+          }
+          cur.src = res.src;
+          refreshStickerNode(cur);
+          commit();
+        })());
       });
       sep();
     }
@@ -2264,6 +2643,7 @@
     const node = stickerNode(s.id);
     if (!node) return;
     L.fillSticker(node, s);
+    node.setAttribute('aria-label', stickerLabel(s));
     refreshSelection();
     layout();
   }
@@ -2337,7 +2717,8 @@
     selectedSticker = null;
     refreshSelection();
     const pr = paper.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    // cartas compridas: limita a nitidez para o canvas não passar de ~16 milhões de pixels
+    const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(16e6 / Math.max(1, pr.width * paper.offsetHeight)));
     const cv = L.el('canvas', 'draw-canvas');
     cv.width = Math.round(pr.width * dpr);
     cv.height = Math.round(paper.offsetHeight * dpr);
@@ -2732,7 +3113,12 @@
       env.seal, (v) => set('seal', v), { wrap: true },
     ));
     const custom = L.el('input', 'seal-input', { maxlength: '2', placeholder: 'Ou uma inicial', value: '' });
-    custom.addEventListener('input', () => { if (custom.value.trim()) set('seal', custom.value.trim().toUpperCase()); });
+    custom.addEventListener('input', () => {
+      if (!custom.value.trim()) return;
+      env.seal = custom.value.trim().toUpperCase();
+      refresh();
+      typed(); // digitação: entra no histórico depois de uma pausa
+    });
     s2.appendChild(custom);
     s2.appendChild(L.el('p', 'menu-label', { text: 'Cor do selo' }));
     s2.appendChild(swatchRow(['#a8323e', '#7b2d8b', '#1f4e79', '#2f6b4f', '#b8862b', '#333333', '#d4708a'], env.sealColor, (c) => set('sealColor', c)));
@@ -2881,7 +3267,8 @@
         libraryCache = null;
         setStatus('saving', 'Enviando música…');
         try {
-          const res = await api('upload', fd);
+          const res = await tracked(api('upload', fd));
+          setStatus(dirty ? 'pending' : 'saved');
           setBgm({ kind: 'file', src: res.src, name: f.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 80), volume: 0.6 });
         } catch (err) {
           setStatus('error', err.message);
@@ -3094,6 +3481,7 @@
     state.title = snap.title;
     state.content = snap.content;
     titleInput.value = state.title;
+    const hadFocus = paper.contains(document.activeElement);
     closePopover();
     closeSlash();
     renderAll();
@@ -3101,6 +3489,8 @@
     updateUndoButtons();
     updateWordCount();
     markDirty();
+    // volta o cursor para o último bloco em que a pessoa estava
+    if (lastFocusedId && findBlock(lastFocusedId) && (hadFocus || !isMobile())) focusBlock(lastFocusedId, 'end');
   }
 
   function updateUndoButtons() {
@@ -3111,16 +3501,22 @@
   $('[data-undo]').addEventListener('click', () => restore(-1));
   $('[data-redo]').addEventListener('click', () => restore(1));
 
+  /** Ctrl+Z/Y só valem para a carta: não em campos fora do papel, nem com janela aberta. */
+  function undoAllowed() {
+    if (document.querySelector('dialog[open]')) return false;
+    const ae = document.activeElement;
+    if (!ae || ae === document.body || paper.contains(ae)) return true;
+    if (ae.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(ae.tagName)) return false;
+    return !(popover && popover.contains(ae));
+  }
+
   document.addEventListener('keydown', (e) => {
     const mod = e.ctrlKey || e.metaKey;
-    if (!mod) return;
+    if (!mod || e.altKey) return;
     const key = e.key.toLowerCase();
-    if (key === 'z' && document.activeElement !== titleInput) {
+    if ((key === 'z' || key === 'y') && undoAllowed()) {
       e.preventDefault();
-      restore(e.shiftKey ? 1 : -1);
-    } else if (key === 'y' && document.activeElement !== titleInput) {
-      e.preventDefault();
-      restore(1);
+      restore(key === 'y' || e.shiftKey ? 1 : -1);
     } else if (key === 's') {
       e.preventDefault();
       save();
@@ -3159,14 +3555,26 @@
     statusEl.title = kind === 'error' && text ? text : '';
   }
 
+  let retryDelay = 0; // espera atual entre tentativas quando falha (0 = tudo bem)
+  let offlineWarned = false;
+  let sessionLost = false; // 401/419: só tenta de novo quando a pessoa voltar para a aba
+  let editSeq = 0;
+
   function markDirty() {
     dirty = true;
-    setStatus('pending');
+    editSeq++;
+    setStatus(sessionLost || retryDelay ? 'error' : 'pending');
+    scheduleBackup();
+    if (sessionLost || retryDelay) return; // já tem uma nova tentativa marcada
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 1200);
   }
 
   let checkpointNext = false;
+
+  function savePayload() {
+    return { id: letterId, title: state.title, content: state.content, checkpoint: checkpointNext };
+  }
 
   async function save() {
     clearTimeout(saveTimer);
@@ -3179,20 +3587,47 @@
     dirty = false;
     setStatus('saving');
     try {
-      const res = await api('save', { id: letterId, title: state.title, content: state.content, checkpoint: checkpointNext });
+      const res = await api('save', savePayload());
       checkpointNext = false;
       lastSavedAt = res.savedAt;
-      if (!dirty) setStatus('saved');
+      retryDelay = 0;
+      offlineWarned = false;
+      sessionLost = false;
+      if (!dirty) {
+        setStatus('saved');
+        clearBackup();
+      }
     } catch (err) {
       dirty = true;
       setStatus('error');
       statusEl.title = err.message;
+      if (err.status === 401 || err.status === 419) {
+        if (!sessionLost) toast(err.status === 401 ? err.message : 'Sua sessão expirou. Recarregue a página ou entre de novo — o texto continua aqui.', 'error');
+        sessionLost = true;
+        retryDelay = 0;
+      } else {
+        if (!offlineWarned) toast('Sem conexão. Vou tentar salvar de novo.', 'error');
+        offlineWarned = true;
+        retryDelay = Math.min(30000, retryDelay ? retryDelay * 2 : 2000);
+        saveTimer = setTimeout(save, retryDelay);
+      }
     } finally {
       saving = false;
     }
   }
 
+  /** Volta a tentar logo: internet voltou, a pessoa voltou para a aba ou clicou no aviso. */
+  function retryNow() {
+    if (!dirty) return;
+    retryDelay = 0;
+    sessionLost = false;
+    save();
+  }
+  window.addEventListener('online', retryNow);
+
   async function flushSave() {
+    // fotos e áudios ainda subindo mudam a carta quando terminam
+    while (uploads.size) await Promise.allSettled([...uploads]);
     while (dirty || saving) {
       if (!saving) await save();
       else await new Promise((r) => setTimeout(r, 150));
@@ -3200,18 +3635,105 @@
     }
   }
 
+  /** Saindo da página: manda o que falta mesmo que a aba feche (fetch keepalive aceita até ~64 KB). */
+  function saveOnLeave() {
+    clearTimeout(typingTimer);
+    if (!dirty || sessionLost) return;
+    const body = JSON.stringify(savePayload());
+    if (new TextEncoder().encode(body).length >= 60000) {
+      save();
+      return;
+    }
+    const seq = editSeq;
+    clearTimeout(saveTimer);
+    fetch('api.php?action=save', {
+      method: 'POST',
+      credentials: 'same-origin',
+      keepalive: true,
+      headers: { 'X-CSRF-Token': window.csrfToken ? window.csrfToken() : '', 'Content-Type': 'application/json' },
+      body,
+    }).then((r) => r.json()).then((json) => {
+      if (!json || !json.ok) throw new Error(json && json.error);
+      checkpointNext = false;
+      lastSavedAt = json.savedAt || lastSavedAt;
+      if (editSeq === seq && !saving) {
+        dirty = false;
+        setStatus('saved');
+        clearBackup();
+      }
+    }).catch(() => {
+      if (dirty) saveTimer = setTimeout(save, 1000);
+    });
+  }
+
   statusEl.addEventListener('click', () => {
-    if (statusEl.dataset.state === 'error') save();
+    if (statusEl.dataset.state === 'error') retryNow();
   });
   window.addEventListener('beforeunload', (e) => {
-    if (dirty || saving) {
+    if (dirty || saving || uploads.size) {
       e.preventDefault();
       e.returnValue = '';
     }
   });
+  window.addEventListener('pagehide', saveOnLeave);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && dirty) save();
+    if (document.hidden) saveOnLeave();
+    else if (dirty && (sessionLost || retryDelay)) retryNow();
   });
+
+  // ----- cópia local do que ainda não foi salvo (some quando salva) -----
+  const BACKUP_KEY = 'rascunho-' + letterId;
+  const serverNow = Date.parse(document.documentElement.dataset.now || '');
+  const clockOffset = isNaN(serverNow) ? 0 : serverNow - Date.now();
+  let backupTimer = null;
+
+  function scheduleBackup() {
+    clearTimeout(backupTimer);
+    backupTimer = setTimeout(() => {
+      if (!dirty && !saving) return;
+      try {
+        localStorage.setItem(BACKUP_KEY, JSON.stringify({ title: state.title, content: state.content, at: Date.now() + clockOffset }));
+      } catch (e) { /* cheio ou bloqueado */ }
+    }, 1000);
+  }
+
+  function clearBackup() {
+    clearTimeout(backupTimer);
+    try { localStorage.removeItem(BACKUP_KEY); } catch (e) { /* ignora */ }
+  }
+
+  function offerBackup() {
+    let bk = null;
+    try { bk = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null'); } catch (e) { return; }
+    if (!bk || !bk.content || !Array.isArray(bk.content.blocks)) return;
+    const serverAt = Date.parse(DATA.letter.updatedAt || '');
+    const same = JSON.stringify({ t: bk.title, c: bk.content }) === JSON.stringify({ t: state.title, c: state.content });
+    if (same || (!isNaN(serverAt) && bk.at <= serverAt)) {
+      clearBackup();
+      return;
+    }
+    const bar = L.el('div', 'restore-bar', { role: 'status' });
+    bar.appendChild(L.el('p', '', { text: 'Este aparelho guardou um texto que não chegou a ser salvo.' }));
+    const yes = L.el('button', 'btn btn-sm btn-primary', { type: 'button', text: 'Recuperar o texto não salvo' });
+    const no = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Descartar' });
+    yes.addEventListener('click', () => {
+      bar.remove();
+      state.title = typeof bk.title === 'string' ? bk.title : state.title;
+      state.content = bk.content;
+      titleInput.value = state.title;
+      renderAll();
+      renderPanel();
+      updateWordCount();
+      commit();
+      toast('Texto recuperado. Se mudar de ideia, use desfazer.');
+    });
+    no.addEventListener('click', () => {
+      bar.remove();
+      clearBackup();
+    });
+    bar.append(yes, no);
+    document.body.appendChild(bar);
+  }
 
   // ---------------------------------------------------------------- contagem de palavras
 
@@ -3232,9 +3754,18 @@
   // ---------------------------------------------------------------- histórico de versões
 
   const versionsDialog = $('[data-versions]');
+  let versionPreview = null; // carta renderizada na prévia (tem ouvintes para soltar)
+  let versionReq = 0; // só a última versão clicada aparece
+
+  function clearVersionPreview() {
+    if (versionPreview) versionPreview.destroy();
+    versionPreview = null;
+  }
 
   async function openVersions() {
     closePopover();
+    versionReq++;
+    clearVersionPreview();
     const list = $('[data-versions-list]', versionsDialog);
     const preview = $('[data-versions-preview]', versionsDialog);
     const restoreBtn = $('[data-versions-restore]', versionsDialog);
@@ -3265,10 +3796,23 @@
       item.addEventListener('click', async () => {
         $$('.version-item', list).forEach((x) => x.classList.remove('active'));
         item.classList.add('active');
-        const data = await api('version', { id: letterId, version_id: v.id });
+        const token = ++versionReq;
+        restoreBtn.hidden = true;
+        let data;
+        try {
+          data = await api('version', { id: letterId, version_id: v.id });
+        } catch (err) {
+          if (token === versionReq) {
+            clearVersionPreview();
+            preview.replaceChildren(L.el('p', 'muted small versions-empty', { text: err.message }));
+          }
+          return;
+        }
+        if (token !== versionReq || !versionsDialog.open) return;
+        clearVersionPreview();
         const holder = L.el('div', 'versions-render');
         preview.replaceChildren(holder);
-        L.renderLetter(holder, data.content);
+        versionPreview = L.renderLetter(holder, data.content);
         holder.style.transform = 'scale(' + Math.min(1, preview.clientWidth / 760) + ')';
         restoreBtn.hidden = false;
         restoreBtn.onclick = () => {
@@ -3286,8 +3830,35 @@
     });
   }
   $('[data-open-versions]')?.addEventListener('click', openVersions);
+  versionsDialog?.addEventListener('close', () => {
+    versionReq++;
+    clearVersionPreview();
+  });
   $('[data-close-versions]')?.addEventListener('click', () => versionsDialog.close());
   versionsDialog?.addEventListener('click', (e) => { if (e.target === versionsDialog) versionsDialog.close(); });
+
+  // ----- prévia: salva antes de abrir, para mostrar o texto mais novo -----
+  async function openPreview(e) {
+    const url = 'carta.php?id=' + letterId;
+    if (!dirty && !saving && !uploads.size) {
+      if (!e) window.open(url, '_blank', 'noopener');
+      return;
+    }
+    if (e) e.preventDefault();
+    const win = window.open('', '_blank'); // abre já, dentro do clique, para não ser bloqueada
+    try {
+      await flushSave();
+    } catch (err) {
+      toast('A prévia pode estar sem as últimas mudanças: ' + err.message, 'error');
+    }
+    if (win) {
+      win.opener = null;
+      win.location.href = new URL(url, location.href).href;
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
+  }
+  $('[data-preview]')?.addEventListener('click', openPreview);
 
   // ---------------------------------------------------------------- paleta de comandos (Ctrl+K)
 
@@ -3309,7 +3880,7 @@
       { icon: 'layers', label: 'Ver camadas', words: 'camadas ordem adesivos', run: tab('layers') },
       { icon: 'sparkle', label: 'Testar efeito de abertura', words: 'efeito confete coracoes', run: () => L.playEffect(state.content.effect || 'hearts', 3000) },
       { icon: 'history', label: 'Histórico de versões', words: 'versoes restaurar voltar', run: openVersions },
-      { icon: 'eye', label: 'Abrir prévia', words: 'previa visualizar ver', run: () => window.open('carta.php?id=' + letterId, '_blank') },
+      { icon: 'eye', label: 'Abrir prévia', words: 'previa visualizar ver', run: () => openPreview() },
       { icon: 'send', label: 'Enviar carta', words: 'enviar destinatario mandar', run: () => $('[data-open-send]').click() },
       { icon: 'undo', label: 'Desfazer', words: 'voltar', run: () => restore(-1) },
       { icon: 'redo', label: 'Refazer', words: '', run: () => restore(1) },
@@ -3394,10 +3965,18 @@
     }));
   }
 
+  /** Date → valor do <input type="datetime-local"> no fuso deste aparelho. */
+  function toLocalInput(d) {
+    const p2 = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+
   $('[data-open-send]').addEventListener('click', () => {
     $$('[data-send-step]', dialog).forEach((s) => { s.hidden = s.dataset.sendStep !== 'choose'; });
     scheduleToggle.checked = !!DATA.letter.openAt;
-    openAt.value = DATA.letter.openAt || '';
+    const stored = DATA.letter.openAt ? new Date(DATA.letter.openAt) : null;
+    openAt.value = stored && !isNaN(stored) ? toLocalInput(stored) : '';
+    openAt.min = toLocalInput(new Date());
     schedule.hidden = !scheduleToggle.checked;
     refreshSendPreview();
     dialog.showModal();
@@ -3410,7 +3989,7 @@
     if (scheduleToggle.checked && !openAt.value) {
       const d = new Date(Date.now() + 86400000);
       d.setHours(9, 0, 0, 0);
-      openAt.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + 'T09:00';
+      openAt.value = toLocalInput(d);
     }
     refreshSendPreview();
   });
@@ -3423,11 +4002,25 @@
       toast('Escolha para quem vai a carta.', 'error');
       return;
     }
+    // a data é escolhida no fuso deste aparelho; vai para o servidor em UTC
+    let when = '';
+    if (scheduleToggle.checked && openAt.value) {
+      const d = new Date(openAt.value);
+      if (isNaN(d)) {
+        toast('Essa data não parece válida.', 'error');
+        return;
+      }
+      if (d.getTime() <= Date.now()) {
+        toast('Escolha uma data e hora no futuro.', 'error');
+        return;
+      }
+      when = d.toISOString();
+    }
     const btn = $('[data-send-submit]');
     btn.disabled = true;
     try {
+      if (uploads.size) setStatus('saving', 'Terminando de enviar fotos…');
       await flushSave();
-      const when = scheduleToggle.checked && openAt.value ? openAt.value : '';
       const res = await api('send', { id: letterId, recipient_id: Number(checked.value), open_at: when });
       DATA.letter.recipientId = Number(checked.value);
       DATA.letter.openAt = when;
@@ -3456,6 +4049,7 @@
   pushHistory();
   updateWordCount();
   setStatus('saved', 'Tudo salvo');
+  offerBackup();
 
   // Foca o primeiro texto vazio para já sair escrevendo
   const firstEmpty = blocks().find((b) => TEXT_TYPES.includes(b.type) && !b.html);

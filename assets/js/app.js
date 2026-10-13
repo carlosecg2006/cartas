@@ -1,10 +1,13 @@
 (function () {
   'use strict';
 
-  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  let csrf = csrfMeta?.content || '';
+  window.csrfToken = () => csrf;
+  const SESSION_ENDED = 'Sua sessão terminou. Entre de novo em outra aba e volte aqui — o que você escreveu continua nesta página.';
 
   /** Chamada à API: api('save', {...}) ou api('upload', formData) */
-  window.api = async function (action, body) {
+  window.api = async function (action, body, retried) {
     const isForm = body instanceof FormData;
     const res = await fetch('api.php?action=' + encodeURIComponent(action), {
       method: 'POST',
@@ -16,9 +19,21 @@
     try {
       json = await res.json();
     } catch (e) {
-      throw new Error('O servidor respondeu de um jeito estranho. Tente de novo.');
+      const err = new Error(res.status === 401 ? SESSION_ENDED : 'O servidor respondeu de um jeito estranho. Tente de novo.');
+      err.status = res.status;
+      throw err;
     }
-    if (!res.ok || !json.ok) throw new Error(json.error || 'Algo deu errado.');
+    // token vencido: o servidor manda um novo e a chamada é repetida uma vez
+    if (res.status === 419 && json && json.csrf && !retried) {
+      csrf = json.csrf;
+      if (csrfMeta) csrfMeta.content = csrf;
+      return window.api(action, body, true);
+    }
+    if (!res.ok || !json.ok) {
+      const err = new Error(res.status === 401 ? SESSION_ENDED : (json.error || 'Algo deu errado.'));
+      err.status = res.status;
+      throw err;
+    }
     return json;
   };
 
@@ -89,15 +104,34 @@
   // Contagens regressivas
   const countdowns = document.querySelectorAll('[data-countdown]');
   if (countdowns.length) {
+    // diferença entre o relógio do servidor e o deste aparelho
+    const serverNow = Date.parse(document.documentElement.dataset.now || '');
+    const offset = isNaN(serverNow) ? 0 : serverNow - Date.now();
+    // no máximo 3 recarregamentos automáticos a cada 10 minutos nesta página
+    const reloadKey = 'recargas:' + location.pathname + location.search;
+    const recentReloads = () => {
+      try {
+        const list = JSON.parse(sessionStorage.getItem(reloadKey) || '[]');
+        return Array.isArray(list) ? list.filter((t) => Date.now() - t < 600000) : [];
+      } catch (e) { return []; }
+    };
+    const scheduleReload = () => {
+      const list = recentReloads();
+      if (list.length >= 3) return false;
+      list.push(Date.now());
+      try { sessionStorage.setItem(reloadKey, JSON.stringify(list)); } catch (e) { return false; }
+      setTimeout(() => location.reload(), 1500 * 2 ** (list.length - 1));
+      return true;
+    };
     const tick = () => {
       countdowns.forEach((node) => {
         const target = new Date(node.dataset.countdown).getTime();
-        let diff = Math.max(0, Math.floor((target - Date.now()) / 1000));
+        let diff = Math.max(0, Math.floor((target - (Date.now() + offset)) / 1000));
         if (diff === 0) {
           node.textContent = 'agora';
           if (node.hasAttribute('data-reload') && !node.dataset.reloading) {
             node.dataset.reloading = '1';
-            setTimeout(() => location.reload(), 1500);
+            if (!scheduleReload()) node.textContent = 'agora — recarregue a página';
           }
           return;
         }
@@ -119,11 +153,16 @@
   const mailbox = document.querySelector('[data-mailbox]');
   if (mailbox) {
     const known = Number(mailbox.dataset.count);
+    const knownLatest = Number(mailbox.dataset.latest || 0);
     setInterval(async () => {
       if (document.hidden) return;
       try {
         const res = await api('mailbox');
-        if (res.count > known) {
+        // compara a carta mais nova (o total pode cair quando alguma some e subir de novo)
+        const fresh = res.latest !== undefined && mailbox.dataset.latest !== undefined
+          ? Number(res.latest) > knownLatest
+          : res.count > known;
+        if (fresh) {
           document.querySelector('[data-new-banner]').hidden = false;
           document.title = '(1) ' + document.title.replace(/^\(1\) /, '');
         }

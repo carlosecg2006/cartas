@@ -363,16 +363,23 @@
       ctx.fillText((b.label || 'Raspe aqui').toUpperCase(), r.width / 2, r.height / 2);
       ctx.globalCompositeOperation = 'destination-out';
     };
+    // mede numa cópia reduzida (64×64): ler a tela inteira travaria celulares
+    let probe = null;
     const progress = () => {
-      const ctx = cv.getContext('2d');
-      const data = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      if (!cv.width || !cv.height) return 0;
+      if (!probe) {
+        probe = document.createElement('canvas');
+        probe.width = probe.height = 64;
+      }
+      const pctx = probe.getContext('2d', { willReadFrequently: true });
+      pctx.clearRect(0, 0, 64, 64);
+      pctx.drawImage(cv, 0, 0, 64, 64);
+      const data = pctx.getImageData(0, 0, 64, 64).data;
       let clear = 0;
-      let total = 0;
-      for (let i = 3; i < data.length; i += 4 * 97) {
-        total++;
+      for (let i = 3; i < data.length; i += 4) {
         if (data[i] < 40) clear++;
       }
-      return total ? clear / total : 0;
+      return clear / (64 * 64);
     };
     const scratchAt = (e) => {
       const r = cv.getBoundingClientRect();
@@ -386,12 +393,18 @@
       if (done) return;
       done = true;
       wrap.classList.add('scratched');
+      reveal.remove();
       setTimeout(() => cv.remove(), 700);
     };
+    // quem não consegue raspar (teclado, leitor de tela) revela com um botão
+    const reveal = el('button', 'visually-hidden', { type: 'button', text: 'Revelar: ' + (b.label || 'Raspe aqui') });
+    reveal.addEventListener('click', finish);
+    wrap.appendChild(reveal);
     let down = false;
     cv.addEventListener('pointerdown', (e) => { down = true; cv.setPointerCapture(e.pointerId); scratchAt(e); });
     cv.addEventListener('pointermove', (e) => { if (down) scratchAt(e); });
     cv.addEventListener('pointerup', () => { down = false; });
+    cv.addEventListener('pointercancel', () => { down = false; });
     if (window.ResizeObserver) new ResizeObserver(paint).observe(wrap);
     requestAnimationFrame(paint);
     wrap.querySelectorAll('img').forEach((img) => img.addEventListener('load', () => { ready = false; paint(); }));
@@ -563,19 +576,22 @@
   function layoutStickers(paper, stickers) {
     const layer = paper.querySelector('.sticker-layer');
     if (!layer) return;
+    // primeiro só lê, depois só escreve: evita recalcular o layout a cada adesivo
     const paperRect = paper.getBoundingClientRect();
     const width = paperRect.width || 1;
-    let maxBottom = 0;
+    const blocks = paper.querySelector('.paper-inner');
+    const contentBottom = blocks ? blocks.offsetTop + blocks.offsetHeight : 0;
+    const items = [];
     stickers.forEach((s) => {
       const node = layer.querySelector('.sticker[data-id="' + s.id + '"]');
       if (!node) return;
-      const top = anchorTop(paper, s.anchor, paperRect) + (s.y * width) / 100;
-      node.style.top = top + 'px';
-      const h = node.offsetHeight || 0;
-      maxBottom = Math.max(maxBottom, top + h / 2);
+      items.push({ node, top: anchorTop(paper, s.anchor, paperRect) + (s.y * width) / 100, h: node.offsetHeight || 0 });
     });
-    const blocks = paper.querySelector('.paper-inner');
-    const contentBottom = blocks ? blocks.offsetTop + blocks.offsetHeight : 0;
+    let maxBottom = 0;
+    items.forEach((it) => {
+      it.node.style.top = it.top + 'px';
+      maxBottom = Math.max(maxBottom, it.top + it.h / 2);
+    });
     paper.style.minHeight = maxBottom > contentBottom ? Math.ceil(maxBottom + 24) + 'px' : '';
   }
 
@@ -628,9 +644,33 @@
     const papers = pages.map((pg) => buildPaper(scene, pg, p));
     let current = 0;
     const seen = new Set();
+    const cleanups = [];
+    const observers = [];
 
     const relayoutOne = (i) => layoutStickers(papers[i], pages[i].stickers);
     const relayout = () => relayoutOne(current);
+    /** Todas as páginas (para imprimir): as escondidas aparecem só durante a medida. */
+    const relayoutAll = () => {
+      papers.forEach((paper, i) => {
+        const wasHidden = paper.hidden;
+        paper.hidden = false;
+        relayoutOne(i);
+        paper.hidden = wasHidden;
+      });
+    };
+    // Enquanto o texto está sendo "escrito" (aria-busy), os adesivos se ajustam no máximo a cada 250 ms
+    const timers = [];
+    const lastRun = [];
+    const scheduleRelayout = (i) => {
+      if (timers[i]) return;
+      const busy = papers[i].getAttribute('aria-busy') === 'true';
+      const wait = busy ? Math.max(0, 250 - (performance.now() - (lastRun[i] || 0))) : 0;
+      timers[i] = setTimeout(() => requestAnimationFrame(() => {
+        timers[i] = 0;
+        lastRun[i] = performance.now();
+        relayoutOne(i);
+      }), wait);
+    };
 
     if (papers.length === 1) {
       scene.appendChild(papers[0]);
@@ -679,20 +719,33 @@
       };
       prev.addEventListener('click', () => go(current - 1, -1));
       next.addEventListener('click', () => go(current + 1, 1));
-      // Deslizar o dedo para os lados também vira a página
+      // Deslizar o dedo para os lados também vira a página (um dedo só, gesto mais horizontal que vertical)
       let sx = null;
-      book.addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; }, { passive: true });
+      let sy = null;
+      book.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1) { sx = null; return; }
+        sx = e.touches[0].clientX;
+        sy = e.touches[0].clientY;
+      }, { passive: true });
+      book.addEventListener('touchmove', (e) => { if (e.touches.length > 1) sx = null; }, { passive: true });
       book.addEventListener('touchend', (e) => {
-        if (sx === null) return;
+        if (sx === null || e.touches.length) return;
         const dx = e.changedTouches[0].clientX - sx;
+        const dy = e.changedTouches[0].clientY - sy;
         sx = null;
-        if (Math.abs(dx) > 60 && !e.target.closest('.scratch, .gallery-strip')) go(current + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
+        if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy) && !e.target.closest('.scratch, .gallery-strip')) go(current + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
       });
-      document.addEventListener('keydown', (e) => {
-        if (e.target.closest && e.target.closest('input, textarea')) return;
+      const onKey = (e) => {
+        if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        if (!scene.isConnected || !scene.getClientRects().length) return;
+        const t = e.target;
+        if (t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')))) return;
         if (e.key === 'ArrowRight') go(current + 1, 1);
-        if (e.key === 'ArrowLeft') go(current - 1, -1);
-      });
+        else go(current - 1, -1);
+      };
+      document.addEventListener('keydown', onKey);
+      cleanups.push(() => document.removeEventListener('keydown', onKey));
       container.replaceChildren(scene);
       update();
     }
@@ -713,14 +766,24 @@
     }
 
     papers.forEach((paper, i) => {
-      if (window.ResizeObserver) new ResizeObserver(() => relayoutOne(i)).observe(paper.querySelector('.paper-inner'));
-      paper.querySelectorAll('img').forEach((img) => img.addEventListener('load', () => relayoutOne(i)));
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => scheduleRelayout(i));
+        ro.observe(paper.querySelector('.paper-inner'));
+        observers.push(ro);
+      }
+      paper.querySelectorAll('img').forEach((img) => img.addEventListener('load', () => scheduleRelayout(i)));
     });
     relayout();
-    if (document.fonts) document.fonts.ready.then(relayout);
+    if (document.fonts) document.fonts.ready.then(() => { if (scene.isConnected) relayout(); });
     return {
-      scene, papers, relayout,
+      scene, papers, relayout, relayoutAll,
       get paper() { return papers[current]; },
+      /** Solta ouvintes e observadores (o editor recria a prévia várias vezes). */
+      destroy() {
+        cleanups.splice(0).forEach((fn) => fn());
+        observers.splice(0).forEach((ro) => ro.disconnect());
+        timers.forEach((t) => clearTimeout(t));
+      },
     };
   }
 

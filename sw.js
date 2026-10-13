@@ -25,12 +25,18 @@ self.addEventListener('notificationclick', (event) => {
   const url = new URL(event.notification.data && event.notification.data.url || './index.php', self.registration.scope).href;
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const c of all) {
-      if ('focus' in c) {
-        await c.navigate(url).catch(() => {});
-        return c.focus();
-      }
+    // 1) uma aba já nesse endereço só ganha foco
+    const same = all.find((c) => c.url === url && 'focus' in c);
+    if (same) return same.focus();
+    // 2) reaproveita uma aba que não seja o editor (lá pode haver texto não salvo)
+    const free = all.find((c) => 'navigate' in c && !/\/editor\.php$/.test(new URL(c.url).pathname));
+    if (free) {
+      try {
+        const nav = await free.navigate(url);
+        return (nav || free).focus();
+      } catch (e) { /* aba não controlada: abre outra */ }
     }
+    // 3) senão, abre uma janela nova
     return self.clients.openWindow(url);
   })());
 });

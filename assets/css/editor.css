@@ -185,9 +185,15 @@
 .lb-divider .divider { cursor: pointer; }
 
 /* ---------- adesivos no editor ---------- */
-.editing .sticker { pointer-events: auto; cursor: grab; touch-action: none; }
+.editing .sticker { pointer-events: auto; cursor: grab; touch-action: none; -webkit-touch-callout: none; }
+/* no toque: primeiro seleciona (a página continua rolando), depois arrasta */
+@media (pointer: coarse) {
+  .editing .sticker { touch-action: auto; }
+  .editing .sticker.selected { touch-action: none; }
+}
 .editing .sticker.moving { cursor: grabbing; }
 .editing .sticker:focus { outline: none; }
+.editing .sticker:focus-visible { outline: 2px dashed #3d7be0; outline-offset: 4px; }
 .editing .sticker.selected { outline: 1.5px solid #3d7be0; outline-offset: 4px; }
 .editing .sticker.locked { cursor: default; }
 .editing .sticker.locked.selected { outline-style: dashed; outline-color: var(--muted); }
@@ -209,7 +215,7 @@
 
 .sticker-bar, .format-bar {
   position: fixed; z-index: 60; display: none; align-items: center; gap: 2px;
-  background: #1d1a16; color: var(--on-ink); padding: 4px; border-radius: 10px;
+  background: #1d1a16; color: #fbf7f0; padding: 4px; border-radius: 10px;
   box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .5);
 }
 .sticker-bar.show, .format-bar.show { display: flex; }
@@ -323,7 +329,7 @@
   .eb-gutter { left: -32px; flex-direction: column; top: 0; }
   .eb-add, .eb-handle { width: 26px; height: 24px; }
   .bar-actions [data-open-versions] { display: none; }
-  .format-bar { top: 64px !important; left: 50% !important; transform: translateX(-50%); }
+  .format-bar { left: 50% !important; transform: translateX(-50%); }
   .draw-bar { bottom: 80px; }
 }
 
@@ -396,7 +402,8 @@
   position: absolute; right: -8px; top: -8px; z-index: 3; width: 24px; height: 24px; border-radius: 50%;
   border: 0; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .15s;
 }
-.gallery-item:hover .gal-del { opacity: 1; }
+.gallery-item:hover .gal-del, .gallery-item:focus-within .gal-del { opacity: 1; }
+@media (hover: none) { .gal-del { opacity: 1; } }
 .gal-add {
   display: grid; place-items: center; gap: .3rem; align-content: center; min-height: 120px; width: 30%; margin: 8px;
   border: 1.5px dashed color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 10px; background: none;
@@ -527,3 +534,13 @@
 .bgm-start input { max-width: 110px; }
 .or-line { display: flex; align-items: center; gap: .6rem; color: var(--muted); font-size: .8rem; margin: .1rem 0; }
 .or-line::before, .or-line::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+/* rascunho guardado neste aparelho */
+.restore-bar {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 75;
+  display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: center;
+  width: max-content; max-width: calc(100vw - 24px);
+  background: var(--field); border: 1px solid var(--line); border-radius: 14px; padding: .55rem .8rem; box-shadow: var(--shadow-lg);
+}
+.restore-bar p { margin: 0; font-size: .9rem; }
+@media (max-width: 860px) { .restore-bar { bottom: 90px; } }

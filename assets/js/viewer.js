@@ -26,6 +26,17 @@
     if (!e.target.closest('.env-seal')) seal.focus();
   });
 
+  // Toque em qualquer lugar (ou Esc) durante a animação pula direto para a carta
+  let animTimers = [];
+  const skipAnimation = (e) => {
+    if (!animTimers.length) return;
+    if (e.type === 'keydown' && e.key !== 'Escape' && e.key !== 'Enter' && e.key !== ' ') return;
+    if (e.type === 'keydown') e.preventDefault();
+    showLetter();
+  };
+  stage.addEventListener('pointerdown', skipAnimation);
+  document.addEventListener('keydown', skipAnimation);
+
   function openLetter() {
     if (opened) return;
     opened = true;
@@ -36,15 +47,34 @@
       showLetter();
       return;
     }
+    // Releitura: a mesma animação, só que mais curta (~1,2 s)
+    const quick = data.firstOpen === false;
+    const t = quick ? [200, 480, 850, 1200] : [350, 950, 1750, 2200];
+    if (quick) {
+      envelope.classList.add('quick');
+      stage.classList.add('quick');
+    }
+    stage.classList.add('animating');
     envelope.classList.add('seal-break');
     burst(seal);
-    setTimeout(() => envelope.classList.add('flap-open'), 350);
-    setTimeout(() => envelope.classList.add('letter-out'), 950);
-    setTimeout(() => stage.classList.add('fade-away'), 1750);
-    setTimeout(showLetter, 2200);
+    // só a partir do próximo evento: o próprio clique no selo não pode pular
+    setTimeout(() => {
+      animTimers = [
+        setTimeout(() => envelope.classList.add('flap-open'), t[0]),
+        setTimeout(() => envelope.classList.add('letter-out'), t[1]),
+        setTimeout(() => stage.classList.add('fade-away'), t[2]),
+        setTimeout(showLetter, t[3]),
+      ];
+    }, 0);
   }
 
   function showLetter() {
+    if (rendered) return;
+    animTimers.forEach(clearTimeout);
+    animTimers = [];
+    stage.removeEventListener('pointerdown', skipAnimation);
+    document.removeEventListener('keydown', skipAnimation);
+    stage.classList.remove('animating');
     stage.hidden = true;
     letterStage.hidden = false;
     const mode = reduceMotion ? 'none' : (data.content.reveal || 'fade');
@@ -53,6 +83,9 @@
       onPage: mode === 'write' ? (paper) => writeReveal(paper) : null,
     });
     letterStage.classList.add('appear');
+    // Impressão: as páginas escondidas também precisam dos adesivos no lugar
+    window.addEventListener('beforeprint', () => rendered.relayoutAll());
+    window.addEventListener('afterprint', () => rendered.relayout());
     setTimeout(() => Letter.playEffect(data.content.effect), 250);
     setupProgress();
     after.hidden = false;
@@ -120,16 +153,37 @@
     const send = (func, args) => {
       try { frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: args || [] }), '*'); } catch (e) { /* ainda carregando */ }
     };
+    // O player só manda notícias depois de ouvir "listening"; repete até a primeira resposta
+    let heard = false;
+    const listen = () => {
+      try { frame.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'bgm', channel: 'widget' }), '*'); } catch (e) { /* ainda carregando */ }
+    };
+    let listenTries = 0;
+    const listenTimer = setInterval(() => {
+      if (heard || ++listenTries > 120) clearInterval(listenTimer); // desiste depois de 30 s
+      else listen();
+    }, 250);
     frame.addEventListener('load', () => {
-      try { frame.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'bgm' }), '*'); } catch (e) { /* ignora */ }
+      listen();
       send('setVolume', [Math.round(volume * 100)]);
       send('playVideo');
     });
     window.addEventListener('message', (e) => {
+      if (e.source !== frame.contentWindow) return;
       if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(e.origin)) return;
       let msg;
       try { msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch (err) { return; }
-      const st = msg && msg.info && typeof msg.info === 'object' ? msg.info.playerState : (msg && msg.event === 'onStateChange' ? msg.info : undefined);
+      if (!msg || typeof msg !== 'object') return;
+      if (!heard) {
+        heard = true;
+        clearInterval(listenTimer);
+        send('setVolume', [Math.round(volume * 100)]);
+        if (!playing) send('playVideo');
+      }
+      let st;
+      if (msg.event === 'onStateChange') st = typeof msg.info === 'object' && msg.info ? msg.info.playerState : msg.info;
+      else if (msg.info && typeof msg.info === 'object' && 'playerState' in msg.info) st = msg.info.playerState;
+      st = Number(st);
       if (st === 1) { show(true); bar.classList.remove('needs-tap'); }
       if (st === 2 || st === 0) show(false);
     });
@@ -142,8 +196,19 @@
   }
 
   /** Texto aparecendo como se estivesse sendo escrito na hora. */
-  let skipWriting = null;
+  let activeWriter = null; // termina a escrita da página atual
+  let skipBtn = null;
+  function skipButton(on) {
+    if (!skipBtn) {
+      skipBtn = Letter.el('button', 'btn btn-sm skip-writing', { type: 'button', text: 'Mostrar tudo' });
+      skipBtn.addEventListener('click', () => { if (activeWriter) activeWriter(); });
+      document.body.appendChild(skipBtn);
+    }
+    skipBtn.hidden = !on;
+  }
+
   function writeReveal(paper) {
+    if (activeWriter) activeWriter(); // nova página: a anterior aparece inteira
     const blocks = Array.from(paper.querySelectorAll('.paper-inner > .lb'));
     const stickers = Array.from(paper.querySelectorAll('.sticker'));
     const jobs = blocks.map((block) => {
@@ -158,19 +223,26 @@
       return { block, texts };
     });
     stickers.forEach((st) => st.classList.add('w-hidden'));
+    paper.setAttribute('aria-busy', 'true');
 
     let cancelled = false;
+    const done = () => {
+      paper.removeAttribute('aria-busy');
+      if (activeWriter === finishAll) {
+        activeWriter = null;
+        skipButton(false);
+      }
+      if (rendered) rendered.relayout();
+    };
     const finishAll = () => {
+      if (cancelled) return;
       cancelled = true;
       jobs.forEach((j) => { j.block.classList.remove('w-hidden'); j.texts.forEach((t) => { t.node.nodeValue = t.full; }); });
       stickers.forEach((st) => st.classList.remove('w-hidden'));
-      skipBtn.remove();
-      rendered.relayout();
+      done();
     };
-    const skipBtn = Letter.el('button', 'btn btn-sm skip-writing', { type: 'button', text: 'Mostrar tudo' });
-    skipBtn.addEventListener('click', finishAll);
-    document.body.appendChild(skipBtn);
-    skipWriting = finishAll;
+    activeWriter = finishAll;
+    skipButton(true);
 
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     (async () => {
@@ -194,9 +266,9 @@
         await wait(180);
       }
       if (cancelled) return;
+      cancelled = true;
       stickers.forEach((st, i) => setTimeout(() => st.classList.remove('w-hidden'), i * 120));
-      skipBtn.remove();
-      rendered.relayout();
+      done();
     })();
   }
 
@@ -360,11 +432,67 @@
     btn.textContent = 'Gerando…';
     try {
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
-      const canvas = await window.html2canvas(rendered.paper, { scale: 2, backgroundColor: null, useCORS: true, logging: false });
-      const link = document.createElement('a');
-      link.download = (data.title || 'carta').replace(/[^\p{L}\p{N} _-]/gu, '').trim() + '.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      if (activeWriter) activeWriter();
+      const name = (data.title || 'carta').replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'carta';
+      const papers = rendered.papers;
+      const sizes = papers.map((pp) => {
+        const wasHidden = pp.hidden;
+        pp.hidden = false;
+        const r = { w: pp.offsetWidth, h: pp.offsetHeight };
+        pp.hidden = wasHidden;
+        return r;
+      });
+      const maxW = Math.max(...sizes.map((z) => z.w));
+      const totalH = sizes.reduce((n, z) => n + z.h, 0);
+      const MAX_PX = 16e6; // limite seguro de pixels por imagem (celulares)
+      // todas as páginas numa imagem só, uma embaixo da outra, se couber com boa nitidez
+      const stackScale = Math.min(2, Math.sqrt(MAX_PX / (maxW * totalH)));
+      const capture = async (i, scale) => {
+        const pp = papers[i];
+        const wasHidden = pp.hidden;
+        pp.hidden = false;
+        rendered.relayoutAll();
+        try {
+          return await window.html2canvas(pp, { scale, backgroundColor: null, useCORS: true, logging: false });
+        } finally {
+          pp.hidden = wasHidden;
+        }
+      };
+      const download = (cv, file) => new Promise((resolve, reject) => {
+        cv.toBlob((blob) => {
+          if (!blob) { reject(new Error('sem imagem')); return; }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = file;
+          link.href = url;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 4000);
+          resolve();
+        }, 'image/png');
+      });
+      if (papers.length === 1 || stackScale >= 1) {
+        const parts = [];
+        for (let i = 0; i < papers.length; i++) parts.push(await capture(i, stackScale));
+        let out = parts[0];
+        if (parts.length > 1) {
+          out = document.createElement('canvas');
+          out.width = Math.max(...parts.map((c) => c.width));
+          out.height = parts.reduce((n, c) => n + c.height, 0);
+          const ctx = out.getContext('2d');
+          let y = 0;
+          parts.forEach((c) => { ctx.drawImage(c, Math.round((out.width - c.width) / 2), y); y += c.height; });
+        }
+        await download(out, name + '.png');
+        if (papers.length > 1) toast('As ' + papers.length + ' páginas foram juntas numa imagem só.');
+      } else {
+        // carta muito comprida: uma imagem por página
+        for (let i = 0; i < papers.length; i++) {
+          const z = sizes[i];
+          const cv = await capture(i, Math.min(2, Math.sqrt(MAX_PX / (z.w * z.h))));
+          await download(cv, name + ' - página ' + (i + 1) + '.png');
+        }
+        toast('Salvei ' + papers.length + ' imagens, uma por página. Se o navegador perguntar, permita vários downloads.');
+      }
     } catch (err) {
       toast('Não consegui gerar a imagem. Tente "Salvar em PDF".', 'error');
     } finally {

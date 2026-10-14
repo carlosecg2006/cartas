@@ -172,7 +172,8 @@ page_head('Pessoas', ['body' => 'page-friends']);
             <input class="invite-url" readonly value="<?= e($inviteLink['url']) ?>" aria-label="Link">
             <textarea class="cred-message" readonly rows="3" data-copy-source><?= e($message) ?></textarea>
             <div class="row wrap">
-                <button class="btn btn-primary" type="button" data-copy><?= icon('copy') ?>Copiar mensagem</button>
+                <button class="btn btn-primary" type="button" data-share hidden><?= icon('share') ?>Compartilhar</button>
+                <button class="btn" type="button" data-copy><?= icon('copy') ?>Copiar mensagem</button>
                 <a class="btn" target="_blank" rel="noopener" href="https://wa.me/?text=<?= e(rawurlencode($message)) ?>"><?= icon('send') ?>Mandar pelo WhatsApp</a>
             </div>
         </div>

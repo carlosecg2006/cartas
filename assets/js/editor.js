@@ -2871,7 +2871,62 @@
     return s;
   }
 
+  // ----- ideias para quem trava diante da página em branco -----
+  const PROMPTS = [
+    'Uma lembrança nossa que sempre me faz rir', 'O que eu nunca te agradeci direito', 'A primeira vez que eu te vi',
+    'Uma coisa que você faz e nem percebe o quanto importa', 'O que eu queria que você soubesse hoje', 'Um lugar onde eu queria estar com você agora',
+    'Uma música que me lembra você, e por quê', 'O que eu admiro em você', 'Uma conversa nossa que eu não esqueço',
+    'Coisas que eu quero viver com você', 'Um conselho que você me deu e eu guardei', 'O dia em que você me ajudou sem saber',
+    'Três palavras que te descrevem', 'Como era a gente há alguns anos', 'Uma promessa que eu quero te fazer',
+    'O que eu sinto quando penso em você', 'Uma foto nossa e a história por trás dela', 'Se eu pudesse te dar qualquer presente',
+    'O que mudou em mim depois que te conheci', 'Uma piada interna só nossa', 'O que eu desejo para o seu próximo ano',
+    'Desculpa por…', 'Obrigado(a) por…', 'Sabe o que eu nunca te contei?',
+  ];
+  function pickPrompts(n) {
+    const pool = PROMPTS.slice();
+    const out = [];
+    while (out.length < n && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    return out;
+  }
+
+  function insertPrompt(text) {
+    const after = lastFocusedId && findBlock(lastFocusedId) ? lastFocusedId : (blocks().length ? blocks()[blocks().length - 1].id : null);
+    const cur = after ? findBlock(after) : null;
+    const esc = text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    // usa o parágrafo vazio onde está o cursor, se houver; senão cria um título com um parágrafo embaixo
+    const h = Object.assign(newBlock('paragraph'), { type: 'heading', level: 3, html: esc });
+    let anchor = after;
+    if (cur && cur.type === 'paragraph' && !(cur.html || '').replace(/<br>/g, '').trim()) {
+      replaceBlock(cur, h);
+      anchor = h.id;
+    } else {
+      insertBlockAfter(h, after);
+      anchor = h.id;
+    }
+    const p = newBlock('paragraph');
+    insertBlockAfter(p, anchor);
+    focusBlock(p.id, 'start');
+    commit();
+  }
+
   function panelBlocks() {
+    const ideas = panelSection('Sem ideias?', 'Um ponto de partida. Toque para colocar na carta.');
+    const chips = L.el('div', 'idea-chips prompt-chips');
+    const drawChips = () => {
+      chips.replaceChildren();
+      pickPrompts(3).forEach((t) => {
+        const c = L.el('button', 'idea-chip', { type: 'button', text: t });
+        c.addEventListener('mousedown', (e) => e.preventDefault());
+        c.addEventListener('click', () => { closeSheetOnMobile(); insertPrompt(t); });
+        chips.appendChild(c);
+      });
+      const more = L.el('button', 'idea-chip more', { type: 'button', text: 'Outras ideias', 'aria-label': 'Mostrar outras ideias' });
+      more.addEventListener('click', drawChips);
+      chips.appendChild(more);
+    };
+    drawChips();
+    ideas.appendChild(chips);
+
     const s = panelSection('Inserir bloco', 'Entra logo depois do bloco onde está o cursor.');
     const grid = L.el('div', 'tile-grid');
     BLOCKS.forEach((d) => {

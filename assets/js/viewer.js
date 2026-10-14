@@ -6,7 +6,8 @@
   const holder = document.querySelector('[data-envelope]');
   const letterStage = document.querySelector('[data-letter-stage]');
   const after = document.querySelector('[data-after]');
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // preferência do sistema ou a escolha "Reduzir animações" feita em Conta
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches || data.reduceMotion === true;
 
   const envelope = Letter.renderEnvelope(data.envelope, data.toName, {
     interactive: !data.locked,

@@ -128,6 +128,7 @@
         const target = new Date(node.dataset.countdown).getTime();
         let diff = Math.max(0, Math.floor((target - (Date.now() + offset)) / 1000));
         if (diff === 0) {
+          if (node.dataset.reloading) return;
           node.textContent = 'agora';
           if (node.hasAttribute('data-reload') && !node.dataset.reloading) {
             node.dataset.reloading = '1';
@@ -333,4 +334,17 @@
       prompt.hidden = true;
     });
   }
+
+  // Compartilhar pelo menu do celular (WhatsApp, Instagram…), quando o navegador oferece
+  document.querySelectorAll('[data-share]').forEach((btn) => {
+    if (!navigator.share) return;
+    btn.hidden = false;
+    btn.addEventListener('click', async () => {
+      const box = btn.closest('.card') || document;
+      const text = box.querySelector('[data-copy-source]')?.value || box.querySelector('[data-copy-source]')?.textContent || '';
+      try {
+        await navigator.share({ text });
+      } catch (e) { /* a pessoa cancelou */ }
+    });
+  });
 })();

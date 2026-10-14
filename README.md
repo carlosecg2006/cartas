@@ -5,7 +5,9 @@ Um site para trocar cartas digitais. Cada pessoa tem o próprio login, a própri
 ## Como funcionam as pessoas
 
 - Quem instala o site cria a primeira conta. A partir daí, **qualquer pessoa pode convidar alguém** (em **Pessoas**): o site gera um **link de convite**, a pessoa abre, cria a própria conta com a senha que quiser e vocês entram um na lista do outro. Se ela já tem conta, o mesmo link só conecta vocês dois.
-- Para quem não consegue abrir o link, ainda dá para criar o acesso direto (o site gera a senha). Quem criou a conta pode mandar um **link para escolher senha nova** quando a pessoa esquecer.
+- Para quem não consegue abrir o link, ainda dá para criar o acesso direto (o site gera a senha). Quem criou esse acesso pode editar ou apagar **só até a pessoa entrar pela primeira vez**; depois, pode no máximo mandar um **link para a pessoa escolher a própria senha nova**, e a pessoa pode desligar até isso em Conta.
+- Quem entra por convite escolhe a própria senha e ganha um **código de recuperação**: ninguém mais mexe na conta, nem quem convidou, nem quem instalou o site.
+- Dá para **bloquear** alguém: a pessoa sai da lista e não consegue mais mandar cartas.
 - Você só escreve para quem está na **sua** lista, com o apelido que quiser dar (o apelido é só seu).
 - Quem recebe uma carta ganha automaticamente quem escreveu na lista, e pode **responder com outra carta**.
 - Ninguém vê cartas de outras pessoas, nem quem instalou o site.
@@ -20,6 +22,9 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 - **Página de amizade**: todas as cartas trocadas com uma pessoa numa linha do tempo, "trocando cartas desde…", contagens e aniversário
 - **Busca** em todas as suas cartas (cartas lacradas só entram depois de abertas) e **favoritas**
 - **Lembrete gentil**: avisa quando faz tempo que você não escreve para alguém da sua lista
+- **Neste dia**: cartas trocadas na mesma data em anos anteriores aparecem na caixa
+- **Primeiros passos** para quem acabou de entrar, e **ideias para começar** a escrever no editor
+- **Anotações privadas** sobre cada pessoa da lista
 - **8 modelos prontos** para começar (aniversário, saudade, obrigado, "abra quando…", fim de ano, desculpa, bilhete, em branco)
 - **Editor com blocos (como no Notion)**
   - Texto, títulos, citação, listas, lista de desejos, destaque, foto, **galeria** (espalhada, grade ou filme), **foto e texto lado a lado**, **mensagem de voz gravada no navegador**, música do YouTube/Spotify, segredo, divisórias, assinatura e espaçamento
@@ -46,7 +51,13 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 - Entram quando quiserem ("lembrar de mim") e veem só as cartas deles; as "abra quando…" ficam numa seção própria
 - Dá para instalar o site na tela inicial do celular, como um app
 - **Avisos no celular** quando chega carta ou recado (ative em **Conta**; no iPhone, só com o site instalado na tela de início)
-- **Modo escuro**: automático (segue o celular) ou escolhido em **Conta**
+- **Modo escuro**: automático (segue o celular) ou escolhido em **Conta**, e opção de **reduzir animações**
+- Abertura animada só na primeira leitura (dá para pular tocando na tela); releituras são rápidas
+
+**Seus dados (LGPD)**
+- **Baixar todas as minhas cartas**: um ZIP com as cartas, fotos, áudios e recados, que abre em qualquer navegador sem internet
+- **Apagar a conta** sozinho(a), escolhendo se as cartas enviadas ficam com quem recebeu
+- Páginas de **Privacidade** e **Ajuda**, **sair de todos os aparelhos**, **código de recuperação** para quando esquecer a senha
 - Abertura animada: o selo se parte, a aba abre, a carta sai e os blocos aparecem um a um
 - Cartas agendadas aparecem lacradas com contagem regressiva (o conteúdo nem chega ao navegador antes da hora)
 - Reagem, respondem, ouvem a mensagem de voz e salvam a carta em PDF ou imagem
@@ -70,6 +81,7 @@ Requisitos: PHP 8.1 ou mais novo com PDO MySQL, GD e DOM (todas as hospedagens c
 1. Baixe o ZIP novo e envie os arquivos para `htdocs`, **substituindo** os antigos.
 2. **Não apague** o `config.php` nem a pasta `storage` (é lá que ficam as fotos e os áudios). O ZIP não traz esses arquivos, então substituir tudo é seguro.
 3. Abra o site: o banco se atualiza sozinho na primeira visita, sem perder cartas.
+   (Se a hospedagem estiver lenta nessa primeira visita, é normal demorar alguns segundos uma única vez.)
 4. Para conferir os avisos no celular, vá em **Conta → Avisos no celular → Mandar um aviso de teste**. Algumas hospedagens gratuitas bloqueiam conexões de saída; se for o caso, o botão mostra o erro e o resto do site continua funcionando normalmente.
 
 ## Rodar no seu computador
@@ -90,7 +102,11 @@ carta.php        leitura da carta (envelope, música, reações, respostas, favo
 amigos.php       pessoas: convites, apelidos, aniversários
 pessoa.php       página de amizade (linha do tempo com uma pessoa)
 convite.php      abre o link de convite ou de senha nova
-conta.php        perfil, aparência (modo escuro), avisos no celular e senha
+conta.php        perfil, aparência, avisos, senha, código de recuperação, privacidade, apagar conta
+exportar.php     baixar todas as cartas (ZIP que abre sem internet)
+recuperar.php    esqueci minha senha (com o código de recuperação)
+privacidade.php  como os dados são guardados (LGPD)
+ajuda.php        perguntas frequentes
 api.php          salvar, enviar, enviar imagem/áudio, versões, reagir, responder, favoritar, avisos
 avisos.php       diz ao celular o que chegou quando um aviso é recebido
 sw.js            service worker que mostra os avisos
@@ -111,5 +127,10 @@ storage/         imagens enviadas (e o banco SQLite, se usado) — bloqueado par
 - Cada carta e cada arquivo é conferido no servidor: ninguém abre carta, foto ou áudio de outra pessoa mudando o endereço
 - Links de convite guardam só o *hash* do código, expiram e funcionam uma única vez
 - Os avisos no celular não levam conteúdo: o serviço de push só recebe um "toque" vazio, e o celular pergunta ao próprio site o que chegou
+- Limite de tentativas de login por usuário e por aparelho; trocar a senha desconecta os outros aparelhos
+- Senhas com no mínimo 8 caracteres; código de recuperação guardado embaralhado, de uso único
+- Imagens são recodificadas e conferidas antes de abrir (imagens gigantes são recusadas); cota de 400 MB por pessoa
+- Erros técnicos nunca aparecem na tela; se o banco da hospedagem cair por um instante, aparece um aviso amigável
+- Depois que o site responde uma vez por HTTPS, todo acesso por http:// passa a ir para https:// automaticamente
 - Só dá para enviar carta para quem está na sua lista (conferido no servidor, não só na tela)
 - Imagens são recodificadas no envio (remove dados escondidos e reduz o tamanho)

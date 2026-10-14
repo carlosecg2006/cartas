@@ -857,7 +857,8 @@
   // ---------- Efeitos ao abrir ----------
 
   function playEffect(kind, duration) {
-    if (!kind || kind === 'none' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!kind || kind === 'none' || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      || document.documentElement.dataset.reduceMotion === '1') return;
     const cv = el('canvas', 'effect-canvas');
     document.body.appendChild(cv);
     const ctx = cv.getContext('2d');

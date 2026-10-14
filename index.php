@@ -258,7 +258,7 @@ function mail_item(array $l, array $user): void
 
 page_head('Cartas', ['body' => 'page-home', 'css' => ['assets/css/letter.css']]);
 ?>
-<main class="container" data-mailbox data-count="<?= count($received) - count($transit) ?>">
+<main class="container" data-mailbox data-count="<?= count($received) - count($transit) ?>" data-latest="<?= (int) max(array_merge([0], array_map(fn($l) => (int) $l['id'], array_merge($openWhen, $inbox)))) ?>">
     <section class="page-head">
         <div>
             <p class="eyebrow">Correspondência de <?= e(first_name($user['name'])) ?></p>

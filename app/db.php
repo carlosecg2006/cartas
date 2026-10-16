@@ -253,10 +253,22 @@ function db_schema(string $driver): array
             username VARCHAR(40) NOT NULL,
             attempted_at DATETIME NOT NULL
         )$opts",
+        // respostas de quem recebe a blocos interativos (pergunta respondida, vale usado)
+        "CREATE TABLE IF NOT EXISTS interactions (
+            id $pk,
+            letter_id INT NOT NULL,
+            block_id VARCHAR(40) NOT NULL,
+            user_id INT NOT NULL,
+            value VARCHAR(200) NOT NULL DEFAULT '',
+            created_at DATETIME NOT NULL,
+            UNIQUE (letter_id, block_id, user_id),
+            FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )$opts",
     ];
 }
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 /** Atualiza o banco de instalações antigas uma única vez, sem perder dados. */
 function ensure_schema(): void
@@ -360,6 +372,13 @@ function db_migrate(): void
         'CREATE INDEX idx_media_user ON media (user_id)', 'CREATE INDEX idx_replies_letter ON replies (letter_id, read_at)',
         'CREATE INDEX idx_login_attempts_time ON login_attempts (attempted_at)', 'CREATE INDEX idx_letters_recipient ON letters (recipient_id, status)'] as $sql) {
         try_exec($sql);
+    }
+
+    // versão 6: blocos interativos (a tabela é criada pelo db_install, chamado antes; aqui é só garantia)
+    foreach (db_schema(db_driver()) as $sql) {
+        if (str_contains($sql, 'CREATE TABLE IF NOT EXISTS interactions')) {
+            try_exec($sql);
+        }
     }
 
     if ($legacy) {

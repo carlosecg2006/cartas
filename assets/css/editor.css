@@ -548,3 +548,46 @@
 /* Ideias para começar */
 .prompt-chips .idea-chip { text-align: left; line-height: 1.35; padding: .35rem .6rem; }
 .prompt-chips .idea-chip.more { color: var(--accent); border-style: dashed; }
+
+/* Sanfona, linha do tempo, contador, pergunta, vale, poema, lugar, colunas, botão (edição) */
+:is(.toggle-title, .quiz-q, .quiz-text, .story-date, .story-title, .coupon-title, .coupon-details, .poem-author,
+  .place-name, .place-caption, .place-date, .counter-label, .lb-button-label) { position: relative; }
+.eb :is(.toggle-title, .toggle-body, .quiz-q, .quiz-text, .story-date, .story-title, .story-text, .coupon-title, .coupon-details,
+  .poem-text, .poem-author, .place-name, .place-caption, .place-date, .col, .counter-label, .lb-button-label).is-empty { min-height: 1lh; }
+.eb .place-card :is(.place-name, .place-caption, .place-date).is-empty { min-width: 9em; }
+.eb .place-card .is-empty::before, .eb .lb-button .is-empty::before { text-transform: none; letter-spacing: 0; }
+.eb .poem-author.is-empty::before { content: attr(data-placeholder); }
+.toggle.editing .toggle-body { margin-left: .55em; padding-left: 1.05em; border-left: 2px dashed color-mix(in srgb, var(--ink) 28%, transparent); }
+.story-item:focus-within .story-dot { border-color: var(--accent); }
+.story-tools {
+  position: absolute; right: 0; top: 0; z-index: 3; display: flex; gap: 2px; padding: 2px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow);
+  font-family: var(--font-ui); opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+.story-item:hover > .story-tools, .story-item:focus-within > .story-tools { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .story-tools { opacity: .85; pointer-events: auto; } }
+.story-tool {
+  width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px;
+  background: none; color: var(--ink-2); cursor: pointer;
+}
+.story-tool:hover:not(:disabled) { background: var(--bg-2); color: var(--accent); }
+.story-tool:disabled { opacity: .3; cursor: default; }
+.eb .counter-nums { cursor: pointer; border-radius: .4em; }
+.eb .counter-nums:hover { outline: 2px dashed color-mix(in srgb, var(--ink) 25%, transparent); outline-offset: .15em; }
+.quiz-opt.is-answer { border-color: #3f9a5b; }
+.quiz-badge {
+  position: absolute; right: .4em; top: 50%; transform: translateY(-50%); pointer-events: none;
+  font-family: var(--font-ui); font-size: 11px; font-weight: 600; color: #fff; background: #3f9a5b; border-radius: 999px; padding: 1px 7px;
+}
+.coupon-emoji[type="button"], .place-emoji[type="button"] { cursor: pointer; border-radius: .2em; }
+.coupon-emoji[type="button"]:hover, .place-emoji[type="button"]:hover { background: rgba(255, 255, 255, .45); }
+.eb .lb-button { cursor: text; }
+.eb .lb-button.no-url { opacity: .8; outline: 2px dashed color-mix(in srgb, var(--ink) 40%, transparent); outline-offset: .15em; }
+.eb .lb-button-label.is-empty { min-width: 7em; }
+.eb .lb-button [contenteditable] { caret-color: var(--paper); }
+.menu-inputs { display: flex; gap: .4rem; align-items: center; }
+.menu-inputs input { flex: 1; min-width: 0; }
+.block-menu .menu-inputs .btn { margin-top: 0; }
+.block-menu .menu-input + .menu-label { margin-top: .6rem; }
+.menu-hint { margin: .3rem 0 0; font-size: .78rem; color: var(--muted); }
+.eb .lb-button .is-empty::before { color: color-mix(in srgb, var(--paper) 65%, transparent); }

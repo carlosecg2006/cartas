@@ -70,6 +70,40 @@ function export_block(array $b): string
         case 'signature':
             return '<div class="signature">' . ($b['closing'] !== '' ? '<p>' . e($b['closing']) . '</p>' : '') . '<p class="name">' . e($b['name']) . '</p>'
                 . ($b['date'] !== '' ? '<p class="date">' . e($b['date']) . '</p>' : '') . '</div>';
+        case 'toggle':
+            return '<details class="toggle"><summary>' . e($b['title'] ?: 'Mais') . '</summary><div>' . $b['html'] . '</div></details>';
+        case 'timeline':
+            $items = '';
+            foreach ($b['items'] as $i) {
+                $items .= '<li>' . ($i['date'] !== '' ? '<small>' . e($i['date']) . '</small><br>' : '')
+                    . ($i['title'] !== '' ? '<b>' . e($i['title']) . '</b><br>' : '') . $i['html'] . '</li>';
+            }
+            return '<ol class="timeline">' . $items . '</ol>';
+        case 'counter':
+            if ($b['date'] === '') {
+                return '';
+            }
+            $ts = strtotime(str_replace('T', ' ', $b['date']));
+            $when = $ts ? date(str_contains($b['date'], 'T') ? 'd/m/Y H:i' : 'd/m/Y', $ts) : $b['date'];
+            return '<p class="counter">⏳ ' . ($b['label'] !== '' ? e($b['label']) . ' · ' : '') . ($b['mode'] === 'until' ? 'Até ' : 'Desde ') . e($when) . '</p>';
+        case 'quiz':
+            $opts = '';
+            foreach ($b['options'] as $n => $o) {
+                $opts .= '<li>' . e($o) . ($b['answer'] === $n ? ' ✓' : '') . '</li>';
+            }
+            return '<div class="quiz"><p><b>❓ ' . e($b['question']) . '</b></p><ol type="A">' . $opts . '</ol></div>';
+        case 'coupon':
+            return '<div class="coupon" style="background:' . e($b['bg']) . '"><span>' . e($b['emoji']) . '</span><div><b>' . e($b['title']) . '</b>'
+                . ($b['details'] !== '' ? '<br><small>' . e($b['details']) . '</small>' : '') . '</div></div>';
+        case 'poem':
+            return '<div class="poem">' . $b['html'] . ($b['author'] !== '' ? '<p class="date">— ' . e($b['author']) . '</p>' : '') . '</div>';
+        case 'place':
+            return '<p class="place">' . e($b['emoji']) . ' <b>' . e($b['name']) . '</b>' . ($b['caption'] !== '' ? '<br>' . e($b['caption']) : '')
+                . ($b['date'] !== '' ? '<br><small>' . e($b['date']) . '</small>' : '') . '</p>';
+        case 'columns':
+            return '<div class="phototext"><div>' . $b['left'] . '</div><div>' . $b['right'] . '</div></div>';
+        case 'button':
+            return $b['url'] !== '' ? '<p class="button"><a href="' . e($b['url']) . '" target="_blank" rel="noopener noreferrer">' . e($b['label'] ?: $b['url']) . '</a></p>' : '';
     }
     return '';
 }
@@ -119,6 +153,10 @@ function export_index_html(array $user, array $letters): string
         . '.phototext{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center}.secret{border:1px dashed #b9ad9d;padding:10px 14px;border-radius:8px;margin:12px 0}'
         . '.signature{text-align:right}.signature .name{font-size:1.4rem;margin:0}.signature .date{font-size:13px;color:#71685d}blockquote{border-left:3px solid #d6cab9;margin:12px 0;padding-left:14px;font-style:italic}'
         . '.replies{font:15px system-ui,sans-serif;margin-top:16px}.label{font-style:italic}ul.check{list-style:none;padding-left:0}audio{width:100%}'
+        . '.toggle summary{cursor:pointer;font-weight:bold}.timeline{border-left:2px solid #d6cab9;list-style:none;padding-left:16px}.timeline li{margin:0 0 12px}'
+        . '.coupon{display:flex;gap:12px;align-items:center;padding:14px;border-radius:10px;border:2px dashed rgba(0,0,0,.25);color:#3b3340}.coupon span{font-size:2rem}'
+        . '.poem{text-align:center;line-height:1.9}.place{border:2px dashed #b9ad9d;padding:10px 14px;border-radius:8px;text-align:center}'
+        . '.button a{display:inline-block;padding:8px 18px;border-radius:999px;background:var(--ink);color:var(--paper);text-decoration:none}'
         . '@media (max-width:560px){.phototext{grid-template-columns:1fr}.paper{padding:20px}}@media print{.letter{break-before:page}}';
     $html = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         . '<title>Cartas de ' . e($user['name']) . '</title><style>' . $css . '</style></head><body><main>'

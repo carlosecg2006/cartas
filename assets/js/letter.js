@@ -221,8 +221,12 @@
     node.style.color = b.color || '';
   }
 
-  /** Renderiza um bloco para leitura. */
-  function renderBlock(b, paper) {
+  /**
+   * Renderiza um bloco para leitura.
+   * ctx (opcional): { interaction, onInteract(blockId, value) → Promise, sender, otherName }
+   * — usado pelos blocos interativos (pergunta, vale).
+   */
+  function renderBlock(b, paper, ctx) {
     const node = el('div');
     applyBlockStyle(node, b, paper);
     switch (b.type) {
@@ -306,8 +310,409 @@
       case 'spacer':
         node.style.height = 'calc(' + (b.height || 40) + ' * var(--u))';
         break;
+      default:
+        if (EXTRA_RENDERERS[b.type]) node.appendChild(EXTRA_RENDERERS[b.type](b, ctx || {}));
     }
     return node;
+  }
+
+  // ---------- Blocos: sanfona, linha do tempo, contador, pergunta, vale, poema, lugar, colunas, botão ----------
+  // Cada um recebe (b, ctx). No editor, ctx.editing = true e ctx.field cria os campos editáveis:
+  // a estrutura (e o tamanho) do bloco é a mesma na leitura e na edição.
+
+  /** Põe um campo de texto: na leitura, só se tiver conteúdo (ou se always); na edição, sempre. */
+  function putField(ctx, parent, tag, cls, value, kind, placeholder, onChange, always) {
+    let node;
+    if (ctx.editing && ctx.field) node = ctx.field(tag, cls, value, kind, placeholder, onChange);
+    else if (!always && (kind === 'html' ? isBlank(value) : !String(value || '').trim())) return null;
+    else node = el(tag, cls, kind === 'html' ? { html: value || '' } : { text: value || '' });
+    parent.appendChild(node);
+    return node;
+  }
+
+  const PREVIEW_HINT = 'Quem receber vai poder responder';
+
+  /** Quem está vendo um bloco interativo: 'edit', 'sender' (só lê o resultado), 'recipient' ou 'preview'. */
+  function interactiveState(ctx) {
+    if (ctx.editing) return 'edit';
+    if (ctx.sender) return 'sender';
+    return ctx.onInteract ? 'recipient' : 'preview';
+  }
+
+  function fmtShortDate(iso) {
+    const d = iso ? new Date(iso) : new Date();
+    if (isNaN(d)) return '';
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+  }
+
+  function renderToggle(b, ctx) {
+    const box = el('div', 'toggle');
+    const chev = el('span', 'toggle-chev', { 'aria-hidden': 'true' });
+    chev.appendChild(icon('chevron-down'));
+    if (ctx.editing) {
+      box.classList.add('editing', 'open');
+      const head = el('div', 'toggle-head');
+      head.appendChild(chev);
+      putField(ctx, head, 'span', 'toggle-title', b.title, 'plain', 'Título da sanfona', (v) => { b.title = v; });
+      box.appendChild(head);
+      putField(ctx, box, 'div', 'toggle-body toggle-inner lb-text', b.html, 'html', 'O que aparece quando abrir…', (v) => { b.html = v; });
+      return box;
+    }
+    const bodyId = 'tg-' + b.id + '-' + Math.random().toString(36).slice(2, 6);
+    const head = el('button', 'toggle-head', { type: 'button', 'aria-expanded': 'false', 'aria-controls': bodyId });
+    head.append(chev, el('span', 'toggle-title', { text: b.title || 'Toque para abrir' }));
+    const body = el('div', 'toggle-body', { id: bodyId, hidden: true });
+    body.appendChild(el('div', 'toggle-inner lb-text', { html: b.html || '' }));
+    box.append(head, body);
+    let anim = 0;
+    const quiet = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.reduceMotion === '1';
+    head.addEventListener('click', () => {
+      const open = head.getAttribute('aria-expanded') !== 'true';
+      head.setAttribute('aria-expanded', String(open));
+      box.classList.toggle('open', open);
+      clearTimeout(anim);
+      if (quiet()) {
+        body.hidden = !open;
+        body.style.height = '';
+        return;
+      }
+      body.hidden = false;
+      const full = body.scrollHeight;
+      body.style.height = (open ? 0 : full) + 'px';
+      void body.offsetHeight; // aplica a altura inicial antes da transição
+      body.style.height = (open ? full : 0) + 'px';
+      anim = setTimeout(() => {
+        body.style.height = '';
+        if (!open) body.hidden = true;
+      }, 320);
+    });
+    return box;
+  }
+
+  function renderTimeline(b, ctx) {
+    const list = el('ol', 'story-line');
+    (b.items || []).forEach((it, i) => {
+      const li = el('li', 'story-item');
+      li.appendChild(el('span', 'story-dot', { 'aria-hidden': 'true' }));
+      putField(ctx, li, 'div', 'story-date', it.date, 'plain', 'Quando? (ex.: março de 2021)', (v) => { it.date = v; });
+      putField(ctx, li, 'div', 'story-title', it.title, 'plain', 'O que aconteceu', (v) => { it.title = v; });
+      putField(ctx, li, 'div', 'story-text lb-text', it.html, 'html', 'Conte um pouco…', (v) => { it.html = v; });
+      if (ctx.itemTools) ctx.itemTools(li, i);
+      list.appendChild(li);
+    });
+    return list;
+  }
+
+  const COUNTER_UNITS = {
+    anos: ['ano', 'anos'], meses: ['mês', 'meses'], dias: ['dia', 'dias'],
+    horas: ['hora', 'horas'], min: ['minuto', 'minutos'], seg: ['segundo', 'segundos'],
+  };
+  const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+  function parseCounterDate(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/.exec(s || '');
+    if (!m) return null;
+    const d = new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 0, m[5] ? +m[5] : 0);
+    return isNaN(d) ? null : d;
+  }
+
+  function fmtCounterDate(s) {
+    const d = parseCounterDate(s);
+    if (!d) return '';
+    let t = d.getDate() + ' de ' + MESES[d.getMonth()] + ' de ' + d.getFullYear();
+    if (s.indexOf('T') > 0) t += ' às ' + String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
+    return t;
+  }
+
+  /** Partes do contador: desde (anos, meses, dias) ou até (dias, horas, minutos, segundos). */
+  function counterParts(b, now) {
+    const d = parseCounterDate(b.date);
+    if (!d) return null;
+    if (b.mode === 'until') {
+      const s = Math.max(0, Math.floor((d - now) / 1000));
+      return { done: s === 0, parts: [[Math.floor(s / 86400), 'dias'], [Math.floor((s % 86400) / 3600), 'horas'], [Math.floor((s % 3600) / 60), 'min'], [s % 60, 'seg']] };
+    }
+    if (now < d) return { parts: [[0, 'anos'], [0, 'meses'], [0, 'dias']] };
+    let y = now.getFullYear() - d.getFullYear();
+    let mo = now.getMonth() - d.getMonth();
+    let day = now.getDate() - d.getDate();
+    if (now.getHours() * 60 + now.getMinutes() < d.getHours() * 60 + d.getMinutes()) day--;
+    if (day < 0) {
+      mo--;
+      day += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    }
+    if (mo < 0) {
+      y--;
+      mo += 12;
+    }
+    return { parts: [[y, 'anos'], [mo, 'meses'], [day, 'dias']] };
+  }
+
+  function renderCounter(b, ctx) {
+    const box = el('div', 'counter counter-' + (b.mode === 'until' ? 'until' : 'since'));
+    putField(ctx, box, 'p', 'counter-label', b.label, 'plain', b.mode === 'until' ? 'Faltam' : 'Juntos há', (v) => { b.label = v; });
+    const nums = el('div', 'counter-nums');
+    const foot = el('p', 'counter-date');
+    box.append(nums, foot);
+    let shape = '';
+    const paint = () => {
+      const r = counterParts(b, new Date());
+      const key = !r ? 'none' : r.done ? 'done' : r.parts.map((p) => p[1]).join();
+      if (key !== shape) {
+        shape = key;
+        box.classList.toggle('counter-done', key === 'done');
+        if (!r) nums.replaceChildren(el('span', 'counter-empty', { text: ctx.editing ? 'Escolha a data no menu do bloco' : '—' }));
+        else if (r.done) nums.replaceChildren(el('span', 'counter-party', { text: 'Chegou o dia! 🎉' }));
+        else {
+          nums.replaceChildren(...r.parts.map(() => {
+            const cell = el('span', 'counter-cell');
+            cell.append(el('b'), el('small'));
+            return cell;
+          }));
+        }
+      }
+      if (r && !r.done) {
+        r.parts.forEach(([n, unit], i) => {
+          const cell = nums.children[i];
+          const txt = String(n);
+          if (cell.firstChild.textContent !== txt) cell.firstChild.textContent = txt;
+          cell.lastChild.textContent = n === 1 ? COUNTER_UNITS[unit][0] : COUNTER_UNITS[unit][1];
+        });
+      }
+      foot.textContent = r ? (b.mode === 'until' ? 'até ' : 'desde ') + fmtCounterDate(b.date) : '';
+    };
+    paint();
+    // Atualiza a cada segundo só enquanto aparece na tela
+    if (window.IntersectionObserver) {
+      let timer = 0;
+      const stop = () => {
+        clearInterval(timer);
+        timer = 0;
+        box.dataset.live = '0';
+      };
+      const io = new IntersectionObserver((entries) => {
+        const visible = entries[entries.length - 1].isIntersecting;
+        if (visible && !timer) {
+          paint();
+          box.dataset.live = '1';
+          timer = setInterval(() => {
+            if (!box.isConnected) {
+              stop();
+              io.disconnect();
+              return;
+            }
+            paint();
+          }, 1000);
+        } else if (!visible && timer) stop();
+      });
+      io.observe(box);
+    }
+    return box;
+  }
+
+  function renderQuiz(b, ctx) {
+    const box = el('div', 'quiz');
+    const mode = interactiveState(ctx);
+    putField(ctx, box, 'p', 'quiz-q', b.question, 'plain', 'Sua pergunta…', (v) => { b.question = v; }, true);
+    const list = el('div', 'quiz-options', { role: 'group', 'aria-label': b.question || 'Opções' });
+    const foot = el('p', 'quiz-foot', { 'aria-live': 'polite' });
+    const LETTERS = 'ABCD';
+    const options = b.options || [];
+    const opts = options.map((o, i) => {
+      const btn = el(mode === 'edit' ? 'div' : 'button', 'quiz-opt', mode === 'edit' ? null : { type: 'button' });
+      btn.appendChild(el('span', 'quiz-letter', { text: LETTERS[i], 'aria-hidden': 'true', contenteditable: mode === 'edit' ? 'false' : null }));
+      putField(ctx, btn, 'span', 'quiz-text', o, 'plain', 'Opção ' + LETTERS[i], (v) => { options[i] = v; }, true);
+      if (mode === 'edit' && b.answer === i) {
+        btn.classList.add('is-answer');
+        btn.appendChild(el('span', 'quiz-badge', { text: '✓ certa', contenteditable: 'false' }));
+      }
+      list.appendChild(btn);
+      return btn;
+    });
+    box.append(list, foot);
+
+    const chosen = ctx.interaction && /^\d$/.test(ctx.interaction.value) ? Number(ctx.interaction.value) : -1;
+    const showResult = (choice) => {
+      box.classList.add('answered');
+      opts.forEach((btn, i) => {
+        btn.disabled = true;
+        btn.classList.toggle('chosen', i === choice);
+        btn.classList.toggle('correct', b.answer >= 0 && i === b.answer);
+        btn.classList.toggle('wrong', b.answer >= 0 && i === choice && choice !== b.answer);
+        if (i === choice) btn.setAttribute('aria-pressed', 'true');
+      });
+      if (mode === 'sender') {
+        const verdict = b.answer < 0 ? '' : choice === b.answer ? ' ✓' : ' ✗';
+        foot.textContent = (ctx.otherName || 'Quem recebeu') + ' respondeu: ' + (options[choice] || LETTERS[choice]) + verdict;
+      } else if (b.answer < 0) {
+        foot.textContent = b.right || 'Resposta guardada! 💌';
+      } else {
+        foot.textContent = choice === b.answer ? (b.right || 'Acertou! 🎉') : (b.wrong || 'Quase! A resposta certa está marcada.');
+      }
+      foot.classList.toggle('is-right', b.answer < 0 || choice === b.answer);
+    };
+
+    if (mode === 'edit' || mode === 'preview') {
+      foot.textContent = PREVIEW_HINT;
+      foot.classList.add('quiz-hint');
+      if (mode === 'edit') foot.contentEditable = 'false';
+      else opts.forEach((btn) => { btn.disabled = true; });
+    } else if (chosen >= 0 && chosen < options.length) {
+      showResult(chosen);
+    } else if (mode === 'sender') {
+      opts.forEach((btn) => { btn.disabled = true; });
+      foot.textContent = 'Ainda sem resposta.';
+      foot.classList.add('quiz-hint');
+    } else {
+      foot.textContent = 'Toque numa opção';
+      foot.classList.add('quiz-hint');
+      let busy = false;
+      opts.forEach((btn, i) => btn.addEventListener('click', async () => {
+        if (busy || box.classList.contains('answered')) return;
+        busy = true;
+        box.classList.add('busy');
+        try {
+          await ctx.onInteract(b.id, String(i));
+          foot.classList.remove('quiz-hint');
+          showResult(i);
+        } catch (err) {
+          foot.textContent = (err && err.message) || 'Não deu para guardar sua resposta. Tente de novo.';
+        } finally {
+          busy = false;
+          box.classList.remove('busy');
+        }
+      }));
+    }
+    return box;
+  }
+
+  function renderCoupon(b, ctx) {
+    const wrap = el('div', 'coupon');
+    wrap.style.setProperty('--coupon', b.bg || '#f6d7c3');
+    const ticket = el('div', 'coupon-ticket');
+    const stub = el('div', 'coupon-stub');
+    stub.appendChild(el(ctx.editing ? 'button' : 'span', 'coupon-emoji', ctx.editing
+      ? { type: 'button', contenteditable: 'false', title: 'Trocar emoji', text: b.emoji || '🎟️' }
+      : { text: b.emoji || '🎟️', 'aria-hidden': 'true' }));
+    const main = el('div', 'coupon-main');
+    main.appendChild(el('span', 'coupon-kicker', { text: 'Vale', contenteditable: ctx.editing ? 'false' : null }));
+    putField(ctx, main, 'p', 'coupon-title', b.title, 'plain', 'Vale um abraço apertado', (v) => { b.title = v; }, true);
+    putField(ctx, main, 'p', 'coupon-details', b.details, 'plain', 'Detalhes (opcional): validade, regras…', (v) => { b.details = v; });
+    const foot = el('div', 'coupon-foot', { 'aria-live': 'polite', contenteditable: ctx.editing ? 'false' : null });
+    main.appendChild(foot);
+    ticket.append(stub, main);
+    wrap.appendChild(ticket);
+
+    const mode = interactiveState(ctx);
+    const used = ctx.interaction && ctx.interaction.value === 'used' ? ctx.interaction : null;
+    const markUsed = (at) => {
+      wrap.classList.add('used');
+      const when = fmtShortDate(at);
+      if (!wrap.querySelector('.coupon-stamp')) wrap.appendChild(el('span', 'coupon-stamp', { text: 'Usado em ' + when, 'aria-hidden': 'true' }));
+      foot.replaceChildren(el('span', 'coupon-note', {
+        text: mode === 'sender' ? (ctx.otherName || 'Quem recebeu') + ' usou em ' + when : 'Vale usado em ' + when + ' 💛',
+      }));
+    };
+    if (mode === 'edit' || mode === 'preview') {
+      foot.appendChild(el('span', 'coupon-note', { text: 'Quem receber vai poder usar o vale' }));
+    } else if (used) {
+      markUsed(used.at);
+    } else if (mode === 'sender') {
+      foot.appendChild(el('span', 'coupon-note', { text: 'Ainda não foi usado' }));
+    } else {
+      const ask = () => {
+        const use = el('button', 'coupon-btn', { type: 'button', text: 'Usar vale' });
+        use.addEventListener('click', () => {
+          const q = el('span', 'coupon-note', { text: 'Usar agora?' });
+          const yes = el('button', 'coupon-btn', { type: 'button', text: 'Sim, usar' });
+          const no = el('button', 'coupon-btn coupon-btn-ghost', { type: 'button', text: 'Agora não' });
+          no.addEventListener('click', () => {
+            ask();
+            foot.querySelector('button').focus();
+          });
+          yes.addEventListener('click', async () => {
+            yes.disabled = true;
+            no.disabled = true;
+            try {
+              const res = await ctx.onInteract(b.id, 'used');
+              markUsed(res && res.at);
+            } catch (err) {
+              foot.replaceChildren(el('span', 'coupon-note', { text: (err && err.message) || 'Não deu para usar agora. Tente de novo.' }));
+              setTimeout(ask, 2500);
+            }
+          });
+          foot.replaceChildren(q, yes, no);
+          yes.focus();
+        });
+        foot.replaceChildren(use);
+      };
+      ask();
+    }
+    return wrap;
+  }
+
+  function renderPoem(b, ctx) {
+    const box = el('div', 'poem');
+    putField(ctx, box, 'div', 'poem-text lb-text', b.html, 'html', 'Escreva seu poema…', (v) => { b.html = v; }, true);
+    putField(ctx, box, 'p', 'poem-author', b.author, 'plain', 'Autor (opcional)', (v) => { b.author = v; });
+    return box;
+  }
+
+  function renderPlace(b, ctx) {
+    const box = el('div', 'place');
+    const card = el('div', 'place-card');
+    card.appendChild(el(ctx.editing ? 'button' : 'span', 'place-emoji', ctx.editing
+      ? { type: 'button', contenteditable: 'false', title: 'Trocar emoji', text: b.emoji || '📍' }
+      : { text: b.emoji || '📍', 'aria-hidden': 'true' }));
+    putField(ctx, card, 'p', 'place-name', b.name, 'plain', 'Nome do lugar', (v) => { b.name = v; }, true);
+    putField(ctx, card, 'p', 'place-caption', b.caption, 'plain', 'Uma lembrança (opcional)', (v) => { b.caption = v; });
+    putField(ctx, card, 'p', 'place-date', b.date, 'plain', 'Data (opcional)', (v) => { b.date = v; });
+    box.appendChild(card);
+    return box;
+  }
+
+  function renderColumns(b, ctx) {
+    const row = el('div', 'columns');
+    putField(ctx, row, 'div', 'col lb-text', b.left, 'html', 'Coluna da esquerda…', (v) => { b.left = v; }, true);
+    putField(ctx, row, 'div', 'col lb-text', b.right, 'html', 'Coluna da direita…', (v) => { b.right = v; }, true);
+    return row;
+  }
+
+  function renderButton(b, ctx) {
+    const wrap = el('div', 'lb-btn-wrap');
+    if (ctx.editing) {
+      const pill = el('span', 'lb-button' + (b.url ? '' : ' no-url'));
+      putField(ctx, pill, 'span', 'lb-button-label', b.label, 'plain', 'Texto do botão', (v) => { b.label = v; });
+      pill.appendChild(icon('link', 'lb-button-ic'));
+      wrap.appendChild(pill);
+      return wrap;
+    }
+    const pill = b.url
+      ? el('a', 'lb-button', { href: b.url, target: '_blank', rel: 'noopener noreferrer' })
+      : el('span', 'lb-button no-url');
+    pill.appendChild(el('span', 'lb-button-label', { text: b.label || b.url || 'Link' }));
+    pill.appendChild(icon('link', 'lb-button-ic'));
+    wrap.appendChild(pill);
+    return wrap;
+  }
+
+  const EXTRA_RENDERERS = {
+    toggle: renderToggle, timeline: renderTimeline, counter: renderCounter, quiz: renderQuiz, coupon: renderCoupon,
+    poem: renderPoem, place: renderPlace, columns: renderColumns, button: renderButton,
+  };
+
+  /** Normaliza um link de botão como o servidor faz (só http/https; "site.com" vira "https://site.com"). */
+  function normalizeUrl(url) {
+    url = (url || '').trim();
+    if (!url || /[\s<>"]/.test(url)) return '';
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url.replace(/^\/+/, '');
+    try {
+      const u = new URL(url);
+      if (!/^https?:$/.test(u.protocol) || !u.hostname || (!u.hostname.includes('.') && u.hostname !== 'localhost')) return '';
+      return url;
+    } catch (e) {
+      return '';
+    }
   }
 
   function renderImageFigure(b) {
@@ -656,12 +1061,16 @@
     paper.classList.toggle('paper-fluid', fluid);
   }
 
-  function buildPaper(scene, page, p, fluid) {
+  function buildPaper(scene, page, p, fluid, opts) {
     const paper = el('div', 'paper');
     paper.dataset.fluid = fluid ? '1' : '';
     applyPaper(scene, paper, p);
     const inner = el('div', 'paper-inner');
-    page.blocks.forEach((b) => inner.appendChild(renderBlock(b, p)));
+    opts = opts || {};
+    const interactions = opts.interactions || {};
+    page.blocks.forEach((b) => inner.appendChild(renderBlock(b, p, {
+      interaction: interactions[b.id] || null, onInteract: opts.onInteract || null, sender: !!opts.sender, otherName: opts.otherName || '',
+    })));
     paper.appendChild(inner);
     const layer = el('div', 'sticker-layer');
     page.stickers.forEach((s) => layer.appendChild(stickerEl(s)));
@@ -672,6 +1081,8 @@
   /**
    * Monta a carta completa para leitura.
    * opts.reveal: blocos aparecem um a um · opts.onPage(paper, index): chamado quando uma página aparece pela 1ª vez
+   * opts.interactions: {blockId: {value, at}} · opts.onInteract(blockId, value) → Promise (quem recebe responde/usa)
+   * opts.sender: quem escreveu está vendo (resultados só para ler) · opts.otherName: nome de quem recebeu
    */
   function renderLetter(container, content, opts) {
     opts = opts || {};
@@ -679,7 +1090,7 @@
     const scene = el('div', 'letter-scene');
     const pages = splitPages(content);
     const fluid = !(content.stickers || []).length;
-    const papers = pages.map((pg) => buildPaper(scene, pg, p, fluid));
+    const papers = pages.map((pg) => buildPaper(scene, pg, p, fluid, opts));
     let current = 0;
     const seen = new Set();
     const cleanups = [];
@@ -947,6 +1358,7 @@
     uid, el, icon, mediaUrl, unitPx, setFluid, parseMusicUrl, musicEmbed, isDark, fmtTime,
     renderGallery, renderAudio, renderScratch, SCRATCH_COVERS, doodleSvg, stampEl, postmarkEl, playEffect, splitPages,
     applyPaper, applyBlockStyle, renderBlock, renderImageFigure, renderDivider, renderSignature,
+    EXTRA_RENDERERS, normalizeUrl, parseCounterDate, counterParts,
     stickerEl, updateStickerBox, fillSticker, layoutStickers, anchorTop,
     renderLetter, renderEnvelope,
   };

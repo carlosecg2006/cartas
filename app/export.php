@@ -181,6 +181,7 @@ function export_json(array $user, array $letters): string
             'situacao' => $l['status'], 'enviada_em' => $l['sent_at'], 'abrir_a_partir_de' => $l['open_at'],
             'aberta_pela_primeira_vez' => $l['first_opened_at'], 'conteudo' => $l['content'], 'recados' => $l['replies'], 'reacoes' => $l['reactions'],
         ], $letters),
+        'modelos' => array_map(fn($t) => ['nome' => $t['name'], 'criado_em' => $t['created_at'], 'conteudo' => json_decode((string) $t['content'], true)], q_all('SELECT name, content, created_at FROM templates WHERE user_id = ? ORDER BY id', [(int) $user['id']])),
     ];
     return json_encode($out, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 }

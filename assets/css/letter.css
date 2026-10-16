@@ -972,3 +972,91 @@ button.quiz-opt:focus-visible { outline: 2px solid color-mix(in srgb, var(--ink)
   50% { opacity: 1; transform: translate3d(var(--x), var(--y), 0) scale(1); }
 }
 @media print { .fx-layer { display: none !important; } }
+
+/* ================================================================
+   Liberdade no texto, nos blocos e na abertura
+   (trechos com outra letra, degradês, sombra, espaçamentos, "caixa" dos blocos,
+   selo com foto e chuva de emojis). Tudo em em/--u: o papel continua proporcional.
+   ================================================================ */
+
+/* trecho com outra letra: o tamanho é corrigido pela escala de cada letra (igual aos blocos) */
+[class^="ff-"], [class*=" ff-"] { font-size: calc(1em * var(--ff-s, 1) / var(--block-fs, var(--font-scale, 1))); }
+.ff-caveat { font-family: 'Caveat', cursive; --ff-s: 1.3; }
+.ff-dancing { font-family: 'Dancing Script', cursive; --ff-s: 1.2; }
+.ff-indie { font-family: 'Indie Flower', cursive; --ff-s: 1.05; }
+.ff-patrick { font-family: 'Patrick Hand', cursive; --ff-s: 1.12; }
+.ff-shadows { font-family: 'Shadows Into Light', cursive; --ff-s: 1.15; }
+.ff-homemade { font-family: 'Homemade Apple', cursive; --ff-s: 0.85; }
+.ff-gloria { font-family: 'Gloria Hallelujah', cursive; --ff-s: 0.92; }
+.ff-special { font-family: 'Special Elite', monospace; --ff-s: 0.95; }
+.ff-playfair { font-family: 'Playfair Display', serif; --ff-s: 1; }
+.ff-lora { font-family: 'Lora', serif; --ff-s: 1; }
+.ff-nunito { font-family: 'Nunito', sans-serif; --ff-s: 1; }
+.ff-quicksand { font-family: 'Quicksand', sans-serif; --ff-s: 1; }
+.ff-pacifico { font-family: 'Pacifico', cursive; --ff-s: 1; }
+.ff-greatvibes { font-family: 'Great Vibes', cursive; --ff-s: 1.38; }
+.ff-satisfy { font-family: 'Satisfy', cursive; --ff-s: 1.15; }
+.ff-amatic { font-family: 'Amatic SC', cursive; --ff-s: 1.45; }
+.ff-kalam { font-family: 'Kalam', cursive; --ff-s: 1; }
+.ff-sacramento { font-family: 'Sacramento', cursive; --ff-s: 1.5; }
+.ff-courier { font-family: 'Courier Prime', monospace; --ff-s: 0.88; }
+.ff-reenie { font-family: 'Reenie Beanie', cursive; --ff-s: 1.3; }
+.ff-fredoka { font-family: 'Fredoka', sans-serif; --ff-s: 0.98; }
+.ff-cormorant { font-family: 'Cormorant Garamond', serif; --ff-s: 1.2; }
+.ff-marker { font-family: 'Permanent Marker', cursive; --ff-s: 0.88; }
+.ff-nanum { font-family: 'Nanum Pen Script', cursive; --ff-s: 1.3; }
+
+/* efeitos de trecho: degradês e sombra suave */
+.fx-gradient-sunset, .fx-gradient-ocean, .fx-gradient-rainbow {
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.fx-gradient-sunset { background-image: linear-gradient(90deg, #ff6b6b, #f7a046 55%, #e8547a); }
+.fx-gradient-ocean { background-image: linear-gradient(90deg, #1e6fd9, #22a6b3 55%, #3fc9a0); }
+.fx-gradient-rainbow { background-image: linear-gradient(90deg, #e8546b, #f29e4c, #e8c547, #6bbf8a, #5aa9e6, #9b7be0); }
+.paper-dark .fx-gradient-ocean { background-image: linear-gradient(90deg, #7fb8ff, #6fe0e8 55%, #8ff0c8); }
+.fx-shadow { text-shadow: .05em .07em .12em rgba(30, 20, 30, .32); }
+.paper-dark .fx-shadow { text-shadow: .05em .07em .14em rgba(0, 0, 0, .7); }
+
+/* espaçamento de letras e de linhas do bloco */
+.lb.ls-tight { letter-spacing: -.02em; }
+.lb.ls-wide { letter-spacing: .06em; }
+.lb.ls-wider { letter-spacing: .14em; }
+.lb.ls-tight :is(h1, h2, h3), .lb.ls-wide :is(h1, h2, h3), .lb.ls-wider :is(h1, h2, h3) { letter-spacing: inherit; }
+.lb.lh-tight, .lb.lh-tight :where(*) { line-height: 1.2; }
+.lb.lh-loose, .lb.lh-loose :where(*) { line-height: 2; }
+.lb.lh-looser, .lb.lh-looser :where(*) { line-height: 2.5; }
+
+/* alinhamento justificado */
+.lb[style*="text-align: justify"] .lb-text, .lb[style*="text-align: justify"] li { text-align: justify; hyphens: auto; }
+
+/* "caixa" do bloco. A borda fica num ::before por cima do bloco: o navegador arredonda bordas
+   para pixels inteiros, e uma borda de verdade mudaria a altura do bloco conforme a tela */
+.lb.has-box { background-color: var(--box-bg, transparent); }
+.lb[class*="box-bd-"]::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  border: calc(2 * var(--u)) solid var(--box-bc);
+}
+.lb.box-bd-dashed::before { border-style: dashed; }
+.lb.box-bd-dotted::before { border-width: max(2px, calc(3 * var(--u))); border-style: dotted; }
+.lb.box-bd-double::before { border-width: max(3px, calc(5 * var(--u))); border-style: double; }
+.lb.box-r-sm { border-radius: .3em; }
+.lb.box-r-md { border-radius: .75em; }
+.lb.box-r-round { border-radius: 1.6em; }
+.lb.box-p-sm { padding: .35em .6em; }
+.lb.box-p-md { padding: .8em 1.1em; }
+.lb.box-shadow { box-shadow: 0 .12em .2em rgba(40, 20, 30, .12), 0 .5em 1.1em -.3em rgba(40, 20, 30, .3); }
+.paper-dark .lb.box-shadow { box-shadow: 0 .12em .25em rgba(0, 0, 0, .35), 0 .5em 1.2em -.3em rgba(0, 0, 0, .6); }
+.lb.box-w75 { width: 75%; }
+.lb.box-w50 { width: 50%; }
+.lb.box-pos-center { margin-left: auto; margin-right: auto; }
+.lb.box-pos-left { margin-left: 0; margin-right: auto; }
+.lb.box-pos-right { margin-left: auto; margin-right: 0; }
+
+/* selo com foto */
+.stamp-photo { overflow: hidden; }
+.stamp-photo img { display: block; width: 100%; height: 100%; object-fit: cover; background: #e9e2d8; }
+
+/* chuva do seu jeito (emojis) */
+.fx-emoji .fx { width: auto; height: auto; font-size: var(--s); line-height: 1; background: none; }

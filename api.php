@@ -150,7 +150,8 @@ switch ($action) {
         q('UPDATE media SET in_library = 0 WHERE filename = ? AND user_id = ?', [$file, $uid]);
         // Se nenhuma carta usa o arquivo, ele pode ir embora de vez
         if (!q_val('SELECT 1 FROM letter_media WHERE filename = ?', [$file])
-            && !q_val('SELECT 1 FROM letter_versions v JOIN letters l ON l.id = v.letter_id WHERE l.sender_id = ? AND v.content LIKE ?', [$uid, '%' . $file . '%'])) {
+            && !q_val('SELECT 1 FROM letter_versions v JOIN letters l ON l.id = v.letter_id WHERE l.sender_id = ? AND v.content LIKE ?', [$uid, '%' . $file . '%'])
+            && !media_in_templates($uid, $file)) {
             $m = q_one('SELECT id FROM media WHERE filename = ? AND user_id = ?', [$file, $uid]);
             if ($m) {
                 @unlink(UPLOAD_DIR . '/' . $file);
@@ -158,6 +159,16 @@ switch ($action) {
             }
         }
         json_out(['ok' => true]);
+
+    case 'template_save':
+        // "Salvar como meu modelo": o conteúdo atual da carta, sem destinatário
+        load_letter_for($user, $in['id'] ?? 0, 'sender');
+        try {
+            $tid = save_user_template($uid, (string) ($in['name'] ?? ''), is_array($in['content'] ?? null) ? $in['content'] : []);
+        } catch (RuntimeException $e) {
+            json_error($e->getMessage());
+        }
+        json_out(['ok' => true, 'id' => $tid, 'count' => (int) q_val('SELECT COUNT(*) FROM templates WHERE user_id = ?', [$uid])]);
 
     case 'versions':
         $letter = load_letter_for($user, $in['id'] ?? 0, 'sender');

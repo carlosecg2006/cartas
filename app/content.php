@@ -23,7 +23,7 @@ const SCRATCH_COVERS = ['silver', 'gold', 'pink', 'mint'];
 const IMAGE_FITS = ['cover', 'contain', 'tile'];
 const TEXT_SIZES = ['sm', 'md', 'lg'];
 const BLOCK_SIZES = ['', 'sm', 'md', 'lg', 'xl'];
-const ALIGNS = ['left', 'center', 'right'];
+const ALIGNS = ['left', 'center', 'right', 'justify'];
 const ENVELOPE_LINERS = ['plain', 'stripes', 'dots', 'hearts', 'stars', 'flowers', 'checks'];
 const DIVIDER_STYLES = ['line', 'dashed', 'dots', 'hearts', 'stars', 'flowers', 'wave'];
 const IMAGE_FRAMES = ['plain', 'polaroid', 'rounded', 'tape', 'circle'];
@@ -38,7 +38,8 @@ const DOODLE_NAMES = ['heart', 'heart-fill', 'star', 'sparkle', 'arrow', 'arrow-
     'gift', 'balloon', 'butterfly', 'rainbow', 'umbrella', 'plane2', 'house', 'key', 'lock', 'ring', 'cat2', 'paw'];
 const STAMP_NAMES = ['heart', 'flower', 'bird', 'moon', 'coffee', 'mountain', 'wave', 'plane', 'cat', 'sun',
     'rose', 'star', 'cake', 'beach'];
-const EFFECT_NAMES = ['none', 'hearts', 'confetti', 'petals', 'stars', 'snow'];
+// 'emoji' = chuva do seu jeito: os emojis escolhidos (effectOpts.emojis) caem quando o envelope abre
+const EFFECT_NAMES = ['none', 'hearts', 'confetti', 'petals', 'stars', 'snow', 'emoji'];
 const GALLERY_LAYOUTS = ['scatter', 'grid', 'strip'];
 // Adesivos: animação, contorno recortado/sombra, filtro de foto e formas geométricas
 const STICKER_ANIMS = ['', 'float', 'pulse', 'wiggle', 'spin', 'sparkle', 'bounce'];
@@ -46,7 +47,17 @@ const STICKER_OUTLINES = ['', 'white', 'shadow', 'both'];
 const IMAGE_FILTERS = ['', 'pb', 'sepia', 'vintage', 'quente', 'frio', 'desbotado', 'contraste', 'sonho'];
 const SHAPE_NAMES = ['circle', 'square', 'rounded', 'heart', 'star', 'blob', 'arrow', 'bubble', 'ribbon', 'badge', 'cloud', 'sparkle4'];
 // Efeitos de texto (classes aceitas em <span>): marca-texto, sublinhado ondulado, brilho e contorno
-const TEXT_FX_CLASSES = ['fx-hl-yellow', 'fx-hl-pink', 'fx-hl-green', 'fx-hl-blue', 'fx-wavy', 'fx-glow', 'fx-outline'];
+const TEXT_FX_CLASSES = ['fx-hl-yellow', 'fx-hl-pink', 'fx-hl-green', 'fx-hl-blue', 'fx-wavy', 'fx-glow', 'fx-outline',
+    'fx-gradient-sunset', 'fx-gradient-ocean', 'fx-gradient-rainbow', 'fx-shadow'];
+// Espaçamento entre letras e entre linhas de um bloco ('' = o do papel)
+const BLOCK_SPACING = ['', 'tight', 'wide', 'wider'];
+const BLOCK_LEADING = ['', 'tight', 'loose', 'looser'];
+// "Caixa" de qualquer bloco: fundo, borda, cantos, respiro, sombra, inclinação e largura
+const BOX_BORDERS = ['none', 'solid', 'dashed', 'dotted', 'double'];
+const BOX_RADII = ['0', 'sm', 'md', 'round'];
+const BOX_PADS = ['none', 'sm', 'md'];
+const BOX_WIDTHS = ['full', 'w75', 'w50'];
+const BOX_POSITIONS = ['center', 'left', 'right'];
 const REACTION_EMOJIS = ['❤️', '🥹', '😂', '😭', '🤗', '🔥', '✨', '🫶'];
 
 const MEDIA_RE = '/^[a-f0-9]{32}\.(jpg|png|webp|gif)$/';
@@ -283,7 +294,9 @@ function wrap_styled_span(DOMElement $node, string $tag, string $inner): string
         }
     }
     foreach (preg_split('/\s+/', $node->getAttribute('class')) as $class) {
-        if (in_array($class, ['t-sm', 't-lg', 't-xl'], true) || in_array($class, TEXT_FX_CLASSES, true)) {
+        // ff-<letra>: um trecho com outra letra da lista (ex.: ff-pacifico)
+        if (in_array($class, ['t-sm', 't-lg', 't-xl'], true) || in_array($class, TEXT_FX_CLASSES, true)
+            || (str_starts_with($class, 'ff-') && in_array(substr($class, 3), LETTER_FONTS, true))) {
             $classes[] = $class;
         }
     }
@@ -335,7 +348,7 @@ function sanitize_letter_content($raw): array
             'label' => plain($env['label'] ?? '', 80),
             // surpresa: quem recebe só vê o título depois de abrir
             'hideTitle' => !empty($env['hideTitle']),
-        ],
+        ] + (media_or($env['stampImage'] ?? '') !== '' ? ['stampImage' => media_or($env['stampImage'])] : []),
         'effect' => pick($raw['effect'] ?? 'none', EFFECT_NAMES, 'none'),
         'reveal' => pick($raw['reveal'] ?? 'fade', REVEAL_MODES, 'fade'),
         'bgm' => sanitize_bgm($raw['bgm'] ?? null),
@@ -365,7 +378,64 @@ function sanitize_letter_content($raw): array
             $content['stickers'][] = $sticker;
         }
     }
+    $effectOpts = sanitize_effect_opts($raw['effectOpts'] ?? null);
+    if ($effectOpts) {
+        $content['effectOpts'] = $effectOpts;
+    }
     return $content;
+}
+
+/** Opções do efeito de abertura: até 3 emojis (chuva do seu jeito) e até 4 cores. Vazio = nada guardado. */
+function sanitize_effect_opts($raw): array
+{
+    if (!is_array($raw)) {
+        return [];
+    }
+    $out = [];
+    $emojis = [];
+    foreach (array_slice(is_array($raw['emojis'] ?? null) ? $raw['emojis'] : [], 0, 3) as $em) {
+        $em = trim(plain($em, 16));
+        if ($em === '' || preg_match('/[\s<>&"]/u', $em) || (function_exists('grapheme_strlen') && grapheme_strlen($em) > 3)) {
+            continue;
+        }
+        $emojis[$em] = true;
+    }
+    if ($emojis) {
+        $out['emojis'] = array_keys($emojis);
+    }
+    $colors = [];
+    foreach (array_slice(is_array($raw['colors'] ?? null) ? $raw['colors'] : [], 0, 4) as $c) {
+        $c = color_or($c, '');
+        if ($c !== '') {
+            $colors[$c] = true;
+        }
+    }
+    if ($colors) {
+        $out['colors'] = array_keys($colors);
+    }
+    return $out;
+}
+
+/** "Caixa" opcional de um bloco (vale para todos os tipos). Nada escolhido = sem caixa (null). */
+function sanitize_block_box($raw): ?array
+{
+    if (!is_array($raw)) {
+        return null;
+    }
+    $box = [
+        'bg' => color_or($raw['bg'] ?? null, ''),
+        'border' => pick($raw['border'] ?? 'none', BOX_BORDERS, 'none'),
+        'bc' => color_or($raw['bc'] ?? null, '#3b3340'),
+        'radius' => pick((string) ($raw['radius'] ?? '0'), BOX_RADII, '0'),
+        'pad' => pick($raw['pad'] ?? 'none', BOX_PADS, 'none'),
+        'shadow' => !empty($raw['shadow']),
+        'tilt' => (int) round(num($raw['tilt'] ?? 0, -4, 4, 0)),
+        'width' => pick($raw['width'] ?? 'full', BOX_WIDTHS, 'full'),
+        'pos' => pick($raw['pos'] ?? 'center', BOX_POSITIONS, 'center'),
+    ];
+    $empty = $box['bg'] === '' && $box['border'] === 'none' && $box['radius'] === '0' && $box['pad'] === 'none'
+        && !$box['shadow'] && $box['tilt'] === 0 && $box['width'] === 'full';
+    return $empty ? null : $box;
 }
 
 function sanitize_block(array $b): ?array
@@ -552,6 +622,19 @@ function sanitize_block(array $b): ?array
         default:
             return null;
     }
+    // opcionais de qualquer bloco: só entram quando escolhidos (cartas antigas ficam iguais)
+    $spacing = pick($b['spacing'] ?? '', BLOCK_SPACING, '');
+    $leading = pick($b['leading'] ?? '', BLOCK_LEADING, '');
+    if ($spacing !== '') {
+        $block['spacing'] = $spacing;
+    }
+    if ($leading !== '') {
+        $block['leading'] = $leading;
+    }
+    $box = sanitize_block_box($b['box'] ?? null);
+    if ($box) {
+        $block['box'] = $box;
+    }
     return $block;
 }
 
@@ -654,6 +737,9 @@ function sanitize_bgm($raw): array
 function content_media(array $content): array
 {
     $files = [];
+    if (!empty($content['envelope']['stampImage'])) {
+        $files[] = $content['envelope']['stampImage'];
+    }
     if (($content['bgm']['kind'] ?? '') === 'file' && !empty($content['bgm']['src'])) {
         $files[] = $content['bgm']['src'];
     }
@@ -770,6 +856,9 @@ function strip_media(array $content, array $files): array
         if (isset($bad[$content['paper'][$k] ?? ''])) {
             $content['paper'][$k] = '';
         }
+    }
+    if (isset($bad[$content['envelope']['stampImage'] ?? ''])) {
+        unset($content['envelope']['stampImage']);
     }
     if (isset($bad[$content['bgm']['src'] ?? ''])) {
         $content['bgm'] = ['kind' => 'none'];

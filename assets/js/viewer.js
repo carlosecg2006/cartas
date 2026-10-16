@@ -92,7 +92,7 @@
     // Impressão: as páginas escondidas também precisam dos adesivos no lugar
     window.addEventListener('beforeprint', () => rendered.relayoutAll());
     window.addEventListener('afterprint', () => rendered.relayout());
-    setTimeout(() => Letter.playEffect(data.content.effect), 250);
+    setTimeout(() => Letter.playEffect(data.content.effect, undefined, data.content.effectOpts), 250);
     setupProgress();
     after.hidden = false;
     renderReactions();

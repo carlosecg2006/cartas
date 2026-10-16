@@ -4480,9 +4480,10 @@
     const hideBox = $('[data-hide-title]');
     if (hideBox) hideBox.checked = !!state.content.envelope.hideTitle;
     $$('[data-send-step]', dialog).forEach((s) => { s.hidden = s.dataset.sendStep !== 'choose'; });
-    scheduleToggle.checked = !!DATA.letter.openAt;
     const stored = DATA.letter.openAt ? new Date(DATA.letter.openAt) : null;
-    openAt.value = stored && !isNaN(stored) ? toLocalInput(stored) : '';
+    // data de abrir que já passou: a carta já está aberta, não precisa (nem pode) agendar de novo
+    scheduleToggle.checked = !!stored && stored.getTime() > Date.now();
+    openAt.value = scheduleToggle.checked ? toLocalInput(stored) : '';
     openAt.min = toLocalInput(new Date());
     schedule.hidden = !scheduleToggle.checked;
     refreshSendPreview();

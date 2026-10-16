@@ -9,15 +9,29 @@
   /** Chamada à API: api('save', {...}) ou api('upload', formData) */
   window.api = async function (action, body, retried) {
     const isForm = body instanceof FormData;
-    const res = await fetch('api.php?action=' + encodeURIComponent(action), {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: isForm ? { 'X-CSRF-Token': csrf } : { 'X-CSRF-Token': csrf, 'Content-Type': 'application/json' },
-      body: isForm ? body : JSON.stringify(body || {}),
-    });
+    let res;
+    try {
+      res = await fetch('api.php?action=' + encodeURIComponent(action), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: isForm ? { 'X-CSRF-Token': csrf } : { 'X-CSRF-Token': csrf, 'Content-Type': 'application/json' },
+        body: isForm ? body : JSON.stringify(body || {}),
+      });
+    } catch (e) {
+      // sem internet: o navegador só diz "Failed to fetch"
+      throw new Error('Sem conexão com a internet. Confira e tente de novo.');
+    }
     let json = null;
     try {
-      json = await res.json();
+      const text = await res.text();
+      try {
+        json = JSON.parse(text);
+      } catch (e) {
+        // hospedagem que mostra avisos do PHP na tela: o JSON vem depois do aviso
+        const at = text.lastIndexOf('{"ok":');
+        if (at < 0) throw e;
+        json = JSON.parse(text.slice(at));
+      }
     } catch (e) {
       const err = new Error(res.status === 401 ? SESSION_ENDED : 'O servidor respondeu de um jeito estranho. Tente de novo.');
       err.status = res.status;

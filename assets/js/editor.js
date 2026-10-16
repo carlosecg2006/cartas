@@ -2168,7 +2168,32 @@
     return box;
   }
 
+  /**
+   * Foto grande de celular (vários MB, 48 megapixels…): reduz no próprio aparelho antes de enviar.
+   * A hospedagem recusa arquivos acima de ~10 MB e o servidor reduz para 1800 px de qualquer jeito.
+   */
+  async function shrinkForUpload(file) {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type || '') || file.size < 3 * 1048576) return file;
+    try {
+      const url = URL.createObjectURL(file);
+      let img;
+      try { img = await loadImage(url); } finally { URL.revokeObjectURL(url); }
+      const scale = Math.min(1, 2400 / Math.max(img.naturalWidth, img.naturalHeight));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      cv.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      const png = file.type === 'image/png';
+      const blob = await new Promise((r) => cv.toBlob(r, png ? 'image/png' : 'image/jpeg', 0.88));
+      if (!blob || blob.size >= file.size) return file;
+      return new File([blob], (file.name || 'foto').replace(/\.[a-z0-9]+$/i, '') + (png ? '.png' : '.jpg'), { type: blob.type });
+    } catch (e) {
+      return file; // o servidor ainda tenta (e explica se não der)
+    }
+  }
+
   async function uploadFile(file, kind) {
+    if (kind !== 'sticker') file = await shrinkForUpload(file);
     const fd = new FormData();
     fd.append('id', letterId);
     fd.append('image', file, file.name || 'imagem.png');
@@ -4085,7 +4110,8 @@
         sessionLost = true;
         retryDelay = 0;
       } else {
-        if (!offlineWarned) toast('Sem conexão. Vou tentar salvar de novo.', 'error');
+        // o servidor explicou o problema (carta grande demais, banco ocupado…): mostra a explicação
+        if (!offlineWarned) toast(err.status ? err.message : 'Sem conexão. Vou tentar salvar de novo.', 'error');
         offlineWarned = true;
         retryDelay = Math.min(30000, retryDelay ? retryDelay * 2 : 2000);
         saveTimer = setTimeout(save, retryDelay);

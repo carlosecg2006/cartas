@@ -943,6 +943,8 @@ button.quiz-opt:focus-visible { outline: 2px solid color-mix(in srgb, var(--ink)
 /* Modo "Escrevendo": o texto que falta já ocupa o lugar dele, só não aparece */
 .w-rest { visibility: hidden; }
 .w-text .lb-figure, .w-text img, .w-wait { opacity: 0; }
+/* marca-texto e sublinhado de trechos ainda não escritos não aparecem antes das palavras */
+.fx-hl-yellow:has(.w-rest), .fx-hl-pink:has(.w-rest), .fx-hl-green:has(.w-rest), .fx-hl-blue:has(.w-rest), .fx-wavy:has(.w-rest) { background: none; }
 .lb { transition: opacity .5s; }
 .w-caret { position: relative; }
 .w-caret::after {

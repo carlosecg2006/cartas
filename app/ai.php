@@ -105,6 +105,10 @@ function ai_write_letter(array $o): array
     } catch (\Anthropic\Core\Exceptions\APIConnectionException $e) {
         error_log('[cartas] IA sem conexão: ' . $e->getMessage());
         throw new RuntimeException('Não consegui falar com a IA (a hospedagem pode estar bloqueando). Montei um rascunho para você completar.');
+    } catch (\Throwable $e) {
+        // pacote da IA corrompido ou que não carrega nesta hospedagem: o assistente segue sem IA
+        error_log('[cartas] IA indisponível: ' . get_class($e) . ': ' . $e->getMessage());
+        throw new RuntimeException('A escrita com IA não está funcionando nesta hospedagem agora. Montei um rascunho para você completar.');
     }
 
     if ($message->stopReason === 'refusal') {

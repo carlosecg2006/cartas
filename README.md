@@ -73,6 +73,8 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 1. Crie uma conta em [infinityfree.com](https://www.infinityfree.com) e crie uma hospedagem com um **subdomínio gratuito** (ex.: `minhascartas.infinityfreeapp.com`).
 2. No painel (**Control Panel → MySQL Databases**), crie um banco de dados. Anote **host**, **nome do banco**, **usuário** e **senha**.
 3. Envie **todos os arquivos deste repositório** para a pasta `htdocs` (pelo **File Manager** do painel ou por FTP com o FileZilla).
+   - Pelo File Manager com o ZIP: **primeiro entre na pasta `htdocs`** (dois cliques nela), e só então use *Upload → Upload ZIP and extract* (ou envie o ZIP e clique com o botão direito → *Extract*). Se você enviar o ZIP na raiz (`/`), aparece o erro *"extract path must be within an htdocs folder"*.
+   - Depois de extrair, os arquivos (`index.php`, `app/`, `assets/`…) precisam estar **direto** dentro de `htdocs`, não numa subpasta. O ZIP pode ser apagado.
 4. Acesse o seu site. O **instalador** abre sozinho:
    - Passo 1: escolha *MySQL* e preencha os dados do banco
    - Passo 2: crie a sua conta de remetente
@@ -84,7 +86,7 @@ Requisitos: PHP 8.1 ou mais novo com PDO MySQL, GD e DOM (todas as hospedagens c
 
 ## Atualizar um site que já está no ar
 
-1. Baixe o ZIP novo e envie os arquivos para `htdocs`, **substituindo** os antigos.
+1. Baixe o ZIP novo, **entre na pasta `htdocs`** no File Manager e extraia o ZIP lá dentro, **substituindo** os arquivos antigos (veja o passo 3 acima).
 2. **Não apague** o `config.php` nem a pasta `storage` (é lá que ficam as fotos e os áudios). O ZIP não traz esses arquivos, então substituir tudo é seguro.
 3. Abra o site: o banco se atualiza sozinho na primeira visita, sem perder cartas.
    (Se a hospedagem estiver lenta nessa primeira visita, é normal demorar alguns segundos uma única vez.)

@@ -1346,7 +1346,10 @@
       if (key === current) opt.selected = true;
       select.appendChild(opt);
     });
-    select.addEventListener('change', () => onPick(select.value));
+    // a própria caixa mostra o nome na letra escolhida
+    const showFont = () => { select.style.fontFamily = (L.FONTS[select.value] || {}).css || ''; };
+    showFont();
+    select.addEventListener('change', () => { showFont(); onPick(select.value); });
     return select;
   }
 
@@ -1418,6 +1421,13 @@
         });
         s.appendChild(replace);
       }
+      menu.appendChild(s);
+    }
+
+    if (['image', 'phototext', 'gallery'].includes(b.type)) {
+      const s = section('Filtro da foto');
+      const preview = b.type === 'gallery' ? ((b.items || [])[0] || {}).src : b.src;
+      s.appendChild(filterPicker(preview, b.filter || '', (v) => update(() => { b.filter = v; })));
       menu.appendChild(s);
     }
 
@@ -1524,6 +1534,7 @@
     null,
     ['color', 'text-color', 'Cor do texto'],
     ['highlight', 'highlighter', 'Marca-texto'],
+    ['effects', 'sparkle', 'Efeitos de texto'],
     ['size', 'text-size', 'Tamanho'],
     null,
     ['link', 'link', 'Link'],
@@ -1571,6 +1582,10 @@
     const host = richHost();
     if (!host) return;
     savedRange = getSelection().getRangeAt(0).cloneRange();
+    if (cmd === 'effects') {
+      openTextFx(btn, host);
+      return;
+    }
     if (cmd === 'color' || cmd === 'highlight') {
       const colors = cmd === 'color' ? L.ACCENT_COLORS.concat([state.content.paper.ink]) : HIGHLIGHTS;
       const box = L.el('div', 'fmt-pop');
@@ -1606,6 +1621,93 @@
     }
     document.execCommand(cmd, false, null);
     afterFormat(host);
+  }
+
+  // ----- efeitos em trechos de texto: marca-texto, sublinhado ondulado, brilho e contorno -----
+  const fxFamily = (c) => (c.startsWith('fx-hl-') ? 'hl' : c);
+
+  function unwrapNode(node) {
+    const parent = node.parentNode;
+    while (node.firstChild) parent.insertBefore(node.firstChild, node);
+    node.remove();
+  }
+
+  /** Tira de um span as classes de efeito pedidas; se ele ficar vazio de atributos, some. */
+  function dropFx(sp, test) {
+    Array.from(sp.classList).forEach((c) => { if (L.TEXT_FX[c] && test(c)) sp.classList.remove(c); });
+    if (!sp.className) sp.removeAttribute('class');
+    if (!sp.attributes.length) unwrapNode(sp);
+  }
+
+  function applyTextFx(host, cls) {
+    restoreRange();
+    const sel = getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed || !host.contains(range.commonAncestorContainer)) return;
+    if (!cls) {
+      $$('span[class*="fx-"]', host).filter((sp) => range.intersectsNode(sp)).forEach((sp) => dropFx(sp, () => true));
+      afterFormat(host);
+      return;
+    }
+    const span = document.createElement('span');
+    span.className = cls;
+    span.appendChild(range.extractContents());
+    // dentro do trecho, o mesmo efeito (ou outro marca-texto) não se repete
+    $$('span', span).forEach((sp) => dropFx(sp, (c) => fxFamily(c) === fxFamily(cls)));
+    range.insertNode(span);
+    const r = document.createRange();
+    r.selectNodeContents(span);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    savedRange = r.cloneRange();
+    afterFormat(host);
+  }
+
+  function openTextFx(btn, host) {
+    const box = L.el('div', 'fmt-pop text-fx-pop');
+    const pick = (cls) => {
+      applyTextFx(host, cls);
+      closePopover();
+    };
+    box.appendChild(L.el('p', 'menu-label', { text: 'Marca-texto' }));
+    const hl = L.el('div', 'fx-row');
+    box.appendChild(hl);
+    const fx = L.el('div', 'fx-row');
+    Object.entries(L.TEXT_FX).forEach(([cls, label]) => {
+      const b = L.el('button', 'fx-opt', { type: 'button', title: label, 'aria-label': label });
+      b.appendChild(L.el('span', cls, { text: cls.startsWith('fx-hl-') ? 'abc' : 'Texto' }));
+      if (!cls.startsWith('fx-hl-')) b.appendChild(L.el('small', '', { text: label.replace('Sublinhado ', '') }));
+      b.addEventListener('mousedown', (e) => e.preventDefault());
+      b.addEventListener('click', () => pick(cls));
+      (cls.startsWith('fx-hl-') ? hl : fx).appendChild(b);
+    });
+    box.appendChild(L.el('p', 'menu-label', { text: 'Efeitos' }));
+    box.appendChild(fx);
+    const none = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Tirar efeitos do trecho' });
+    none.addEventListener('mousedown', (e) => e.preventDefault());
+    none.addEventListener('click', () => pick(''));
+    box.appendChild(none);
+    openPopover(btn, box, { keepFocus: true, className: 'text-fx-popover' });
+  }
+
+  /** Miniaturas com cada filtro aplicado à foto (ou só os nomes, sem foto). */
+  function filterPicker(src, current, onPick) {
+    const grid = L.el('div', 'filter-grid');
+    Object.entries(L.IMAGE_FILTERS).forEach(([key, label]) => {
+      const b = L.el('button', 'filter-thumb' + (current === key ? ' active' : ''), { type: 'button', title: label });
+      const th = L.el('span', 'filter-img' + (key ? ' imgf-' + key : ''));
+      if (src) th.appendChild(L.el('img', '', { src: L.mediaUrl(src), alt: '', loading: 'lazy' }));
+      else th.appendChild(L.el('span', 'filter-ph'));
+      b.append(th, L.el('span', 'filter-name', { text: label }));
+      b.addEventListener('click', () => {
+        $$('.filter-thumb', grid).forEach((o) => o.classList.remove('active'));
+        b.classList.add('active');
+        onPick(key);
+      });
+      grid.appendChild(b);
+    });
+    return grid;
   }
 
   function normalizeFonts(host) {
@@ -2106,6 +2208,7 @@
     if (s.kind === 'text') return 'Texto solto: ' + (s.text || '').slice(0, 40);
     if (s.kind === 'emoji') return 'Emoji ' + (s.char || '');
     if (s.kind === 'doodle') return 'Rabisco: ' + ((L.DOODLES[s.name] || {}).label || '');
+    if (s.kind === 'shape') return 'Forma: ' + ((L.SHAPES[s.name] || {}).label || '');
     return { image: 'Figurinha', tape: 'Fita washi', drawing: 'Desenho' }[s.kind] || 'Adesivo';
   }
 
@@ -2514,6 +2617,7 @@
       ['chevron-up', 'Trazer para frente', ']', () => restack(s, 'front')],
       ['chevron-down', 'Enviar para trás', '[', () => restack(s, 'back')],
       ['flip', 'Espelhar', '', () => flipSticker(s)],
+      ['star', 'Animação e efeitos', '', () => { const n = stickerNode(s.id); if (n) openStickerFx(n, s); }],
       [s.lk ? 'unlock' : 'lock', s.lk ? 'Destravar' : 'Travar posição', 'Ctrl+L', () => toggleLock(s)],
       ['trash', 'Excluir', 'Del', () => deleteSticker(s.id), 'danger'],
     ];
@@ -2613,6 +2717,37 @@
       });
       sep();
     }
+    if (s.kind === 'shape') {
+      btn('text-color', 'Cor e contorno', (e) => {
+        const box = L.el('div', 'fmt-pop');
+        box.appendChild(L.el('p', 'menu-label', { text: 'Cor' }));
+        box.appendChild(swatchRow(L.SHAPE_COLORS.concat(L.ACCENT_COLORS.slice(0, 4)), s.c, (c) => {
+          s.c = c;
+          refreshStickerNode(s);
+          commit();
+        }));
+        box.appendChild(L.el('p', 'menu-label', { text: 'Contorno' }));
+        box.appendChild(swatchRow(['#3b3340', '#ffffff', '#e8546b', '#c9a227', '#1f4e79'], s.s || '', (c) => {
+          s.s = c;
+          if (c && !s.sw) s.sw = 3;
+          refreshStickerNode(s);
+          commit();
+        }, { allowNone: true, noneLabel: 'Sem contorno' }));
+        box.appendChild(L.el('p', 'menu-label', { text: 'Espessura do contorno' }));
+        const range = L.el('input', '', { type: 'range', min: '0', max: '8', step: '1', value: String(s.sw || 0) });
+        range.addEventListener('input', () => {
+          s.sw = Number(range.value);
+          if (s.sw && !s.s) s.s = '#3b3340';
+          const node = stickerNode(s.id);
+          if (node) L.fillSticker(node, s);
+          refreshSelection();
+        });
+        range.addEventListener('change', commit);
+        box.appendChild(range);
+        openPopover(e.currentTarget, box);
+      });
+      sep();
+    }
     if (s.kind === 'tape') {
       btn('sparkle', 'Trocar estampa', () => {
         s.pattern = L.TAPES[(L.TAPES.indexOf(s.pattern) + 1) % L.TAPES.length];
@@ -2621,6 +2756,7 @@
       });
       sep();
     }
+    btn('star', 'Animação e efeitos', (e) => openStickerFx(e.currentTarget, s));
     btn('wand', 'Transparência', (e) => {
       const box = L.el('div', 'fmt-pop');
       box.appendChild(L.el('p', 'menu-label', { text: 'Transparência' }));
@@ -2648,6 +2784,27 @@
     btn('lock', 'Travar posição (Ctrl+L)', () => toggleLock(s));
     sep();
     btn('trash', 'Excluir (Delete)', () => deleteSticker(s.id), 'danger');
+  }
+
+  /** Animação, contorno recortado/sombra e (nas figurinhas) filtro de foto. */
+  function openStickerFx(anchor, s) {
+    const box = L.el('div', 'fmt-pop sticker-fx-pop');
+    const apply = () => {
+      refreshStickerNode(s);
+      commit();
+    };
+    box.appendChild(L.el('p', 'menu-label', { text: 'Animação' }));
+    box.appendChild(optionRow(L.STICKER_ANIMS, s.an || '', (v) => { s.an = v; apply(); }, { wrap: true }));
+    if (['image', 'emoji', 'doodle', 'shape', 'drawing', 'text'].includes(s.kind)) {
+      box.appendChild(L.el('p', 'menu-label', { text: 'Contorno' }));
+      box.appendChild(optionRow(L.STICKER_OUTLINES, s.ol || '', (v) => { s.ol = v; apply(); }, { wrap: true }));
+    }
+    if (s.kind === 'image') {
+      box.appendChild(L.el('p', 'menu-label', { text: 'Filtro' }));
+      box.appendChild(filterPicker(s.src, s.fi || '', (v) => { s.fi = v; apply(); }));
+    }
+    box.appendChild(L.el('p', 'panel-hint', { text: 'Quem pediu menos movimento nas configurações vê o adesivo parado.' }));
+    openPopover(anchor, box, { className: 'sticker-fx-popover' });
   }
 
   function refreshStickerNode(s) {
@@ -2963,6 +3120,8 @@
     }));
   }
 
+  var shapeColor = L.SHAPE_COLORS[0]; // var: o painel pode ser desenhado antes desta linha rodar
+
   function panelStickers() {
     const s1 = panelSection('Emojis', 'Toque para colocar no papel e depois arraste, gire e redimensione.');
     Object.entries(EMOJI_SETS).forEach(([name, list]) => {
@@ -2986,6 +3145,20 @@
     });
     sd.appendChild(dgrid);
 
+    const sf = panelSection('Formas', 'Formas cheias para etiquetas, fundos e molduras. Escolha a cor e toque na forma.');
+    const fgrid = L.el('div', 'doodle-grid shape-grid');
+    sf.appendChild(swatchRow(L.SHAPE_COLORS, shapeColor, (c) => {
+      shapeColor = c;
+      $$('path', fgrid).forEach((path) => path.setAttribute('fill', c));
+    }));
+    Object.entries(L.SHAPES).forEach(([name, def]) => {
+      const btn = L.el('button', 'doodle-btn', { type: 'button', title: def.label, 'aria-label': def.label });
+      btn.appendChild(L.shapeSvg({ name, c: shapeColor }));
+      btn.addEventListener('click', () => addSticker({ kind: 'shape', name, c: shapeColor, s: '', sw: 0, w: ['arrow', 'ribbon'].includes(name) ? 24 : 14, r: 0 }));
+      fgrid.appendChild(btn);
+    });
+    sf.appendChild(fgrid);
+
     const s2 = panelSection('Fitas washi');
     const tapes = L.el('div', 'tape-grid');
     L.TAPES.forEach((p) => {
@@ -3004,7 +3177,7 @@
       sample.appendChild(L.el('span', 'st-text st-' + style, { text: 'Aa' }));
       t.append(sample, L.el('span', 'tile-label', { text: label }));
       t.addEventListener('click', () => {
-        const s = addSticker({ kind: 'text', text: style === 'note' ? 'Lembra disso?' : 'Escreva aqui', font: state.content.paper.font, color: state.content.paper.ink, style, w: style === 'note' ? 26 : 30 });
+        const s = addSticker({ kind: 'text', text: style === 'note' ? 'Lembra disso?' : 'Escreva aqui', font: state.content.paper.font, color: style === 'neon' ? '#e8546b' : state.content.paper.ink, style, w: style === 'note' ? 26 : 30 });
         setTimeout(() => editStickerText(s), 50);
       });
       grid.appendChild(t);
@@ -3038,6 +3211,34 @@
       commit();
     };
 
+    // Estilos prontos: papel, letra, cenário, envelope e efeito de uma vez (um passo no desfazer)
+    if (DATA.themes && Object.keys(DATA.themes).length) {
+      const st = panelSection('Estilos prontos', 'Um toque muda papel, letra, cenário, envelope e efeito juntos.');
+      const tg = L.el('div', 'theme-grid');
+      Object.entries(DATA.themes).forEach(([key, t]) => {
+        const tp = t.paper || {};
+        const btn = L.el('button', 'theme-tile', { type: 'button', title: t.label, 'data-theme-key': key });
+        const sw = L.el('span', 'theme-swatch scene-' + (tp.scene && L.SCENES[tp.scene] && tp.scene !== 'image' ? tp.scene : 'plain'));
+        const mini = L.el('span', 'theme-paper', { text: 'Aa' });
+        mini.style.background = tp.color || '#fffdf6';
+        mini.style.color = tp.ink || '#3b3340';
+        mini.style.fontFamily = (L.FONTS[tp.font] || L.FONTS.caveat).css;
+        mini.style.fontSize = (15 * (L.FONTS[tp.font] || L.FONTS.caveat).scale).toFixed(1) + 'px';
+        sw.appendChild(mini);
+        btn.append(sw, L.el('span', 'theme-label', { text: (t.emoji ? t.emoji + ' ' : '') + t.label }));
+        btn.addEventListener('click', () => {
+          Object.assign(state.content.paper, tp);
+          state.content.envelope = Object.assign({}, state.content.envelope, t.envelope || {});
+          state.content.effect = t.effect || 'none';
+          renderAll();
+          commit();
+          renderPanel();
+        });
+        tg.appendChild(btn);
+      });
+      st.appendChild(tg);
+    }
+
     const s1 = panelSection('Papel');
     const grid = L.el('div', 'paper-grid');
     Object.entries(L.PAPERS).forEach(([key, label]) => {
@@ -3045,6 +3246,7 @@
       const sample = L.el('span', 'paper-sample paper paper-' + key);
       sample.style.setProperty('--paper', p.color);
       sample.style.setProperty('--ink', p.ink);
+      if (key === 'gradient') sample.style.setProperty('--paper2', p.color2 || '#f6d6e0');
       if (key === 'image') {
         if (p.image) sample.style.backgroundImage = 'url("' + L.mediaUrl(p.image) + '")';
         else sample.appendChild(L.icon('upload'));
@@ -3088,6 +3290,10 @@
     }
     s1.appendChild(L.el('p', 'menu-label', { text: 'Cor do papel' }));
     s1.appendChild(swatchRow(L.PAPER_COLORS, p.color, (c) => set('color', c)));
+    if (p.style === 'gradient') {
+      s1.appendChild(L.el('p', 'menu-label', { text: 'Segunda cor do degradê' }));
+      s1.appendChild(swatchRow(['#f6d6e0', '#fde2c4', '#d9ecdf', '#d6e6fa', '#e6dcfa', '#fff1b8', '#ffffff'], p.color2 || '#f6d6e0', (c) => set('color2', c)));
+    }
     s1.appendChild(L.el('p', 'menu-label', { text: 'Cor da tinta' }));
     s1.appendChild(swatchRow(L.INK_COLORS, p.ink, (c) => set('ink', c)));
 
@@ -3095,10 +3301,12 @@
     const fonts = L.el('div', 'font-list');
     Object.entries(L.FONTS).forEach(([key, f]) => {
       const btn = L.el('button', 'font-tile' + (p.font === key ? ' active' : ''), { type: 'button' });
-      const sample = L.el('span', 'font-sample', { text: 'Querida amiga,' });
+      // o nome de cada letra aparece escrito nela mesma
+      const sample = L.el('span', 'font-sample', { text: f.label });
       sample.style.fontFamily = f.css;
       sample.style.fontSize = (18 * f.scale) + 'px';
-      btn.append(sample, L.el('small', '', { text: f.label }));
+      btn.append(sample, L.el('small', '', { text: 'Aa', 'aria-hidden': 'true' }));
+      btn.lastChild.style.fontFamily = f.css;
       btn.addEventListener('click', () => {
         $$('.font-tile', fonts).forEach((t) => t.classList.remove('active'));
         btn.classList.add('active');
@@ -3471,7 +3679,7 @@
     });
   }
 
-  const KIND_LABEL = { emoji: 'Emoji', image: 'Imagem', text: 'Texto', tape: 'Fita', drawing: 'Desenho', doodle: 'Rabisco' };
+  const KIND_LABEL = { emoji: 'Emoji', image: 'Imagem', text: 'Texto', tape: 'Fita', drawing: 'Desenho', doodle: 'Rabisco', shape: 'Forma' };
 
   function panelLayers() {
     const sec = panelSection('Camadas', 'De cima para baixo: o primeiro fica na frente de todos.');

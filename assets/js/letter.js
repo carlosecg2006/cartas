@@ -18,28 +18,46 @@
     lora: { label: 'Lora (livro)', css: "'Lora', serif", scale: 1 },
     nunito: { label: 'Nunito (simples)', css: "'Nunito', sans-serif", scale: 1 },
     quicksand: { label: 'Quicksand (redonda)', css: "'Quicksand', sans-serif", scale: 1 },
+    pacifico: { label: 'Pacifico', css: "'Pacifico', cursive", scale: 1 },
+    greatvibes: { label: 'Great Vibes', css: "'Great Vibes', cursive", scale: 1.38 },
+    satisfy: { label: 'Satisfy', css: "'Satisfy', cursive", scale: 1.15 },
+    amatic: { label: 'Amatic SC', css: "'Amatic SC', cursive", scale: 1.45 },
+    kalam: { label: 'Kalam', css: "'Kalam', cursive", scale: 1 },
+    sacramento: { label: 'Sacramento', css: "'Sacramento', cursive", scale: 1.5 },
+    courier: { label: 'Courier Prime', css: "'Courier Prime', monospace", scale: 0.88 },
+    reenie: { label: 'Reenie Beanie', css: "'Reenie Beanie', cursive", scale: 1.3 },
+    fredoka: { label: 'Fredoka (fofinha)', css: "'Fredoka', sans-serif", scale: 0.98 },
+    cormorant: { label: 'Cormorant (clássica)', css: "'Cormorant Garamond', serif", scale: 1.2 },
+    marker: { label: 'Permanent Marker', css: "'Permanent Marker', cursive", scale: 0.88 },
+    nanum: { label: 'Nanum Pen', css: "'Nanum Pen Script', cursive", scale: 1.3 },
   };
 
   const PAPERS = {
     plain: 'Liso', lined: 'Pautado', grid: 'Quadriculado', dots: 'Pontilhado',
     kraft: 'Kraft', vintage: 'Antigo', parchment: 'Pergaminho', image: 'Sua imagem',
+    watercolor: 'Aquarela', linen: 'Linho', notebook: 'Caderno', music: 'Pauta musical', gradient: 'Degradê',
   };
   const BORDERS = {
     none: 'Sem borda', simple: 'Simples', double: 'Dupla', dashed: 'Tracejada',
     stamp: 'Selo postal', hearts: 'Corações', flowers: 'Flores',
+    stars: 'Estrelas', scallop: 'Ondulada', polaroid: 'Polaroid', ticket: 'Ingresso',
   };
   const SCENES = {
     desk: 'Mesa de madeira', pink: 'Rosa suave', sky: 'Céu', night: 'Noite estrelada', garden: 'Jardim', plain: 'Neutro', image: 'Sua imagem',
+    sunset: 'Pôr do sol', beach: 'Praia', lavender: 'Lavanda', confetti: 'Confete', wood: 'Madeira escura', marble: 'Mármore',
   };
-  const LINERS = { plain: 'Liso', stripes: 'Listras', dots: 'Bolinhas', hearts: 'Corações', stars: 'Estrelas' };
+  const LINERS = { plain: 'Liso', stripes: 'Listras', dots: 'Bolinhas', hearts: 'Corações', stars: 'Estrelas', flowers: 'Florzinhas', checks: 'Xadrez' };
   const DIVIDERS = {
     line: 'Linha', dashed: 'Tracejado', dots: 'Pontinhos', hearts: 'Corações',
     stars: 'Estrelas', flowers: 'Flores', wave: 'Onda',
   };
   const DIVIDER_TEXT = { dots: '• • •', hearts: '♡  ♥  ♡', stars: '✦  ✧  ✦', flowers: '✿  ❀  ✿' };
   const FRAMES = { plain: 'Simples', polaroid: 'Polaroid', rounded: 'Arredondada', tape: 'Com fita', circle: 'Círculo' };
-  const TAPES = ['pink', 'mint', 'yellow', 'lilac', 'dots', 'stripes', 'grid', 'hearts'];
-  const TEXT_STYLES = { none: 'Só texto', label: 'Etiqueta', note: 'Post-it', bubble: 'Balão' };
+  const TAPES = ['pink', 'mint', 'yellow', 'lilac', 'dots', 'stripes', 'grid', 'hearts', 'flowers', 'stars', 'gingham', 'kraft', 'glitter', 'rainbow'];
+  const TEXT_STYLES = {
+    none: 'Só texto', label: 'Etiqueta', note: 'Post-it', bubble: 'Balão',
+    neon: 'Neon', outline: 'Contorno', tag: 'Tag', ticket: 'Ingresso', shadow: 'Sombra retrô',
+  };
 
   // Rabiscos desenhados à mão (viewBox 0 0 100 100). "fill" = preenchido.
   const DOODLES = {
@@ -63,6 +81,30 @@
     crown: { label: 'Coroa', d: 'M13 72 19 31 36 52 50 23 64 52 81 31 87 72ZM13 81H87' },
     bow: { label: 'Laço', d: 'M50 48C36 28 13 32 17 49 21 64 40 60 50 48 60 60 79 64 83 49 87 32 64 28 50 48ZM50 48 39 82M50 48 62 82' },
     note: { label: 'Nota musical', d: 'M27 74A10 8 0 1 0 47 74 10 8 0 1 0 27 74ZM47 74V22L79 15V65M59 65A10 8 0 1 0 79 65 10 8 0 1 0 59 65Z' },
+    flower2: { label: 'Margarida', d: 'M56 36A6 6 0 1 1 44 36 6 6 0 1 1 56 36ZM47 31C40 20 47 10 51 12 55 15 55 24 52 30M56 33C64 25 75 27 74 33 73 38 64 40 57 38M55 42C61 50 58 60 53 59 48 58 47 50 50 43M45 42C40 51 31 52 29 47 27 42 35 38 44 38M44 33C34 31 30 22 35 19 40 16 46 24 47 30M50 43C48 58 52 72 49 94M50 74C42 64 31 64 27 70 34 76 43 77 50 74' },
+    leaf2: { label: 'Raminho', d: 'M18 90C38 66 58 42 82 10M32 72C20 68 16 57 20 50 29 53 34 62 32 72ZM44 58C56 60 64 54 67 47 57 44 48 49 44 58ZM55 43C46 36 45 26 49 19 56 25 58 35 55 43ZM67 29C77 29 83 23 86 17 76 16 69 21 67 29Z' },
+    sun2: { label: 'Solzinho', d: 'M50 34A16 16 0 1 0 50.1 34ZM50 8C47 14 53 18 50 25M50 75C47 81 53 85 50 92M8 50C14 47 18 53 25 50M75 50C81 47 85 53 92 50M21 21C27 22 27 27 32 31M68 68C73 71 73 76 79 79M79 21C77 27 72 27 68 32M32 68C28 73 23 73 21 79M43 53C46 58 54 58 57 53M44 45V46M56 45V46' },
+    moon2: { label: 'Lua e estrelas', d: 'M56 14C37 18 26 36 29 55 32 75 51 88 71 84 54 77 44 62 45 46 46 33 50 22 56 14ZM76 22V36M69 29H83M78 56V64M74 60H82' },
+    cloud2: { label: 'Nuvem de chuva', d: 'M28 60C15 60 11 46 23 42 21 28 39 22 47 32 53 18 76 20 76 38 90 38 92 60 76 60ZM34 72 30 82M52 72 48 82M70 72 66 82M43 84 40 92M61 84 58 92' },
+    crown2: { label: 'Tiara', d: 'M18 72C16 56 14 44 14 33L32 50 50 24 68 50 86 33C86 44 84 56 82 72ZM18 72C40 78 60 78 82 72M20 82C40 88 60 88 80 82M14 22A4 4 0 1 0 14.1 22ZM50 12A4 4 0 1 0 50.1 12ZM86 22A4 4 0 1 0 86.1 22ZM50 58A5 5 0 1 0 50.1 58Z' },
+    music: { label: 'Música', d: 'M24 78C24 71 34 66 39 70 44 75 36 84 29 84 26 84 24 81 24 78ZM39 72V24C47 30 58 32 62 44M60 66C60 59 70 54 75 58 80 63 72 72 65 72 62 72 60 69 60 66ZM75 60V30M67 18 71 22M82 16 78 22' },
+    lips: { label: 'Beijo', d: 'M10 52C20 38 34 30 44 36 47 38 49 40 50 40 51 40 53 38 56 36 66 30 80 38 90 52 78 70 64 78 50 78 36 78 22 70 10 52ZM10 52C30 57 70 57 90 52M30 50C38 53 44 54 50 54' },
+    envelope: { label: 'Envelope', d: 'M14 28C30 27 70 27 86 29 87 44 87 60 86 74 62 75 38 75 14 74 13 58 13 42 14 28ZM14 29C28 40 40 50 50 56 60 50 72 40 86 29M14 74 40 52M86 74 60 52' },
+    camera: { label: 'Câmera', d: 'M14 37C14 33 16 31 20 31H32L38 22H62L68 31H80C84 31 86 33 86 37V72C86 76 84 78 80 78H20C16 78 14 76 14 72ZM50 40A14 14 0 1 0 50.1 40ZM50 47A7 7 0 1 0 50.1 47ZM73 39H79' },
+    coffee2: { label: 'Cafezinho', d: 'M22 40H70V64C70 75 62 82 52 82H40C30 82 22 75 22 64ZM70 46C83 45 84 62 70 63M36 32C32 26 40 22 36 14M52 32C48 26 56 22 52 14M46 69C38 63 38 56 42 55 44 54 46 56 46 58 46 56 48 54 50 55 54 56 54 63 46 69Z' },
+    cake: { label: 'Bolo', d: 'M16 84H84M22 84V60H78V84M27 60V46H73V60M22 70C30 76 36 64 44 70 52 76 58 64 66 70 72 74 76 68 78 68M50 46V34M50 33C45 29 47 23 50 18 53 23 55 29 50 33Z' },
+    gift: { label: 'Presente', d: 'M18 42H82V54H18ZM24 54V86H76V54M50 42V86M50 42C40 26 26 28 31 37 35 42 50 42 50 42ZM50 42C60 26 74 28 69 37 65 42 50 42 50 42Z' },
+    balloon: { label: 'Balão', d: 'M50 10C34 10 26 24 28 39 30 53 42 63 50 65 58 63 70 53 72 39 74 24 66 10 50 10ZM46 65H54L50 71ZM50 71C44 77 56 81 50 87 46 91 51 94 48 98M37 28C39 22 43 19 48 19' },
+    butterfly: { label: 'Borboleta', d: 'M50 32V78M50 38C40 18 14 18 16 34 18 48 38 50 50 48M50 48C38 52 22 60 28 72 34 82 46 70 50 60M50 38C60 18 86 18 84 34 82 48 62 50 50 48M50 48C62 52 78 60 72 72 66 82 54 70 50 60M50 32C46 24 40 19 35 17M50 32C54 24 60 19 65 17' },
+    rainbow: { label: 'Arco-íris', d: 'M10 74C10 46 30 26 50 26 70 26 90 46 90 74M22 74C22 54 36 38 50 38 64 38 78 54 78 74M34 74C34 61 42 50 50 50 58 50 66 61 66 74M4 80C4 74 11 71 15 75 18 70 27 72 27 80ZM73 80C73 73 81 71 85 75 88 71 97 73 96 80Z' },
+    umbrella: { label: 'Guarda-chuva', d: 'M10 50C14 28 30 16 50 16 70 16 86 28 90 50 84 44 76 44 70 50 64 44 56 44 50 50 44 44 36 44 30 50 24 44 16 44 10 50ZM50 50V80C50 89 39 89 39 81M50 16V10M30 50C32 32 40 20 50 16 60 20 68 32 70 50' },
+    plane2: { label: 'Avião de papel', d: 'M10 46 90 16 64 82 48 58ZM48 58 90 16M48 58 47 76 57 67M8 68C12 72 18 72 22 68M14 82C20 86 26 85 30 81' },
+    house: { label: 'Casinha', d: 'M14 50 50 18 86 50M24 42V84H76V42M42 84V64C42 58 58 58 58 64V84M62 30V16H72V39M30 54H38V62H30Z' },
+    key: { label: 'Chave', d: 'M30 32A16 16 0 1 0 30.1 32ZM30 42A6 6 0 1 0 30.1 42ZM46 48H86M74 48V60M84 48V58' },
+    lock: { label: 'Cadeado', d: 'M28 46C42 45 58 45 72 46 73 58 73 72 72 84 58 85 42 85 28 84 27 72 27 58 28 46ZM36 46V34C36 17 64 17 64 34V46M50 56A4 4 0 1 0 50.1 56ZM50 64V72' },
+    ring: { label: 'Anel', d: 'M50 40A24 24 0 1 0 50.1 40ZM50 46A18 18 0 1 0 50.1 46ZM40 30 50 42 60 30 55 21H45ZM40 30H60M50 21V30' },
+    cat2: { label: 'Gatinho', d: 'M22 42 25 16 42 30C47 28 53 28 58 30L75 16 78 42C82 62 68 77 50 77 32 77 18 62 22 42ZM38 46V51M62 46V51M46 57 50 61 54 57M50 61V64M28 59 12 57M28 65 14 70M72 59 88 57M72 65 86 70' },
+    paw: { label: 'Patinha', fill: true, d: 'M50 52C38 52 28 66 32 76 36 85 46 80 50 80 54 80 64 85 68 76 72 66 62 52 50 52ZM26 28A7 9 0 1 0 26.1 28ZM41 14A7 9 0 1 0 41.1 14ZM59 14A7 9 0 1 0 59.1 14ZM74 28A7 9 0 1 0 74.1 28Z' },
   };
 
   // Selos postais ilustrados (viewBox 0 0 60 72)
@@ -77,6 +119,48 @@
     plane: { label: 'Aviãozinho', bg: '#f8e5cf', svg: '<path d="M10 34l40-16-12 34-8-12z" fill="#fff" stroke="#c4683a" stroke-width="2" stroke-linejoin="round"/><path d="M30 40l20-22" stroke="#c4683a" stroke-width="2"/><path d="M8 52c6 4 10-4 16 0" stroke="#c4683a" stroke-width="2" stroke-dasharray="3 3" fill="none"/>' },
     cat: { label: 'Gatinho', bg: '#efe2f1', svg: '<path d="M14 50V26l8 7h16l8-7v24c0 6-7 9-16 9s-16-3-16-9z" fill="#5a4a5e"/><circle cx="24" cy="41" r="2.2" fill="#f2d16b"/><circle cx="36" cy="41" r="2.2" fill="#f2d16b"/><path d="M28 47h4l-2 2z" fill="#f4a3b5"/>' },
     sun: { label: 'Sol', bg: '#fff0bf', svg: '<circle cx="30" cy="34" r="11" fill="#f0a531"/><g stroke="#f0a531" stroke-width="2.5" stroke-linecap="round"><path d="M30 13v6M30 49v6M9 34h6M45 34h6M15 19l4 4M41 45l4 4M45 19l-4 4M19 45l-4 4"/></g>' },
+    rose: { label: 'Rosa', bg: '#fbe3e6', svg: '<path d="M30 36v22" stroke="#4f7a3a" stroke-width="2.5"/><path d="M30 49c-6-1-10-5-11-10 6 0 10 4 11 10zM30 45c6-1 9-4 10-9-6 0-9 4-10 9z" fill="#5c8a45"/><circle cx="30" cy="25" r="12" fill="#c7354a"/><path d="M30 17c-6 0-8 6-5 9 3 2 8 1 8-3 0-3-4-3-4 0M21 22c-1 7 3 12 9 12s10-5 9-11" stroke="#8e1f33" stroke-width="1.6" fill="none" stroke-linecap="round"/>' },
+    star: { label: 'Estrela', bg: '#22305a', svg: '<path d="M30 12l5.3 11 12 1.6-8.8 8.3 2.2 12L30 39.2 19.3 45l2.2-12-8.8-8.3 12-1.6z" fill="#f6cf5a"/><g fill="#fff"><circle cx="12" cy="14" r="1.2"/><circle cx="50" cy="12" r="1"/><circle cx="48" cy="50" r="1.3"/><circle cx="12" cy="50" r="1"/></g><path d="M6 58c8-5 16-5 24-1s16 4 24-1" stroke="#7d8cc4" stroke-width="2" fill="none"/>' },
+    cake: { label: 'Bolo', bg: '#fde9d6', svg: '<rect x="14" y="36" width="32" height="18" rx="2" fill="#f2a7b8"/><path d="M14 42c4 4 6-2 10 2s6-2 10 2 6-2 12 0" stroke="#fff" stroke-width="2.5" fill="none"/><rect x="18" y="28" width="24" height="9" rx="2" fill="#fbd3dc"/><path d="M30 28v-7" stroke="#6a8fd1" stroke-width="2.5"/><path d="M30 13c-3 3-3 6 0 7 3-1 3-4 0-7z" fill="#f2b84b"/><path d="M10 57h40" stroke="#b07a5a" stroke-width="2"/>' },
+    beach: { label: 'Praia', bg: '#d8f0f7', svg: '<circle cx="46" cy="15" r="6" fill="#f7c64d"/><path d="M4 40c6-3 12-3 18 0s12 3 18 0 12-3 16 0v6H4z" fill="#3b9bb8"/><path d="M4 46h52v12H4z" fill="#f1d9a7"/><path d="M32 30v25" stroke="#7a5a3a" stroke-width="2"/><path d="M19 31a13 12 0 0 1 26 0z" fill="#e8546b"/><path d="M27 31a5 12 0 0 1 10 0z" fill="#fff" opacity=".85"/>' },
+  };
+
+  // Formas (adesivos geométricos preenchidos). vb = área do desenho, para a forma não ficar com sobra.
+  const SHAPES = {
+    circle: { label: 'Círculo', vb: '0 0 100 100', d: 'M50 4A46 46 0 1 1 49.9 4Z' },
+    square: { label: 'Quadrado', vb: '0 0 100 100', d: 'M6 6H94V94H6Z' },
+    rounded: { label: 'Arredondado', vb: '0 0 100 100', d: 'M26 6H74Q94 6 94 26V74Q94 94 74 94H26Q6 94 6 74V26Q6 6 26 6Z' },
+    heart: { label: 'Coração', vb: '0 0 100 92', d: 'M50 88C20 67 4 51 6 31 8 13 30 4 50 24 70 4 92 13 94 31 96 51 80 67 50 88Z' },
+    star: { label: 'Estrela', vb: '0 0 100 96', d: 'M50 4 62 36 96 38 69 59 79 92 50 73 21 92 31 59 4 38 38 36Z' },
+    blob: { label: 'Mancha', vb: '0 0 100 100', d: 'M54 6C76 6 96 22 92 46 89 66 96 84 74 92 52 100 30 92 16 78 2 64 4 40 16 24 26 10 38 6 54 6Z' },
+    arrow: { label: 'Seta', vb: '0 0 100 60', d: 'M4 21H60V5L96 30 60 55V39H4Z' },
+    bubble: { label: 'Balão de fala', vb: '0 0 100 90', d: 'M50 4C76 4 96 18 96 38 96 58 76 72 50 72 44 72 38 71 33 70L14 86 20 66C10 59 4 49 4 38 4 18 24 4 50 4Z' },
+    ribbon: { label: 'Faixa', vb: '0 0 100 46', d: 'M16 6H84V36H16ZM16 12H2L10 25 2 40H16ZM84 12H98L90 25 98 40H84Z' },
+    badge: { label: 'Medalha', vb: '0 0 100 100', d: (function () {
+      const pts = [];
+      for (let i = 0; i < 32; i++) {
+        const a = (Math.PI * 2 * i) / 32 - Math.PI / 2;
+        const r = i % 2 ? 41 : 47;
+        pts.push((50 + r * Math.cos(a)).toFixed(1) + ' ' + (50 + r * Math.sin(a)).toFixed(1));
+      }
+      return 'M' + pts.join(' ') + 'Z';
+    })() },
+    cloud: { label: 'Nuvem', vb: '0 0 100 70', d: 'M24 64C10 64 4 54 6 46 8 38 16 34 24 36 24 20 40 10 54 14 64 6 82 10 84 26 96 28 98 46 92 56 88 62 82 64 76 64Z' },
+    sparkle4: { label: 'Brilho', vb: '0 0 100 100', d: 'M50 2C54 36 64 46 98 50 64 54 54 64 50 98 46 64 36 54 2 50 36 46 46 36 50 2Z' },
+  };
+  const SHAPE_COLORS = ['#f4a3b5', '#f7c873', '#a8dcc0', '#9cc9f0', '#c9b5ee', '#e8546b', '#3b3340', '#ffffff'];
+
+  // Animação, contorno e filtro dos adesivos (espelham STICKER_ANIMS, STICKER_OUTLINES e IMAGE_FILTERS)
+  const STICKER_ANIMS = { '': 'Parado', float: 'Flutuar', pulse: 'Pulsar', wiggle: 'Balançar', spin: 'Girar', sparkle: 'Brilhar', bounce: 'Pular' };
+  const STICKER_OUTLINES = { '': 'Nenhum', white: 'Recorte branco', shadow: 'Sombra', both: 'Recorte + sombra' };
+  const IMAGE_FILTERS = {
+    '': 'Original', pb: 'P&B', sepia: 'Sépia', vintage: 'Vintage', quente: 'Quente',
+    frio: 'Frio', desbotado: 'Desbotado', contraste: 'Contraste', sonho: 'Sonho',
+  };
+  // Efeitos para trechos de texto (classes aceitas pelo servidor em <span>, ver TEXT_FX_CLASSES)
+  const TEXT_FX = {
+    'fx-hl-yellow': 'Marca-texto amarelo', 'fx-hl-pink': 'Marca-texto rosa', 'fx-hl-green': 'Marca-texto verde', 'fx-hl-blue': 'Marca-texto azul',
+    'fx-wavy': 'Sublinhado ondulado', 'fx-glow': 'Brilho', 'fx-outline': 'Contorno',
   };
 
   const EFFECTS = { none: 'Nenhum', hearts: 'Corações', confetti: 'Confete', petals: 'Pétalas', stars: 'Estrelas', snow: 'Neve' };
@@ -177,6 +261,8 @@
     paper.style.setProperty('--ink', p.ink || '#3b3340');
     paper.style.setProperty('--font', font.css);
     paper.style.setProperty('--font-scale', font.scale);
+    if (p.style === 'gradient') paper.style.setProperty('--paper2', p.color2 || '#f6d6e0');
+    else paper.style.removeProperty('--paper2');
     if (usesImage) {
       // Véu por cima da imagem, para o texto continuar legível
       const v = p.veil === undefined ? 0.35 : p.veil;
@@ -219,6 +305,9 @@
     }
     node.style.fontSize = mul !== 1 ? mul.toFixed(3) + 'em' : '';
     node.style.color = b.color || '';
+    // filtro de foto (blocos de foto, foto e texto e galeria)
+    Array.from(node.classList).forEach((c) => { if (c.startsWith('imgf-')) node.classList.remove(c); });
+    if (b.filter && IMAGE_FILTERS[b.filter]) node.classList.add('imgf-' + b.filter);
   }
 
   /** Renderiza um bloco para leitura. */
@@ -311,7 +400,7 @@
   }
 
   function renderImageFigure(b) {
-    const fig = el('figure', 'lb-figure frame-' + (b.frame || 'polaroid') + ' w-' + (b.width || 'md'));
+    const fig = el('figure', 'lb-figure frame-' + (b.frame || 'polaroid') + ' w-' + (b.width || 'md') + (b.filter && IMAGE_FILTERS[b.filter] ? ' imgf-' + b.filter : ''));
     fig.style.setProperty('--tilt', (b.tilt || 0) + 'deg');
     if (b.src) {
       fig.appendChild(el('img', '', { src: mediaUrl(b.src), alt: b.caption || '', loading: 'lazy' }));
@@ -422,7 +511,7 @@
   const SCATTER_TILT = [-6, 4, -3, 7, -5, 3, -2, 6];
 
   function renderGallery(b) {
-    const wrap = el('div', 'gallery gallery-' + (b.layout || 'scatter'));
+    const wrap = el('div', 'gallery gallery-' + (b.layout || 'scatter') + (b.filter && IMAGE_FILTERS[b.filter] ? ' imgf-' + b.filter : ''));
     (b.items || []).forEach((item, i) => {
       const fig = el('figure', 'gallery-item');
       if (b.layout !== 'grid') fig.style.setProperty('--tilt', (b.layout === 'strip' ? 0 : SCATTER_TILT[i % SCATTER_TILT.length]) + 'deg');
@@ -526,7 +615,10 @@
         node.appendChild(el('span', 'st-emoji', { text: s.char }));
         break;
       case 'image':
-        node.appendChild(el('img', '', { src: mediaUrl(s.src), alt: '', draggable: 'false' }));
+        node.appendChild(el('img', s.fi && IMAGE_FILTERS[s.fi] ? 'imgf-' + s.fi : '', { src: mediaUrl(s.src), alt: '', draggable: 'false' }));
+        break;
+      case 'shape':
+        node.appendChild(shapeSvg(s));
         break;
       case 'text': {
         const t = el('div', 'st-text st-' + (s.style || 'none'), { text: s.text || '' });
@@ -561,6 +653,34 @@
         break;
       }
     }
+    // animação e contorno ficam num invólucro: o transform do próprio adesivo guarda posição e giro
+    const an = s.an && STICKER_ANIMS[s.an] ? s.an : '';
+    const ol = s.ol && STICKER_OUTLINES[s.ol] ? s.ol : '';
+    if (an || ol) {
+      const wrap = el('div', 'st-fx' + (an ? ' an-' + an : '') + (ol ? ' ol-' + ol : ''));
+      wrap.append(...node.childNodes);
+      node.appendChild(wrap);
+    }
+  }
+
+  function shapeSvg(s) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const def = SHAPES[s.name] || SHAPES.heart;
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', def.vb);
+    svg.setAttribute('class', 'st-shape');
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', def.d);
+    path.setAttribute('fill', s.c || '#f4a3b5');
+    const sw = Math.max(0, Math.min(8, Number(s.sw) || 0));
+    if (s.s && sw > 0) {
+      path.setAttribute('stroke', s.s);
+      path.setAttribute('stroke-width', String(sw * 2));
+      path.setAttribute('stroke-linejoin', 'round');
+      path.setAttribute('paint-order', 'stroke');
+    }
+    svg.appendChild(path);
+    return svg;
   }
 
   function doodleSvg(name, color) {
@@ -943,6 +1063,7 @@
   window.Letter = {
     FONTS, PAPERS, BORDERS, SCENES, LINERS, DIVIDERS, FRAMES, TAPES, TEXT_STYLES,
     DOODLES, STAMPS, EFFECTS, GALLERY_LAYOUTS,
+    SHAPES, SHAPE_COLORS, STICKER_ANIMS, STICKER_OUTLINES, IMAGE_FILTERS, TEXT_FX, shapeSvg,
     PAPER_COLORS, INK_COLORS, ACCENT_COLORS, SIZE_MUL,
     uid, el, icon, mediaUrl, unitPx, setFluid, parseMusicUrl, musicEmbed, isDark, fmtTime,
     renderGallery, renderAudio, renderScratch, SCRATCH_COVERS, doodleSvg, stampEl, postmarkEl, playEffect, splitPages,

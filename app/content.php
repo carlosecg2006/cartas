@@ -10,28 +10,43 @@ declare(strict_types=1);
  */
 
 const LETTER_FONTS = ['caveat', 'dancing', 'indie', 'patrick', 'shadows', 'homemade', 'gloria',
-    'special', 'playfair', 'lora', 'nunito', 'quicksand'];
-const PAPER_STYLES = ['plain', 'lined', 'grid', 'dots', 'kraft', 'vintage', 'parchment', 'image'];
-const PAPER_BORDERS = ['none', 'simple', 'double', 'dashed', 'stamp', 'hearts', 'flowers'];
-const PAPER_SCENES = ['desk', 'pink', 'sky', 'night', 'garden', 'plain', 'image'];
+    'special', 'playfair', 'lora', 'nunito', 'quicksand',
+    'pacifico', 'greatvibes', 'satisfy', 'amatic', 'kalam', 'sacramento', 'courier', 'reenie', 'fredoka', 'cormorant', 'marker', 'nanum'];
+const PAPER_STYLES = ['plain', 'lined', 'grid', 'dots', 'kraft', 'vintage', 'parchment', 'image',
+    'watercolor', 'linen', 'notebook', 'music', 'gradient'];
+const PAPER_BORDERS = ['none', 'simple', 'double', 'dashed', 'stamp', 'hearts', 'flowers',
+    'stars', 'scallop', 'polaroid', 'ticket'];
+const PAPER_SCENES = ['desk', 'pink', 'sky', 'night', 'garden', 'plain', 'image',
+    'sunset', 'beach', 'lavender', 'confetti', 'wood', 'marble'];
 const REVEAL_MODES = ['fade', 'write', 'none'];
 const SCRATCH_COVERS = ['silver', 'gold', 'pink', 'mint'];
 const IMAGE_FITS = ['cover', 'contain', 'tile'];
 const TEXT_SIZES = ['sm', 'md', 'lg'];
 const BLOCK_SIZES = ['', 'sm', 'md', 'lg', 'xl'];
 const ALIGNS = ['left', 'center', 'right'];
-const ENVELOPE_LINERS = ['plain', 'stripes', 'dots', 'hearts', 'stars'];
+const ENVELOPE_LINERS = ['plain', 'stripes', 'dots', 'hearts', 'stars', 'flowers', 'checks'];
 const DIVIDER_STYLES = ['line', 'dashed', 'dots', 'hearts', 'stars', 'flowers', 'wave'];
 const IMAGE_FRAMES = ['plain', 'polaroid', 'rounded', 'tape', 'circle'];
 const IMAGE_WIDTHS = ['sm', 'md', 'lg'];
-const TAPE_PATTERNS = ['pink', 'mint', 'yellow', 'lilac', 'dots', 'stripes', 'grid', 'hearts'];
-const TEXT_STICKER_STYLES = ['none', 'label', 'note', 'bubble'];
+const TAPE_PATTERNS = ['pink', 'mint', 'yellow', 'lilac', 'dots', 'stripes', 'grid', 'hearts',
+    'flowers', 'stars', 'gingham', 'kraft', 'glitter', 'rainbow'];
+const TEXT_STICKER_STYLES = ['none', 'label', 'note', 'bubble', 'neon', 'outline', 'tag', 'ticket', 'shadow'];
 const SPOTIFY_KINDS = ['track', 'album', 'playlist', 'episode'];
 const DOODLE_NAMES = ['heart', 'heart-fill', 'star', 'sparkle', 'arrow', 'arrow-loop', 'swirl', 'squiggle', 'circle',
-    'underline', 'flower', 'leaf', 'cloud', 'sun', 'moon', 'smile', 'xo', 'crown', 'bow', 'note'];
-const STAMP_NAMES = ['heart', 'flower', 'bird', 'moon', 'coffee', 'mountain', 'wave', 'plane', 'cat', 'sun'];
+    'underline', 'flower', 'leaf', 'cloud', 'sun', 'moon', 'smile', 'xo', 'crown', 'bow', 'note',
+    'flower2', 'leaf2', 'sun2', 'moon2', 'cloud2', 'crown2', 'music', 'lips', 'envelope', 'camera', 'coffee2', 'cake',
+    'gift', 'balloon', 'butterfly', 'rainbow', 'umbrella', 'plane2', 'house', 'key', 'lock', 'ring', 'cat2', 'paw'];
+const STAMP_NAMES = ['heart', 'flower', 'bird', 'moon', 'coffee', 'mountain', 'wave', 'plane', 'cat', 'sun',
+    'rose', 'star', 'cake', 'beach'];
 const EFFECT_NAMES = ['none', 'hearts', 'confetti', 'petals', 'stars', 'snow'];
 const GALLERY_LAYOUTS = ['scatter', 'grid', 'strip'];
+// Adesivos: animação, contorno recortado/sombra, filtro de foto e formas geométricas
+const STICKER_ANIMS = ['', 'float', 'pulse', 'wiggle', 'spin', 'sparkle', 'bounce'];
+const STICKER_OUTLINES = ['', 'white', 'shadow', 'both'];
+const IMAGE_FILTERS = ['', 'pb', 'sepia', 'vintage', 'quente', 'frio', 'desbotado', 'contraste', 'sonho'];
+const SHAPE_NAMES = ['circle', 'square', 'rounded', 'heart', 'star', 'blob', 'arrow', 'bubble', 'ribbon', 'badge', 'cloud', 'sparkle4'];
+// Efeitos de texto (classes aceitas em <span>): marca-texto, sublinhado ondulado, brilho e contorno
+const TEXT_FX_CLASSES = ['fx-hl-yellow', 'fx-hl-pink', 'fx-hl-green', 'fx-hl-blue', 'fx-wavy', 'fx-glow', 'fx-outline'];
 const REACTION_EMOJIS = ['❤️', '🥹', '😂', '😭', '🤗', '🔥', '✨', '🫶'];
 
 const MEDIA_RE = '/^[a-f0-9]{32}\.(jpg|png|webp|gif)$/';
@@ -232,7 +247,7 @@ function wrap_styled_span(DOMElement $node, string $tag, string $inner): string
         }
     }
     foreach (preg_split('/\s+/', $node->getAttribute('class')) as $class) {
-        if (in_array($class, ['t-sm', 't-lg', 't-xl'], true)) {
+        if (in_array($class, ['t-sm', 't-lg', 't-xl'], true) || in_array($class, TEXT_FX_CLASSES, true)) {
             $classes[] = $class;
         }
     }
@@ -273,6 +288,7 @@ function sanitize_letter_content($raw): array
             'sceneImage' => media_or($p['sceneImage'] ?? ''),
             'sceneBlur' => num($p['sceneBlur'] ?? 0, 0, 24, 0),
             'sceneDim' => num($p['sceneDim'] ?? 0, 0, 0.8, 0),
+            'color2' => color_or($p['color2'] ?? null, '#f6d6e0'),
         ],
         'envelope' => [
             'color' => color_or($env['color'] ?? null, '#e9b8b0'),
@@ -367,6 +383,7 @@ function sanitize_block(array $b): ?array
             $block['frame'] = pick($b['frame'] ?? null, IMAGE_FRAMES, 'polaroid');
             $block['width'] = pick($b['width'] ?? null, IMAGE_WIDTHS, 'md');
             $block['tilt'] = num($b['tilt'] ?? 0, -12, 12, 0);
+            $block['filter'] = pick($b['filter'] ?? '', IMAGE_FILTERS, '');
             break;
         case 'divider':
             $block['style'] = pick($b['style'] ?? null, DIVIDER_STYLES, 'hearts');
@@ -405,6 +422,7 @@ function sanitize_block(array $b): ?array
             break;
         case 'gallery':
             $block['layout'] = pick($b['layout'] ?? null, GALLERY_LAYOUTS, 'scatter');
+            $block['filter'] = pick($b['filter'] ?? '', IMAGE_FILTERS, '');
             $block['items'] = [];
             foreach (array_slice(is_array($b['items'] ?? null) ? $b['items'] : [], 0, 24) as $item) {
                 $src = is_array($item) ? ($item['src'] ?? '') : '';
@@ -417,6 +435,7 @@ function sanitize_block(array $b): ?array
             $src = $b['src'] ?? '';
             $block['src'] = is_string($src) && preg_match(MEDIA_RE, $src) ? $src : '';
             $block['side'] = pick($b['side'] ?? null, ['left', 'right'], 'left');
+            $block['filter'] = pick($b['filter'] ?? '', IMAGE_FILTERS, '');
             $block['frame'] = pick($b['frame'] ?? null, IMAGE_FRAMES, 'polaroid');
             $block['html'] = sanitize_inline_html($b['html'] ?? '');
             break;
@@ -450,6 +469,8 @@ function sanitize_sticker(array $s, array $blockIds): ?array
         'o' => num($s['o'] ?? 1, 0.1, 1, 1),
         'f' => !empty($s['f']),
         'lk' => !empty($s['lk']),
+        'an' => pick($s['an'] ?? '', STICKER_ANIMS, ''),
+        'ol' => pick($s['ol'] ?? '', STICKER_OUTLINES, ''),
     ];
     switch ($sticker['kind']) {
         case 'emoji':
@@ -464,6 +485,7 @@ function sanitize_sticker(array $s, array $blockIds): ?array
                 return null;
             }
             $sticker['src'] = $src;
+            $sticker['fi'] = pick($s['fi'] ?? '', IMAGE_FILTERS, '');
             break;
         case 'text':
             $sticker['text'] = plain($s['text'] ?? '', 300);
@@ -477,6 +499,12 @@ function sanitize_sticker(array $s, array $blockIds): ?array
         case 'doodle':
             $sticker['name'] = pick($s['name'] ?? null, DOODLE_NAMES, 'heart');
             $sticker['c'] = color_or($s['c'] ?? null, '#3b3340');
+            break;
+        case 'shape':
+            $sticker['name'] = pick($s['name'] ?? null, SHAPE_NAMES, 'heart');
+            $sticker['c'] = color_or($s['c'] ?? null, '#f4a3b5');
+            $sticker['s'] = color_or($s['s'] ?? null, '');
+            $sticker['sw'] = num($s['sw'] ?? 0, 0, 8, 0);
             break;
         case 'drawing':
             $sticker['vw'] = num($s['vw'] ?? 100, 1, 5000, 100);

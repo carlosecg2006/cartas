@@ -40,6 +40,15 @@
     { key: 'divider', icon: 'minus', label: 'Divisória', desc: 'Separador decorado', words: 'divisoria separador linha', make: () => ({ type: 'divider', style: 'hearts' }) },
     { key: 'signature', icon: 'signature', label: 'Assinatura', desc: 'Despedida com seu nome', words: 'assinatura despedida nome', make: () => ({ type: 'signature', closing: 'Com carinho,', name: DATA.sender, date: DATA.today }) },
     { key: 'spacer', icon: 'move-v', label: 'Espaço', desc: 'Um respiro entre blocos', words: 'espaco espacamento', make: () => ({ type: 'spacer', height: 40 }) },
+    { key: 'toggle', icon: 'toggle', label: 'Sanfona', desc: 'Um título que abre e mostra mais', words: 'sanfona toggle expandir abrir recolher acordeao mais', make: () => ({ type: 'toggle', title: '', html: '' }) },
+    { key: 'timeline', icon: 'timeline', label: 'Linha do tempo', desc: 'Nossa história, momento a momento', words: 'linha do tempo nossa historia momentos datas timeline', make: () => ({ type: 'timeline', items: [{ date: '', title: '', html: '' }, { date: '', title: '', html: '' }] }) },
+    { key: 'counter', icon: 'hourglass', label: 'Contador', desc: 'Há quanto tempo, ou quanto falta', words: 'contador contagem regressiva tempo juntos faltam dias desde ate', make: () => ({ type: 'counter', mode: 'since', date: '', label: 'Juntos há', align: 'center' }) },
+    { key: 'quiz', icon: 'quiz', label: 'Pergunta', desc: 'Quem recebe escolhe uma resposta', words: 'pergunta quiz enquete adivinha resposta opcoes', make: () => ({ type: 'quiz', question: '', options: ['', '', ''], answer: -1, right: '', wrong: '' }) },
+    { key: 'coupon', icon: 'ticket', label: 'Vale-presente', desc: 'Um vale que a pessoa pode usar', words: 'vale presente cupom ticket abraco coupon', make: () => ({ type: 'coupon', title: '', details: '', bg: '#f6d7c3', emoji: '🎟️' }) },
+    { key: 'poem', icon: 'feather', label: 'Poema', desc: 'Versos centralizados, com estrofes', words: 'poema poesia versos estrofe', make: () => ({ type: 'poem', html: '', author: '', align: 'center' }) },
+    { key: 'place', icon: 'map-pin', label: 'Lugar', desc: 'Um lugar especial, como um selo de viagem', words: 'lugar local viagem mapa cidade endereco', make: () => ({ type: 'place', emoji: '📍', name: '', caption: '', date: '', align: 'center' }) },
+    { key: 'columns', icon: 'columns', label: 'Duas colunas', desc: 'Dois textos lado a lado', words: 'colunas duas lado a lado', make: () => ({ type: 'columns', left: '', right: '' }) },
+    { key: 'button', icon: 'pointer', label: 'Botão/Link', desc: 'Um botão que abre um site', words: 'botao link site url endereco', make: () => ({ type: 'button', label: '', url: '', align: 'center' }) },
   ];
   const TEXT_TYPES = ['paragraph', 'heading', 'quote'];
   const CONVERTIBLE = ['paragraph', 'heading', 'quote', 'list', 'checklist', 'callout'];
@@ -697,7 +706,104 @@
       });
       body.appendChild(grip);
     },
+    // Blocos desenhados por letter.js (mesma estrutura da leitura), com os campos editáveis
+    toggle(body, b) {
+      body.appendChild(L.EXTRA_RENDERERS.toggle(b, blockCtx(b)));
+    },
+    timeline(body, b) {
+      const moveItem = (i, delta, focusCls) => {
+        const to = i + delta;
+        if (to < 0 || to >= b.items.length) return;
+        const [it] = b.items.splice(i, 1);
+        b.items.splice(to, 0, it);
+        rerenderBlock(b);
+        commit();
+        if (focusCls) focusEditable($('.' + focusCls, $$('.story-item', blockNode(b.id))[to]), 'start');
+      };
+      body.appendChild(L.EXTRA_RENDERERS.timeline(b, blockCtx(b, {
+        itemTools: (li, i) => {
+          const tools = L.el('div', 'story-tools', { contenteditable: 'false' });
+          const tool = (ic, title, fn, disabled) => {
+            const btn = L.el('button', 'story-tool', { type: 'button', title, 'aria-label': title });
+            btn.appendChild(L.icon(ic, 'ic-sm'));
+            btn.disabled = !!disabled;
+            btn.addEventListener('mousedown', (e) => e.preventDefault());
+            btn.addEventListener('click', fn);
+            tools.appendChild(btn);
+          };
+          tool('chevron-up', 'Subir este momento', () => moveItem(i, -1), i === 0);
+          tool('chevron-down', 'Descer este momento', () => moveItem(i, 1), i === b.items.length - 1);
+          tool('plus', 'Adicionar momento abaixo', () => {
+            b.items.splice(i + 1, 0, { date: '', title: '', html: '' });
+            rerenderBlock(b);
+            commit();
+            focusEditable($('.story-date', $$('.story-item', blockNode(b.id))[i + 1]), 'start');
+          }, b.items.length >= 30);
+          tool('x', 'Tirar este momento', () => {
+            b.items.splice(i, 1);
+            rerenderBlock(b);
+            commit();
+          }, b.items.length <= 1);
+          li.appendChild(tools);
+        },
+      })));
+    },
+    counter(body, b, wrap) {
+      const node = L.EXTRA_RENDERERS.counter(b, blockCtx(b));
+      const nums = $('.counter-nums', node);
+      nums.title = 'Escolher a data';
+      nums.addEventListener('click', () => openBlockMenu($('.eb-handle', wrap) || nums, b));
+      body.appendChild(node);
+    },
+    quiz(body, b) {
+      body.appendChild(L.EXTRA_RENDERERS.quiz(b, blockCtx(b)));
+    },
+    coupon(body, b) {
+      const node = L.EXTRA_RENDERERS.coupon(b, blockCtx(b));
+      emojiButton($('.coupon-emoji', node), b);
+      body.appendChild(node);
+    },
+    poem(body, b) {
+      body.appendChild(L.EXTRA_RENDERERS.poem(b, blockCtx(b)));
+    },
+    place(body, b) {
+      const node = L.EXTRA_RENDERERS.place(b, blockCtx(b));
+      emojiButton($('.place-emoji', node), b);
+      body.appendChild(node);
+    },
+    columns(body, b) {
+      body.appendChild(L.EXTRA_RENDERERS.columns(b, blockCtx(b)));
+    },
+    button(body, b) {
+      const node = L.EXTRA_RENDERERS.button(b, blockCtx(b));
+      $('.lb-button', node).title = b.url ? b.url : 'Coloque o link no menu do bloco';
+      body.appendChild(node);
+    },
   };
+
+  /** Contexto dos blocos desenhados por letter.js: campos editáveis que avisam o salvamento. */
+  function blockCtx(b, extra) {
+    return Object.assign({
+      editing: true,
+      field: (tag, cls, value, kind, placeholder, onChange) => {
+        if (kind === 'html') {
+          const node = editable(tag, cls, value, placeholder, (n) => onChange(n.innerHTML));
+          textBehavior(node, b);
+          return node;
+        }
+        return plainEditable(tag, cls, value, placeholder, onChange);
+      },
+    }, extra);
+  }
+
+  function emojiButton(btn, b) {
+    if (!btn) return;
+    btn.addEventListener('click', () => openEmojiPicker(btn, (emoji) => {
+      b.emoji = emoji;
+      btn.textContent = emoji;
+      commit();
+    }));
+  }
 
   function cleanTrailingBr(html) {
     return html.replace(/(<br\s*\/?>)+$/i, '');
@@ -1469,6 +1575,97 @@
     if (b.type === 'spacer') {
       const s = section('Altura');
       s.appendChild(optionRow({ 16: 'P', 40: 'M', 80: 'G', 140: 'GG' }, b.height, (v) => update(() => { b.height = Number(v); })));
+      menu.appendChild(s);
+    }
+
+    if (b.type === 'counter') {
+      const s = section('Contar');
+      s.appendChild(optionRow({ since: 'Desde uma data', until: 'Até uma data' }, b.mode, (v) => update(() => {
+        // troca o texto padrão junto, se a pessoa não tinha mudado
+        if (b.label === (b.mode === 'until' ? 'Faltam' : 'Juntos há')) b.label = v === 'until' ? 'Faltam' : 'Juntos há';
+        b.mode = v;
+      })));
+      s.appendChild(L.el('p', 'menu-label', { text: 'Data' }));
+      const row = L.el('div', 'menu-inputs');
+      const [d0, t0] = (b.date || '').split('T');
+      const date = L.el('input', 'menu-input', { type: 'date', value: d0 || '', 'aria-label': 'Data' });
+      const time = L.el('input', 'menu-input', { type: 'time', value: t0 || '', 'aria-label': 'Hora (opcional)' });
+      const apply = () => {
+        b.date = date.value ? date.value + (time.value ? 'T' + time.value : '') : '';
+        rerenderBlock(b);
+        commit();
+      };
+      date.addEventListener('change', apply);
+      time.addEventListener('change', apply);
+      row.append(date, time);
+      s.appendChild(row);
+      s.appendChild(L.el('p', 'menu-hint', { text: 'A hora é opcional.' }));
+      menu.appendChild(s);
+    }
+
+    if (b.type === 'quiz') {
+      const s = section('Resposta certa');
+      const LETTERS = 'ABCD';
+      const answers = { '-1': 'Sem resposta certa' };
+      b.options.forEach((o, i) => { answers[i] = LETTERS[i]; });
+      // as mensagens dependem de ter resposta certa: o menu é montado de novo
+      const reopen = () => openBlockMenu($('.eb-handle', blockNode(b.id)), b);
+      s.appendChild(optionRow(answers, String(b.answer), (v) => { update(() => { b.answer = Number(v); }); reopen(); }, { wrap: true }));
+      s.appendChild(L.el('p', 'menu-label', { text: 'Quantas opções' }));
+      s.appendChild(optionRow({ 2: '2', 3: '3', 4: '4' }, b.options.length, (v) => {
+        update(() => {
+          const n = Number(v);
+          while (b.options.length < n) b.options.push('');
+          b.options.length = n;
+          if (b.answer >= n) b.answer = -1;
+        });
+        reopen();
+      }));
+      const msg = (label, key, placeholder) => {
+        s.appendChild(L.el('p', 'menu-label', { text: label }));
+        const input = L.el('input', 'menu-input', { type: 'text', maxlength: '160', placeholder, value: b[key] || '' });
+        input.addEventListener('input', () => { b[key] = input.value; typed(); });
+        s.appendChild(input);
+      };
+      msg(b.answer >= 0 ? 'Mensagem se acertar' : 'Mensagem depois de responder', 'right', b.answer >= 0 ? 'Acertou! 🎉' : 'Resposta guardada! 💌');
+      if (b.answer >= 0) msg('Mensagem se errar', 'wrong', 'Quase! A resposta certa está marcada.');
+      menu.appendChild(s);
+    }
+
+    if (b.type === 'coupon') {
+      const s = section('Cor do vale');
+      s.appendChild(swatchRow(['#f6d7c3', '#fde2e4', '#fff1c9', '#dff3e4', '#dceeff', '#ebe1ff', '#f4e4d0'], b.bg, (c) => {
+        b.bg = c;
+        $('.coupon', blockNode(b.id)).style.setProperty('--coupon', c);
+        commit();
+      }));
+      const emoji = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Trocar emoji ' + (b.emoji || '') });
+      emoji.addEventListener('click', () => {
+        closePopover();
+        $('.coupon-emoji', blockNode(b.id))?.click();
+      });
+      s.appendChild(emoji);
+      menu.appendChild(s);
+    }
+
+    if (b.type === 'button') {
+      const s = section('Link do botão');
+      const form = L.el('form', 'menu-inputs', { novalidate: true });
+      const input = L.el('input', 'menu-input', { type: 'url', inputmode: 'url', placeholder: 'https://…', value: b.url || '', 'aria-label': 'Link do botão' });
+      const ok = L.el('button', 'btn btn-sm btn-primary', { type: 'submit', text: 'Salvar' });
+      form.append(input, ok);
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const url = L.normalizeUrl(input.value);
+        if (input.value.trim() && !url) {
+          toast('Esse link não parece certo. Use um endereço que comece com http:// ou https://', 'error');
+          return;
+        }
+        closePopover();
+        update(() => { b.url = url; });
+      });
+      s.appendChild(form);
+      s.appendChild(L.el('p', 'menu-hint', { text: 'Abre numa aba nova para quem receber.' }));
       menu.appendChild(s);
     }
 

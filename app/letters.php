@@ -237,6 +237,19 @@ function letter_reactions(int $letterId): array
     return array_column(q_all('SELECT emoji FROM reactions WHERE letter_id = ? ORDER BY id', [$letterId]), 'emoji');
 }
 
+/** Respostas de quem recebeu aos blocos interativos: {blockId: {value, at}}. */
+function letter_interactions(int $letterId, int $recipientId): array
+{
+    $out = [];
+    if (!$recipientId) {
+        return $out;
+    }
+    foreach (q_all('SELECT block_id, value, created_at FROM interactions WHERE letter_id = ? AND user_id = ? ORDER BY id', [$letterId, $recipientId]) as $r) {
+        $out[$r['block_id']] = ['value' => $r['value'], 'at' => iso($r['created_at'])];
+    }
+    return $out;
+}
+
 function letter_replies(int $letterId): array
 {
     return q_all(

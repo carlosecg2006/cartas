@@ -44,6 +44,8 @@ $data = [
     'content' => $locked ? null : $content,
     'reactions' => $locked ? [] : letter_reactions((int) $letter['id']),
     'reactionChoices' => REACTION_EMOJIS,
+    // respostas de quem recebeu aos blocos interativos (quem escreveu vê as mesmas)
+    'interactions' => (object) ($locked ? [] : letter_interactions((int) $letter['id'], (int) $letter['recipient_id'])),
     'replies' => $locked ? [] : array_map(fn($r) => reply_payload($r, $user), letter_replies((int) $letter['id'])),
     // abertura completa só na primeira vez; releituras são mais rápidas
     'firstOpen' => !$isSender && !$letter['first_opened_at'],

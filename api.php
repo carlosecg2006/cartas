@@ -104,6 +104,7 @@ switch ($action) {
                 // A conversa, as reações e as favoritas eram de outra pessoa: não podem ir junto
                 q('DELETE FROM replies WHERE letter_id = ?', [(int) $letter['id']]);
                 q('DELETE FROM reactions WHERE letter_id = ?', [(int) $letter['id']]);
+                q('DELETE FROM interactions WHERE letter_id = ?', [(int) $letter['id']]);
                 q('DELETE FROM favorites WHERE letter_id = ? AND user_id <> ?', [(int) $letter['id'], $uid]);
                 $data['first_opened_at'] = null;
                 $data['last_opened_at'] = null;
@@ -201,6 +202,35 @@ switch ($action) {
             db_insert('reactions', ['letter_id' => (int) $letter['id'], 'user_id' => $uid, 'emoji' => $emoji, 'created_at' => now()]);
         }
         json_out(['ok' => true, 'reactions' => letter_reactions((int) $letter['id'])]);
+
+    case 'interact':
+        // Quem recebe responde a uma pergunta ou usa um vale da carta
+        $letter = load_letter_for($user, $in['id'] ?? 0, 'recipient');
+        if (letter_seal($letter, $user) !== null) {
+            json_error('Essa carta ainda está fechada.', 403);
+        }
+        $blockId = (string) ($in['block'] ?? '');
+        $value = (string) ($in['value'] ?? '');
+        $block = null;
+        foreach ($letter['content']['blocks'] ?? [] as $b) {
+            if (($b['id'] ?? '') === $blockId) {
+                $block = $b;
+                break;
+            }
+        }
+        $valid = $block && (
+            ($block['type'] === 'quiz' && preg_match('/^[0-3]$/', $value) && (int) $value < count($block['options'] ?? []))
+            || ($block['type'] === 'coupon' && $value === 'used')
+        );
+        if (!$valid) {
+            json_error('Resposta inválida.');
+        }
+        q('DELETE FROM interactions WHERE letter_id = ? AND block_id = ? AND user_id = ?', [(int) $letter['id'], $blockId, $uid]);
+        db_insert('interactions', ['letter_id' => (int) $letter['id'], 'block_id' => $blockId, 'user_id' => $uid, 'value' => $value, 'created_at' => now()]);
+        json_out_then(
+            ['ok' => true, 'interactions' => letter_interactions((int) $letter['id'], $uid) ?: new stdClass()],
+            fn() => notify_quietly((int) $letter['sender_id'])
+        );
 
     case 'reply':
         $letter = load_letter_for($user, $in['id'] ?? 0);

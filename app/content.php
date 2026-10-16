@@ -98,6 +98,42 @@ function safe_id($value): string
     return is_string($value) && preg_match('/^[A-Za-z0-9_-]{1,24}$/', $value) ? $value : 'b' . bin2hex(random_bytes(4));
 }
 
+/** Data do contador: 'AAAA-MM-DD' ou 'AAAA-MM-DDTHH:MM' (data real); senão vazio. */
+function counter_date_or($value): string
+{
+    if (!is_string($value) || !preg_match('/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/', $value, $m)) {
+        return '';
+    }
+    if (!checkdate((int) $m[2], (int) $m[3], (int) $m[1]) || (int) $m[1] < 1900 || (int) $m[1] > 2200) {
+        return '';
+    }
+    if (isset($m[4]) && ((int) $m[4] > 23 || (int) $m[5] > 59)) {
+        return '';
+    }
+    return $value;
+}
+
+/** Link de botão: só http/https; "exemplo.com" vira "https://exemplo.com". Inválido → vazio. */
+function safe_url($value): string
+{
+    if (!is_string($value)) {
+        return '';
+    }
+    $url = trim($value);
+    if ($url === '' || strlen($url) > 500 || preg_match('/[\s<>"\x00-\x1F]/', $url)) {
+        return '';
+    }
+    if (!preg_match('#^[a-z][a-z0-9+.-]*:#i', $url)) {
+        $url = 'https://' . ltrim($url, '/');
+    }
+    $parts = parse_url($url);
+    if (!$parts || !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true) || empty($parts['host'])
+        || !preg_match('/^[a-z0-9.-]+$/i', $parts['host']) || (!str_contains($parts['host'], '.') && strtolower($parts['host']) !== 'localhost')) {
+        return '';
+    }
+    return preg_replace('#^https?#i', strtolower($parts['scheme']), $url) ?? '';
+}
+
 // ---------- HTML de texto (lista branca) ----------
 
 function sanitize_inline_html($html, int $max = 20000): string
@@ -432,6 +468,68 @@ function sanitize_block(array $b): ?array
                 $block['peaks'][] = num($p, 0, 1, 0.3);
             }
             break;
+        case 'toggle':
+            $block['title'] = plain($b['title'] ?? '', 120);
+            $block['html'] = sanitize_inline_html($b['html'] ?? '');
+            break;
+        case 'timeline':
+            $block['items'] = [];
+            foreach (array_slice(is_array($b['items'] ?? null) ? $b['items'] : [], 0, 30) as $item) {
+                if (is_array($item)) {
+                    $block['items'][] = [
+                        'date' => plain($item['date'] ?? '', 40),
+                        'title' => plain($item['title'] ?? '', 120),
+                        'html' => sanitize_inline_html($item['html'] ?? '', 5000),
+                    ];
+                }
+            }
+            if (!$block['items']) {
+                $block['items'] = [['date' => '', 'title' => '', 'html' => '']];
+            }
+            break;
+        case 'counter':
+            $block['mode'] = pick($b['mode'] ?? null, ['since', 'until'], 'since');
+            $block['date'] = counter_date_or($b['date'] ?? '');
+            $block['label'] = plain($b['label'] ?? '', 120);
+            break;
+        case 'quiz':
+            $block['question'] = plain($b['question'] ?? '', 200);
+            $block['options'] = [];
+            foreach (array_slice(is_array($b['options'] ?? null) ? $b['options'] : [], 0, 4) as $opt) {
+                $block['options'][] = plain(is_string($opt) ? $opt : '', 100);
+            }
+            while (count($block['options']) < 2) {
+                $block['options'][] = '';
+            }
+            $answer = is_numeric($b['answer'] ?? null) ? (int) $b['answer'] : -1;
+            $block['answer'] = $answer >= 0 && $answer < count($block['options']) ? $answer : -1;
+            $block['right'] = plain($b['right'] ?? '', 160);
+            $block['wrong'] = plain($b['wrong'] ?? '', 160);
+            break;
+        case 'coupon':
+            $block['title'] = plain($b['title'] ?? '', 80);
+            $block['details'] = plain($b['details'] ?? '', 200);
+            $block['bg'] = color_or($b['bg'] ?? null, '#f6d7c3');
+            $block['emoji'] = plain($b['emoji'] ?? '🎟️', 8) ?: '🎟️';
+            break;
+        case 'poem':
+            $block['html'] = sanitize_inline_html($b['html'] ?? '');
+            $block['author'] = plain($b['author'] ?? '', 80);
+            break;
+        case 'place':
+            $block['emoji'] = plain($b['emoji'] ?? '📍', 8) ?: '📍';
+            $block['name'] = plain($b['name'] ?? '', 120);
+            $block['caption'] = plain($b['caption'] ?? '', 160);
+            $block['date'] = plain($b['date'] ?? '', 40);
+            break;
+        case 'columns':
+            $block['left'] = sanitize_inline_html($b['left'] ?? '');
+            $block['right'] = sanitize_inline_html($b['right'] ?? '');
+            break;
+        case 'button':
+            $block['label'] = plain($b['label'] ?? '', 80);
+            $block['url'] = safe_url($b['url'] ?? '');
+            break;
         default:
             return null;
     }
@@ -570,6 +668,36 @@ function content_excerpt(array $content, int $max = 140): string
         }
         if (in_array($b['type'] ?? '', ['secret', 'scratch'], true)) {
             $texts = [($b['label'] ?? '')];
+        }
+        switch ($b['type'] ?? '') {
+            case 'toggle': // o conteúdo fica escondido até abrir: só o título
+                $texts = [$b['title'] ?? ''];
+                break;
+            case 'timeline':
+                $texts = [];
+                foreach ($b['items'] ?? [] as $item) {
+                    $texts[] = trim(($item['title'] ?? '') . ' ' . ($item['html'] ?? ''));
+                }
+                break;
+            case 'quiz': // a pergunta, sem as opções nem a resposta
+                $texts = [$b['question'] ?? ''];
+                break;
+            case 'coupon':
+                $texts = [$b['title'] ?? ''];
+                break;
+            case 'poem':
+                $texts = [$b['html'] ?? '', $b['author'] ?? ''];
+                break;
+            case 'place':
+                $texts = [$b['name'] ?? ''];
+                break;
+            case 'columns':
+                $texts = [$b['left'] ?? '', $b['right'] ?? ''];
+                break;
+            case 'counter':
+            case 'button':
+                $texts = [$b['label'] ?? ''];
+                break;
         }
         foreach ($texts as $t) {
             $t = trim(html_entity_decode(strip_tags(str_replace('<br>', ' ', (string) $t)), ENT_QUOTES, 'UTF-8'));

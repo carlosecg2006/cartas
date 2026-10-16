@@ -82,6 +82,11 @@
     rendered = Letter.renderLetter(letterStage, data.content, {
       reveal: mode === 'fade',
       onPage: mode === 'write' ? (paper) => writeReveal(paper) : null,
+      // blocos interativos: quem recebe responde/usa; quem escreveu só vê o resultado
+      interactions: data.interactions || {},
+      sender: !!data.isAdmin,
+      otherName: data.isAdmin ? data.toName : '',
+      onInteract: data.isAdmin ? null : interact,
     });
     letterStage.classList.add('appear');
     // Impressão: as páginas escondidas também precisam dos adesivos no lugar
@@ -96,6 +101,13 @@
     if (location.hash === '#respostas') {
       setTimeout(() => document.getElementById('respostas').scrollIntoView({ behavior: 'smooth' }), 400);
     }
+  }
+
+  /** Guarda a resposta de quem recebe a uma pergunta ou o uso de um vale. */
+  async function interact(blockId, value) {
+    const res = await api('interact', { id: data.id, block: blockId, value });
+    data.interactions = res.interactions || {};
+    return data.interactions[blockId] || { value, at: new Date().toISOString() };
   }
 
   // ---------- Música enquanto lê ----------
@@ -240,7 +252,7 @@
     const jobs = blocks.map((block) => {
       const texts = [];
       const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
-        acceptNode: (n) => (n.parentElement.closest('.secret-content, .scratch-content, .voice, .music-embed, .w-rest') || !n.nodeValue.trim()
+        acceptNode: (n) => (n.parentElement.closest('.secret-content, .scratch-content, .voice, .music-embed, .w-rest, .quiz, .counter, .coupon, .toggle-body') || !n.nodeValue.trim()
           ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
       });
       while (walker.nextNode()) texts.push({ node: walker.currentNode, full: walker.currentNode.nodeValue });

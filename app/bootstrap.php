@@ -52,7 +52,7 @@ header("Content-Security-Policy: default-src 'self'; "
     . "font-src 'self' https://fonts.gstatic.com; "
     . "img-src 'self' data: blob:; "
     . "media-src 'self' blob:; "
-    . "frame-src https://www.youtube-nocookie.com https://open.spotify.com; "
+    . "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://open.spotify.com; "
     . "connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
 
 $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')

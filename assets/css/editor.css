@@ -117,7 +117,7 @@
 /* ---------- área da carta ---------- */
 .canvas-area { padding: 1rem clamp(8px, 3vw, 40px) 6rem; min-width: 0; }
 .canvas-tip { text-align: center; color: var(--ink-2); font-size: .82rem; margin: 0 0 .8rem; }
-.letter-scene.editing .paper-inner { min-height: 60vh; padding-left: clamp(36px, 8cqw, 76px); }
+.letter-scene.editing .paper-inner { min-height: 60vh; }
 
 .eb { outline: none; }
 .eb-gutter {

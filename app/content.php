@@ -45,7 +45,7 @@ function default_letter_content(string $recipientName = '', string $senderName =
         'v' => 1,
         'paper' => [
             'style' => 'lined', 'color' => '#fffdf6', 'ink' => '#3b3340', 'font' => 'caveat',
-            'size' => 'md', 'border' => 'none', 'scene' => 'desk',
+            'size' => 'md', 'border' => 'none', 'scene' => 'desk', 'layout' => 2,
         ],
         'envelope' => ['color' => '#e9b8b0', 'liner' => 'hearts', 'seal' => '❤', 'sealColor' => '#a8323e', 'stamp' => 'heart', 'label' => ''],
         'effect' => 'hearts',
@@ -262,6 +262,8 @@ function sanitize_letter_content($raw): array
             'ink' => color_or($p['ink'] ?? null, '#3b3340'),
             'font' => pick($p['font'] ?? null, LETTER_FONTS, 'caveat'),
             'size' => pick($p['size'] ?? null, TEXT_SIZES, 'md'),
+            // 1 = cartas antigas (projeto de 760 px); 2 = novas (600 px, letra maior no celular)
+            'layout' => (int) pick((int) ($p['layout'] ?? 1), [1, 2], 1),
             'border' => pick($p['border'] ?? null, PAPER_BORDERS, 'none'),
             'scene' => pick($p['scene'] ?? null, PAPER_SCENES, 'desk'),
             'image' => media_or($p['image'] ?? ''),

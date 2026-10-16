@@ -149,6 +149,7 @@
     const frame = Letter.el('iframe', 'bgm-frame', {
       src: 'https://www.youtube-nocookie.com/embed/' + bgm.mid + '?' + params,
       allow: 'autoplay; encrypted-media', title: 'Música da carta', tabindex: '-1',
+      referrerpolicy: 'strict-origin-when-cross-origin', // sem isso o YouTube dá erro 153
     });
     bar.appendChild(frame);
     const send = (func, args) => {
@@ -185,10 +186,15 @@
       if (msg.event === 'onStateChange') st = typeof msg.info === 'object' && msg.info ? msg.info.playerState : msg.info;
       else if (msg.info && typeof msg.info === 'object' && 'playerState' in msg.info) st = msg.info.playerState;
       st = Number(st);
-      if (st === 1) { show(true); bar.classList.remove('needs-tap'); }
+      if (st === 1) { show(true); bar.classList.remove('needs-tap', 'show-frame'); }
       if (st === 2 || st === 0) show(false);
     });
-    // alguns celulares não deixam tocar sozinho: mostra o vídeo pequeno para a pessoa tocar
+    // Alguns celulares não deixam tocar sozinho: mostra o vídeo pequeno para a pessoa tocar.
+    // É compacto, explica o que fazer e pode ser fechado (a música continua disponível no botão ▶).
+    const hint = Letter.el('span', 'bgm-hint', { text: 'Toque no vídeo para a música começar' });
+    const close = Letter.el('button', 'bgm-close', { type: 'button', 'aria-label': 'Esconder vídeo', text: '×' });
+    close.addEventListener('click', () => bar.classList.remove('show-frame'));
+    bar.append(hint, close);
     setTimeout(() => { if (!playing) bar.classList.add('needs-tap', 'show-frame'); }, 3500);
     toggle.addEventListener('click', () => {
       if (playing) { send('pauseVideo'); show(false); } else { send('setVolume', [Math.round(volume * 100)]); send('playVideo'); }
@@ -212,63 +218,118 @@
     if (activeWriter) activeWriter(); // nova página: a anterior aparece inteira
     const blocks = Array.from(paper.querySelectorAll('.paper-inner > .lb'));
     const stickers = Array.from(paper.querySelectorAll('.sticker'));
+    // Cada trecho de texto vira [parte já escrita][caneta][resto invisível].
+    // O resto continua ocupando o espaço: a carta já nasce do tamanho final,
+    // as linhas não pulam e a página não cresce enquanto a pessoa rola.
+    const caret = Letter.el('span', 'w-caret', { 'aria-hidden': 'true' });
     const jobs = blocks.map((block) => {
       const texts = [];
       const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
-        acceptNode: (n) => (n.parentElement.closest('.secret-content, .scratch-content, .voice, .music-embed') || !n.nodeValue.trim()
+        acceptNode: (n) => (n.parentElement.closest('.secret-content, .scratch-content, .voice, .music-embed, .w-rest') || !n.nodeValue.trim()
           ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
       });
       while (walker.nextNode()) texts.push({ node: walker.currentNode, full: walker.currentNode.nodeValue });
-      texts.forEach((t) => { t.node.nodeValue = ''; });
-      block.classList.add('w-hidden');
-      return { block, texts };
+      texts.forEach((t) => {
+        t.rest = Letter.el('span', 'w-rest', { text: t.full });
+        t.node.nodeValue = '';
+        t.node.after(t.rest);
+      });
+      block.classList.add(texts.length ? 'w-text' : 'w-wait');
+      return { block, texts, anchored: [] };
     });
+    // adesivos aparecem junto com o bloco ao qual estão presos
+    const byId = {};
+    (data.content.stickers || []).forEach((s) => { byId[s.id] = s.anchor; });
+    jobs.forEach((j) => { j.anchored = stickers.filter((st) => byId[st.dataset.id] === j.block.dataset.id); });
+    const loose = stickers.filter((st) => !jobs.some((j) => j.anchored.includes(st)));
     stickers.forEach((st) => st.classList.add('w-hidden'));
     paper.setAttribute('aria-busy', 'true');
 
     let cancelled = false;
+    let follow = true; // a tela acompanha a caneta até a pessoa rolar sozinha
+    const stopFollow = () => { follow = false; };
+    ['wheel', 'touchmove', 'keydown'].forEach((ev) => window.addEventListener(ev, stopFollow, { passive: true, once: true }));
+    const showStickers = (list) => list.forEach((st, i) => setTimeout(() => st.classList.remove('w-hidden'), i * 140));
+    const finishText = (t) => {
+      t.node.nodeValue = t.full;
+      t.rest.remove();
+    };
     const done = () => {
+      caret.remove();
       paper.removeAttribute('aria-busy');
+      ['wheel', 'touchmove', 'keydown'].forEach((ev) => window.removeEventListener(ev, stopFollow));
       if (activeWriter === finishAll) {
         activeWriter = null;
         skipButton(false);
       }
-      if (rendered) rendered.relayout();
     };
     const finishAll = () => {
       if (cancelled) return;
       cancelled = true;
-      jobs.forEach((j) => { j.block.classList.remove('w-hidden'); j.texts.forEach((t) => { t.node.nodeValue = t.full; }); });
+      jobs.forEach((j) => { j.block.classList.remove('w-text', 'w-wait'); j.texts.forEach((t) => { if (t.rest.isConnected) finishText(t); }); });
       stickers.forEach((st) => st.classList.remove('w-hidden'));
       done();
     };
     activeWriter = finishAll;
     skipButton(true);
 
-    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Ritmo de quem escreve à mão: ~20 letras por segundo, com pausas na pontuação.
+    // Só cartas muito longas aceleram (no máximo ~30 letras/s), e "Mostrar tudo" pula quando quiser.
+    const totalChars = jobs.reduce((n, j) => n + j.texts.reduce((m, t) => m + t.full.length, 0), 0);
+    const perChar = Math.max(32, Math.min(50, 100000 / Math.max(1, totalChars)));
+    const pauseAfter = (ch) => ('.!?…'.includes(ch) ? 7 : ',;:'.includes(ch) ? 3.2 : ch === '\n' ? 4 : 0) * perChar;
+    let lastFollow = 0;
+    const keepVisible = (now) => {
+      if (!follow || !caret.isConnected || now - lastFollow < 400) return;
+      lastFollow = now;
+      const r = caret.getBoundingClientRect();
+      const limit = window.innerHeight * 0.72;
+      if (r.bottom > limit) window.scrollBy({ top: r.bottom - limit, behavior: 'smooth' });
+    };
+
     (async () => {
-      await wait(500);
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      await sleep(450);
       for (const job of jobs) {
         if (cancelled) return;
-        job.block.classList.remove('w-hidden');
-        const total = job.texts.reduce((n, t) => n + t.full.length, 0);
-        if (!total) {
-          await wait(260);
+        job.block.classList.remove('w-text', 'w-wait');
+        if (!job.texts.length) {
+          showStickers(job.anchored);
+          await sleep(420);
           continue;
         }
-        const perTick = Math.max(1, Math.ceil(total / 90)); // cada bloco leva no máximo ~2,5 s
         for (const t of job.texts) {
-          for (let i = 0; i < t.full.length; i += perTick) {
+          t.rest.before(caret);
+          let shown = 0;
+          let last = performance.now();
+          let budget = 0;
+          // a cada ~70 ms escreve as letras que couberem no tempo que passou
+          // (mais vezes que isso não muda o efeito e só pesa a rolagem no celular)
+          while (shown < t.full.length) {
             if (cancelled) return;
-            t.node.nodeValue = t.full.slice(0, i + perTick);
-            await wait(26);
+            const now = await new Promise((r) => setTimeout(() => requestAnimationFrame(r), 55));
+            budget += now - last;
+            last = now;
+            let step = 0;
+            while (shown + step < t.full.length && budget >= perChar) {
+              const ch = t.full[shown + step];
+              budget -= perChar + pauseAfter(ch);
+              step++;
+            }
+            if (!step) continue;
+            shown += step;
+            t.node.nodeValue = t.full.slice(0, shown);
+            t.rest.textContent = t.full.slice(shown);
+            keepVisible(now);
           }
+          finishText(t);
         }
-        await wait(180);
+        showStickers(job.anchored);
+        await sleep(perChar * 6);
       }
       if (cancelled) return;
       cancelled = true;
-      stickers.forEach((st, i) => setTimeout(() => st.classList.remove('w-hidden'), i * 120));
+      showStickers(loose);
       done();
     })();
   }
@@ -300,15 +361,34 @@
     const bar = document.querySelector('[data-progress]');
     const fill = bar.querySelector('span');
     bar.hidden = false;
-    const update = () => {
-      const paper = rendered.paper.getBoundingClientRect();
-      const total = paper.height - window.innerHeight + 120;
-      const ratio = total > 0 ? Math.min(1, Math.max(0, (120 - paper.top) / total)) : 1;
-      fill.style.transform = 'scaleX(' + ratio + ')';
+    // Mede a carta só quando o tamanho muda; ao rolar, só faz conta com scrollY (nada de medir a página a cada movimento)
+    let top = 0;
+    let height = 0;
+    let queued = false;
+    const measure = () => {
+      const r = rendered.paper.getBoundingClientRect();
+      top = r.top + window.scrollY;
+      height = r.height;
     };
+    const paint = () => {
+      queued = false;
+      const total = height - window.innerHeight + 120;
+      const ratio = total > 0 ? Math.min(1, Math.max(0, (window.scrollY + 120 - top) / total)) : 1;
+      fill.style.transform = 'scaleX(' + ratio.toFixed(4) + ')';
+    };
+    const update = () => {
+      if (!queued) {
+        queued = true;
+        requestAnimationFrame(paint);
+      }
+    };
+    const remeasure = () => { measure(); update(); };
     window.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
-    update();
+    window.addEventListener('resize', remeasure);
+    if (window.ResizeObserver) new ResizeObserver(remeasure).observe(rendered.scene);
+    // a página atual muda ao virar a folha
+    rendered.scene.addEventListener('click', (e) => { if (e.target.closest('.page-btn')) setTimeout(remeasure, 800); });
+    remeasure();
   }
 
   // ---------- Reações ----------

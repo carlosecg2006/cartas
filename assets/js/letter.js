@@ -142,7 +142,14 @@
       src, loading: 'lazy', title: 'Música',
       allow: 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture',
       allowfullscreen: true, frameborder: '0',
+      // O YouTube recusa vídeos embutidos sem saber de qual site vêm (erro 153).
+      // Só o endereço do site é enviado, nunca a página da carta.
+      referrerpolicy: 'strict-origin-when-cross-origin',
     }));
+    if (b.provider === 'youtube') {
+      const link = el('a', 'music-open', { href: 'https://www.youtube.com/watch?v=' + b.mid, target: '_blank', rel: 'noopener', text: 'Abrir no YouTube' });
+      wrap.appendChild(link);
+    }
     return wrap;
   }
 
@@ -162,7 +169,8 @@
     }
     const usesImage = p.style === 'image' && p.image;
     paper.className = 'paper paper-' + (usesImage ? 'image' : (p.style === 'image' ? 'plain' : (p.style || 'lined')))
-      + ' border-' + (p.border || 'none') + ' size-' + (p.size || 'md')
+      + ' border-' + (p.border || 'none') + ' size-' + (p.size || 'md') + (p.layout === 2 ? ' layout-2' : '')
+      + (paper.dataset.fluid === '1' ? ' paper-fluid' : '')
       + ((usesImage ? p.veilDark : isDark(p.color)) ? ' paper-dark' : '');
     const font = FONTS[p.font] || FONTS.caveat;
     paper.style.setProperty('--paper', p.color || '#fffdf6');
@@ -296,7 +304,7 @@
       case 'pagebreak':
         break;
       case 'spacer':
-        node.style.height = (b.height || 40) + 'px';
+        node.style.height = 'calc(' + (b.height || 40) + ' * var(--u))';
         break;
     }
     return node;
@@ -577,29 +585,48 @@
     const layer = paper.querySelector('.sticker-layer');
     if (!layer) return;
     // primeiro só lê, depois só escreve: evita recalcular o layout a cada adesivo
-    const paperRect = paper.getBoundingClientRect();
-    const width = paperRect.width || 1;
+    // medidas de layout (offset*), que ignoram animações e transformações em andamento:
+    // assim a posição não depende do momento em que a carta foi medida
+    const width = paper.clientWidth || 1;
     const blocks = paper.querySelector('.paper-inner');
     const contentBottom = blocks ? blocks.offsetTop + blocks.offsetHeight : 0;
     const items = [];
     stickers.forEach((s) => {
       const node = layer.querySelector('.sticker[data-id="' + s.id + '"]');
       if (!node) return;
-      items.push({ node, top: anchorTop(paper, s.anchor, paperRect) + (s.y * width) / 100, h: node.offsetHeight || 0 });
+      items.push({ node, top: anchorTop(paper, s.anchor) + (s.y * width) / 100, h: node.offsetHeight || 0 });
     });
     let maxBottom = 0;
     items.forEach((it) => {
-      it.node.style.top = it.top + 'px';
+      const top = Math.round(it.top * 10) / 10 + 'px';
+      if (it.node.style.top !== top) it.node.style.top = top;
       maxBottom = Math.max(maxBottom, it.top + it.h / 2);
     });
-    paper.style.minHeight = maxBottom > contentBottom ? Math.ceil(maxBottom + 24) + 'px' : '';
+    const minH = maxBottom > contentBottom ? Math.ceil(maxBottom + 24) + 'px' : '';
+    if (paper.style.minHeight !== minH) paper.style.minHeight = minH;
   }
 
-  function anchorTop(paper, anchor, paperRect) {
+  /** Distância (em px de layout) do topo do papel até o topo do bloco. */
+  function anchorTop(paper, anchor) {
     if (!anchor) return 0;
     const block = paper.querySelector('.lb[data-id="' + anchor + '"]');
     if (!block) return 0;
-    return block.getBoundingClientRect().top - (paperRect || paper.getBoundingClientRect()).top;
+    let y = 0;
+    let node = block;
+    while (node && node !== paper) {
+      y += node.offsetTop;
+      node = node.offsetParent;
+    }
+    if (node === paper) return y;
+    // fora da cadeia esperada (raro): volta para a medida visual
+    return block.getBoundingClientRect().top - paper.getBoundingClientRect().top;
+  }
+
+  /** Quantos px de tela vale 1 unidade de projeto neste papel. */
+  function unitPx(paper) {
+    if (paper.classList.contains('paper-fluid')) return 1;
+    const dw = paper.classList.contains('layout-2') ? 600 : 760;
+    return (paper.clientWidth || dw) / dw;
   }
 
   /** Divide os blocos em páginas nas quebras de página; adesivos vão com o bloco ao qual estão presos. */
@@ -620,8 +647,18 @@
     return pages.filter((pg, i) => i === 0 || pg.blocks.length || pg.stickers.length);
   }
 
-  function buildPaper(scene, page, p) {
+  /**
+   * Sem adesivos, a posição exata não importa: o texto se ajusta à tela (letra grande no celular).
+   * Com adesivos, o papel inteiro muda só de escala, para cada adesivo continuar em cima da palavra certa.
+   */
+  function setFluid(paper, fluid) {
+    paper.dataset.fluid = fluid ? '1' : '';
+    paper.classList.toggle('paper-fluid', fluid);
+  }
+
+  function buildPaper(scene, page, p, fluid) {
     const paper = el('div', 'paper');
+    paper.dataset.fluid = fluid ? '1' : '';
     applyPaper(scene, paper, p);
     const inner = el('div', 'paper-inner');
     page.blocks.forEach((b) => inner.appendChild(renderBlock(b, p)));
@@ -641,7 +678,8 @@
     const p = content.paper || {};
     const scene = el('div', 'letter-scene');
     const pages = splitPages(content);
-    const papers = pages.map((pg) => buildPaper(scene, pg, p));
+    const fluid = !(content.stickers || []).length;
+    const papers = pages.map((pg) => buildPaper(scene, pg, p, fluid));
     let current = 0;
     const seen = new Set();
     const cleanups = [];
@@ -856,23 +894,14 @@
 
   // ---------- Efeitos ao abrir ----------
 
+  /**
+   * Efeito de abertura (corações, confete, pétalas, estrelas, neve).
+   * Feito com animações CSS de transform/opacity: o celular executa direto na placa de vídeo,
+   * separado da página, então o efeito nunca deixa a rolagem engasgar.
+   */
   function playEffect(kind, duration) {
     if (!kind || kind === 'none' || window.matchMedia('(prefers-reduced-motion: reduce)').matches
       || document.documentElement.dataset.reduceMotion === '1') return;
-    const cv = el('canvas', 'effect-canvas');
-    document.body.appendChild(cv);
-    const ctx = cv.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    const resize = () => {
-      cv.width = innerWidth * dpr;
-      cv.height = innerHeight * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    window.addEventListener('resize', resize);
-    const W = () => innerWidth;
-    const H = () => innerHeight;
-    const rnd = (a, b) => a + Math.random() * (b - a);
     const palettes = {
       hearts: ['#e05a6d', '#f08ca0', '#c43b52', '#f7b6c2'],
       confetti: ['#e05a6d', '#f2b84b', '#4f9d8a', '#5b8fd9', '#9b7be0', '#f08c4a'],
@@ -881,69 +910,41 @@
       snow: ['#ffffff', '#eef4fb'],
     };
     const colors = palettes[kind] || palettes.confetti;
-    const count = kind === 'snow' ? 90 : kind === 'stars' ? 46 : 70;
-    const parts = Array.from({ length: count }, () => ({
-      x: rnd(0, W()), y: kind === 'stars' ? rnd(0, H()) : rnd(-H(), -10),
-      vx: rnd(-0.6, 0.6), vy: kind === 'snow' ? rnd(0.6, 1.6) : rnd(1.4, 3.2),
-      size: kind === 'snow' ? rnd(2, 5) : rnd(7, 15), rot: rnd(0, Math.PI * 2), vr: rnd(-0.08, 0.08),
-      color: colors[Math.floor(Math.random() * colors.length)], phase: rnd(0, Math.PI * 2),
-    }));
-    const start = performance.now();
     const total = duration || 5200;
-    const heart = (x, y, s) => {
-      ctx.beginPath();
-      ctx.moveTo(x, y + s * 0.3);
-      ctx.bezierCurveTo(x, y, x - s / 2, y, x - s / 2, y + s * 0.3);
-      ctx.bezierCurveTo(x - s / 2, y + s * 0.6, x, y + s * 0.8, x, y + s);
-      ctx.bezierCurveTo(x, y + s * 0.8, x + s / 2, y + s * 0.6, x + s / 2, y + s * 0.3);
-      ctx.bezierCurveTo(x + s / 2, y, x, y, x, y + s * 0.3);
-      ctx.fill();
-    };
-    const star = (x, y, s) => {
-      ctx.beginPath();
-      for (let i = 0; i < 8; i++) {
-        const r = i % 2 ? s * 0.22 : s * 0.6;
-        const a = (Math.PI / 4) * i;
-        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    const rnd = (x, y) => x + Math.random() * (y - x);
+    // menos partículas em telas pequenas: o efeito continua cheio, com metade do trabalho
+    const area = Math.min(1, Math.max(0.5, (innerWidth * innerHeight) / (1280 * 800)));
+    const count = Math.round((kind === 'stars' ? 40 : 56) * area);
+    const shape = (color) => {
+      if (kind === 'hearts') {
+        return 'url("data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 18"><path d="M10 17S1 11.5 1 5.6A4.6 4.6 0 0 1 10 3.4 4.6 4.6 0 0 1 19 5.6C19 11.5 10 17 10 17z" fill="' + color + '"/></svg>') + '") center / contain no-repeat';
       }
-      ctx.closePath();
-      ctx.fill();
+      if (kind === 'stars') {
+        return 'url("data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -10 20 20"><path d="M0-10L2.2-2.2 10 0 2.2 2.2 0 10-2.2 2.2-10 0-2.2-2.2z" fill="' + color + '"/></svg>') + '") center / contain no-repeat';
+      }
+      return color;
     };
-    const frame = (now) => {
-      const t = now - start;
-      ctx.clearRect(0, 0, W(), H());
-      const fade = t > total - 1200 ? Math.max(0, (total - t) / 1200) : 1;
-      parts.forEach((p) => {
-        p.phase += 0.03;
-        p.rot += p.vr;
-        if (kind !== 'stars') {
-          p.x += p.vx + Math.sin(p.phase) * (kind === 'petals' || kind === 'snow' ? 0.9 : 0.4);
-          p.y += p.vy;
-          if (p.y > H() + 20 && t < total - 1600) { p.y = -20; p.x = rnd(0, W()); }
-        }
-        ctx.save();
-        ctx.globalAlpha = fade * (kind === 'stars' ? 0.35 + 0.65 * Math.abs(Math.sin(p.phase * 2)) : 0.95);
-        ctx.fillStyle = p.color;
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rot);
-        if (kind === 'hearts') heart(0, -p.size / 2, p.size);
-        else if (kind === 'confetti') ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2.2);
-        else if (kind === 'petals') { ctx.beginPath(); ctx.ellipse(0, 0, p.size / 2, p.size / 3.4, 0, 0, Math.PI * 2); ctx.fill(); }
-        else if (kind === 'stars') star(0, 0, p.size);
-        else { ctx.beginPath(); ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2); ctx.fill(); }
-        ctx.restore();
-      });
-      if (t < total) requestAnimationFrame(frame);
-      else { cv.remove(); window.removeEventListener('resize', resize); }
-    };
-    requestAnimationFrame(frame);
+    const layer = el('div', 'fx-layer fx-' + kind, { 'aria-hidden': 'true' });
+    for (let i = 0; i < count; i++) {
+      const size = kind === 'snow' ? rnd(4, 9) : kind === 'stars' ? rnd(10, 20) : rnd(9, 17);
+      const fall = kind === 'snow' ? rnd(5500, 9000) : rnd(3200, 5400);
+      const node = el('i', 'fx');
+      node.style.cssText = '--x:' + rnd(0, 100).toFixed(1) + 'vw;--y:' + rnd(0, 100).toFixed(1) + 'vh;--dx:' + rnd(-12, 12).toFixed(1) + 'vw;'
+        + '--r0:' + rnd(0, 360).toFixed(0) + 'deg;--r1:' + rnd(-540, 540).toFixed(0) + 'deg;--s:' + size.toFixed(1) + 'px;'
+        + '--d:' + fall.toFixed(0) + 'ms;--delay:' + (kind === 'stars' ? rnd(0, 1600) : rnd(-fall * 0.6, Math.max(0, total - fall - 400))).toFixed(0) + 'ms;'
+        + 'background:' + shape(colors[i % colors.length]);
+      layer.appendChild(node);
+    }
+    document.body.appendChild(layer);
+    setTimeout(() => layer.classList.add('fx-out'), Math.max(0, total - 1100));
+    setTimeout(() => layer.remove(), total + 200);
   }
 
   window.Letter = {
     FONTS, PAPERS, BORDERS, SCENES, LINERS, DIVIDERS, FRAMES, TAPES, TEXT_STYLES,
     DOODLES, STAMPS, EFFECTS, GALLERY_LAYOUTS,
     PAPER_COLORS, INK_COLORS, ACCENT_COLORS, SIZE_MUL,
-    uid, el, icon, mediaUrl, parseMusicUrl, musicEmbed, isDark, fmtTime,
+    uid, el, icon, mediaUrl, unitPx, setFluid, parseMusicUrl, musicEmbed, isDark, fmtTime,
     renderGallery, renderAudio, renderScratch, SCRATCH_COVERS, doodleSvg, stampEl, postmarkEl, playEffect, splitPages,
     applyPaper, applyBlockStyle, renderBlock, renderImageFigure, renderDivider, renderSignature,
     stickerEl, updateStickerBox, fillSticker, layoutStickers, anchorTop,

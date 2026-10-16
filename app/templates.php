@@ -191,6 +191,7 @@ function build_template(string $key, string $recipientName, string $senderName):
 {
     $templates = letter_templates();
     $content = ($templates[$key] ?? $templates['branco'])['content'];
+    $content['paper']['layout'] = 2; // cartas novas usam o projeto proporcional mais estreito
     $plainVars = [
         '{nome}' => $recipientName !== '' ? first_name($recipientName) : 'Você',
         '{eu}' => first_name($senderName),

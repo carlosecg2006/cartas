@@ -100,6 +100,7 @@
   }
 
   function renderAll(focus) {
+    paper.dataset.fluid = stickers().length ? '' : '1';
     L.applyPaper(scene, paper, paperOpts());
     renderBlocks();
     renderStickers();
@@ -137,6 +138,15 @@
     layoutQueued = true;
     requestAnimationFrame(() => {
       layoutQueued = false;
+      // primeiro adesivo: o papel passa a mudar só de escala (posições exatas em qualquer tela)
+      const fluid = !stickers().length;
+      if ((paper.dataset.fluid === '1') !== fluid) {
+        L.setFluid(paper, fluid);
+        if (!fluid && paper.clientWidth < 560 && !layout.told) {
+          layout.told = true;
+          toast('Com adesivos, a carta fica com o mesmo desenho em qualquer tela (por isso a letra se ajustou).');
+        }
+      }
       L.layoutStickers(paper, stickers());
       positionStickerBar();
       $$('.pagebreak-label', inner).forEach((n, i) => { n.textContent = 'Página ' + (i + 2); });
@@ -664,16 +674,17 @@
       body.appendChild(buildRecorder(b));
     },
     spacer(body, b, wrap) {
-      wrap.style.height = b.height + 'px';
+      wrap.style.height = 'calc(' + b.height + ' * var(--u))';
       const grip = L.el('div', 'spacer-grip', { title: 'Arraste para ajustar o espaço' });
       grip.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         grip.setPointerCapture(e.pointerId);
         const startY = e.clientY;
         const startH = b.height;
+        const unit = L.unitPx(paper);
         const move = (ev) => {
-          b.height = Math.max(8, Math.min(240, Math.round(startH + ev.clientY - startY)));
-          wrap.style.height = b.height + 'px';
+          b.height = Math.max(8, Math.min(240, Math.round(startH + (ev.clientY - startY) / unit)));
+          wrap.style.height = 'calc(' + b.height + ' * var(--u))';
           layout();
         };
         const up = () => {

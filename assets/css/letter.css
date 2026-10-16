@@ -34,8 +34,11 @@
   --ink: #3b3340;
   --font: 'Caveat', cursive;
   --font-scale: 1.3;
-  --base: 20px;
+  --base-n: 20;
   --line-h: 1.65;
+  /* Largura de projeto: tudo dentro do papel é medido em proporção a ela (--u),
+     então a carta fica idêntica em qualquer tela, como um desenho que só muda de escala. */
+  --dw: 760;
   container-type: inline-size;
   position: relative;
   width: 100%;
@@ -50,29 +53,40 @@
   flex-direction: column;
 }
 .paper > .paper-inner { flex: 1 0 auto; }
-.paper.size-sm { --base: 17px; }
-.paper.size-lg { --base: 23px; }
+.paper.size-sm { --base-n: 17; }
+.paper.size-lg { --base-n: 23; }
+/* Cartas novas: projeto mais estreito, letra maior no celular */
+.paper.layout-2 { --dw: 600; max-width: 600px; }
 .paper-inner {
   position: relative;
   z-index: 1;
-  padding: clamp(28px, 8cqw, 72px) clamp(22px, 8cqw, 76px);
-  font-size: calc(var(--base) * var(--font-scale));
+  --u: calc(100cqw / var(--dw));
+  padding: 8cqw;
+  font-size: calc(var(--base-n) * var(--font-scale) * var(--u));
   line-height: var(--line-h);
   overflow-wrap: anywhere;
 }
+
+/* Carta sem adesivos: o texto se ajusta à tela, como numa página comum */
+.paper-fluid .paper-inner {
+  --u: 1px;
+  --pad-l: clamp(22px, 8cqw, 76px);
+  padding: clamp(28px, 8cqw, 72px) clamp(22px, 8cqw, 76px);
+}
 @container (max-width: 520px) {
-  .paper-inner { font-size: calc(var(--base) * var(--font-scale) * .9); }
+  .paper-fluid .paper-inner { font-size: calc(var(--base-n) * var(--font-scale) * .9px); }
 }
 
 /* As linhas ficam no .paper-inner (dentro do contêiner) para acompanhar o tamanho da letra */
 .paper-lined .paper-inner {
   --lh: calc(1em * var(--line-h));
-  --pad-l: clamp(22px, 8cqw, 76px);
+  --pad-l: 8cqw;
   background-image:
-    linear-gradient(90deg, transparent calc(var(--pad-l) - 14px), rgba(226, 104, 120, .4) calc(var(--pad-l) - 14px), rgba(226, 104, 120, .4) calc(var(--pad-l) - 12px), transparent calc(var(--pad-l) - 12px)),
+    linear-gradient(90deg, transparent calc(var(--pad-l) - 14 * var(--u)), rgba(226, 104, 120, .4) calc(var(--pad-l) - 14 * var(--u)), rgba(226, 104, 120, .4) calc(var(--pad-l) - 12 * var(--u)), transparent calc(var(--pad-l) - 12 * var(--u))),
     repeating-linear-gradient(180deg, transparent 0, transparent calc(var(--lh) - 1px), color-mix(in srgb, var(--ink) 16%, transparent) calc(var(--lh) - 1px), color-mix(in srgb, var(--ink) 16%, transparent) var(--lh));
-  background-position: 0 0, 0 calc(clamp(28px, 8cqw, 72px) - .14em);
+  background-position: 0 0, 0 calc(8cqw - .14em);
 }
+.paper-fluid.paper-lined .paper-inner { background-position: 0 0, 0 calc(clamp(28px, 8cqw, 72px) - .14em); }
 .paper-lined .lb { margin-bottom: 0; }
 .paper-sample.paper-lined {
   background-image: repeating-linear-gradient(180deg, transparent 0 7px, color-mix(in srgb, var(--ink) 18%, transparent) 7px 8px);
@@ -228,6 +242,8 @@
 
 .music-embed { margin: .3em 0; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 16px rgba(0, 0, 0, .12); }
 .music-embed iframe { display: block; width: 100%; border: 0; }
+.music-open { display: block; text-align: center; font-family: var(--font-ui, system-ui), sans-serif; font-size: 12px; padding: .35em; color: inherit; opacity: .7; background: color-mix(in srgb, var(--paper) 85%, var(--ink)); }
+.music-open:hover { opacity: 1; }
 .music-youtube iframe { aspect-ratio: 16 / 9; height: auto; }
 .music-spotify iframe { height: 152px; }
 
@@ -463,7 +479,7 @@ button.env-seal:hover { animation-play-state: paused; transform: translate(-50%,
 /* revelação na abertura */
 .paper.reveal .paper-inner > .lb { animation: blockIn .7s both cubic-bezier(.2, .8, .2, 1); animation-delay: calc(.35s + var(--i, 0) * 110ms); }
 .paper.reveal .sticker { animation: stickerIn .5s both cubic-bezier(.3, 1.4, .5, 1); animation-delay: calc(.35s + var(--i, 0) * 110ms); }
-@keyframes blockIn { from { opacity: 0; transform: translateY(10px); filter: blur(3px); } }
+@keyframes blockIn { from { opacity: 0; transform: translateY(10px); } }
 @keyframes stickerIn { from { opacity: 0; scale: .4; } }
 
 /* ---------- imagem própria: papel e cenário ---------- */
@@ -512,3 +528,35 @@ button.env-seal:hover { animation-play-state: paused; transform: translate(-50%,
 
 /* texto se escrevendo */
 .w-hidden { visibility: hidden; }
+/* Modo "Escrevendo": o texto que falta já ocupa o lugar dele, só não aparece */
+.w-rest { visibility: hidden; }
+.w-text .lb-figure, .w-text img, .w-wait { opacity: 0; }
+.lb { transition: opacity .5s; }
+.w-caret { position: relative; }
+.w-caret::after {
+  /* desenhada por cima, sem ocupar espaço: a linha não muda de altura */
+  content: ''; position: absolute; left: -.03em; bottom: -.18em; width: .07em; height: 1em;
+  background: currentColor; border-radius: 1px; opacity: .75; animation: w-blink .9s steps(1) infinite;
+}
+@keyframes w-blink { 50% { opacity: 0; } }
+
+/* ---------- Efeito de abertura (só transform/opacity: roda na placa de vídeo, sem pesar a rolagem) ---------- */
+.fx-layer { position: fixed; inset: 0; pointer-events: none; z-index: 90; overflow: hidden; contain: strict; transition: opacity 1s; }
+.fx-layer.fx-out { opacity: 0; }
+.fx {
+  position: absolute; left: 0; top: 0; width: var(--s); height: var(--s); will-change: transform;
+  animation: fx-fall var(--d) linear var(--delay) both;
+}
+.fx-confetti .fx { height: calc(var(--s) * .45); border-radius: 1px; }
+.fx-petals .fx { height: calc(var(--s) * .62); border-radius: 50%; }
+.fx-snow .fx { border-radius: 50%; opacity: .9; }
+.fx-stars .fx { animation: fx-twinkle 1.6s ease-in-out var(--delay) infinite both; transform: translate3d(var(--x), var(--y), 0); }
+@keyframes fx-fall {
+  from { transform: translate3d(var(--x), -6vh, 0) rotate(var(--r0)); }
+  to { transform: translate3d(calc(var(--x) + var(--dx)), 106vh, 0) rotate(var(--r1)); }
+}
+@keyframes fx-twinkle {
+  0%, 100% { opacity: .15; transform: translate3d(var(--x), var(--y), 0) scale(.6); }
+  50% { opacity: 1; transform: translate3d(var(--x), var(--y), 0) scale(1); }
+}
+@media print { .fx-layer { display: none !important; } }

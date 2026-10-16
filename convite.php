@@ -4,7 +4,8 @@ declare(strict_types=1);
 // Página aberta pelo link de convite (ou de nova senha)
 require __DIR__ . '/app/bootstrap.php';
 
-$token = (string) ($_GET['t'] ?? $_POST['t'] ?? '');
+$token = $_GET['t'] ?? $_POST['t'] ?? '';
+$token = is_string($token) ? $token : '';
 $invite = find_invite($token);
 $me = current_user();
 $errors = [];

@@ -76,6 +76,7 @@
     const nb = newBlock(key);
     const text = blockText(b);
     Object.assign(nb, { id: b.id, align: b.align, font: b.font, size: b.size, color: b.color });
+    ['spacing', 'leading', 'box'].forEach((k) => { if (b[k]) nb[k] = JSON.parse(JSON.stringify(b[k])); });
     if ('html' in nb) nb.html = text;
     if (nb.type === 'list') nb.items = text ? text.split('<br>') : [''];
     if (nb.type === 'checklist') nb.items = (text ? text.split('<br>') : ['']).map((h) => ({ checked: false, html: h }));
@@ -1681,8 +1682,11 @@
 
     if (!['image', 'divider', 'music', 'spacer', 'gallery', 'audio', 'pagebreak'].includes(b.type)) {
       const s = section('Alinhamento');
-      s.appendChild(optionRow({ left: 'align-left', center: 'align-center', right: 'align-right' }, b.align, (v) => update(() => { b.align = v; }), {
-        titles: { left: 'Esquerda', center: 'Centro', right: 'Direita' }, render: (btn, v, ic) => btn.appendChild(L.icon(ic)), className: 'opt-icons',
+      const aligns = { left: 'align-left', center: 'align-center', right: 'align-right' };
+      if (JUSTIFY_TYPES.includes(b.type)) aligns.justify = 'justify';
+      s.appendChild(optionRow(aligns, b.align, (v) => update(() => { b.align = v; }), {
+        titles: { left: 'Esquerda', center: 'Centro', right: 'Direita', justify: 'Justificado' },
+        render: (btn, v, ic) => btn.appendChild(ic === 'justify' ? justifyIcon() : L.icon(ic)), className: 'opt-icons',
       }));
       s.appendChild(L.el('p', 'menu-label', { text: 'Tamanho do texto' }));
       s.appendChild(optionRow({ '': 'Auto', sm: 'P', md: 'M', lg: 'G', xl: 'GG' }, b.size || '', (v) => update(() => { b.size = v; })));
@@ -1690,12 +1694,26 @@
       s.appendChild(fontSelect(b.font, (v) => update(() => { b.font = v; }), true));
       s.appendChild(L.el('p', 'menu-label', { text: 'Cor do texto' }));
       s.appendChild(swatchRow(L.ACCENT_COLORS, b.color, (c) => update(() => { b.color = c; }), { allowNone: true, noneLabel: 'Cor da tinta' }));
+      s.appendChild(L.el('p', 'menu-label', { text: 'Espaço entre letras' }));
+      s.appendChild(optionRow(L.SPACINGS, b.spacing || '', (v) => update(() => { if (v) b.spacing = v; else delete b.spacing; }), { wrap: true }));
+      s.appendChild(L.el('p', 'menu-label', { text: 'Espaço entre linhas' }));
+      s.appendChild(optionRow(L.LEADINGS, b.leading || '', (v) => update(() => { if (v) b.leading = v; else delete b.leading; }), { wrap: true }));
       menu.appendChild(s);
     } else if (b.type === 'image') {
       const s = section('Posição');
       s.appendChild(optionRow({ left: 'align-left', center: 'align-center', right: 'align-right' }, b.align, (v) => update(() => { b.align = v; }), {
         titles: { left: 'Esquerda', center: 'Centro', right: 'Direita' }, render: (btn, v, ic) => btn.appendChild(L.icon(ic)), className: 'opt-icons',
       }));
+      menu.appendChild(s);
+    }
+
+    if (b.type !== 'pagebreak') {
+      const s = section('Caixa');
+      const boxBtn = L.el('button', 'btn btn-sm btn-ghost box-open', { type: 'button' });
+      boxBtn.append(L.el('span', 'box-open-sample' + (b.box ? ' on' : ''), { 'aria-hidden': 'true' }),
+        L.el('span', '', { text: b.box ? 'Mudar fundo, borda e inclinação' : 'Fundo, borda, cantos, inclinação…' }));
+      boxBtn.addEventListener('click', () => openBoxMenu(anchor, b));
+      s.appendChild(boxBtn);
       menu.appendChild(s);
     }
 
@@ -1719,6 +1737,109 @@
     openPopover(anchor, menu, { className: 'block-menu-popover' });
   }
 
+  // ----- "caixa" de qualquer bloco: fundo, borda, cantos, respiro, sombra, inclinação e largura -----
+  const JUSTIFY_TYPES = ['paragraph', 'heading', 'quote', 'list', 'checklist', 'callout', 'secret', 'phototext', 'toggle', 'columns', 'poem', 'timeline'];
+  const BOX_BG_COLORS = ['#fff6cc', '#fde8e4', '#fbe3f1', '#e2f5e5', '#e1efff', '#efe6ff', '#f1ece4', '#ffffff', '#3b3340'];
+
+  function justifyIcon() {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('class', 'ic');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', 'M3 6h18M3 12h18M3 18h18');
+    svg.appendChild(path);
+    return svg;
+  }
+
+  function boxDefaults() {
+    return { bg: '', border: 'none', bc: state.content.paper.ink || '#3b3340', radius: 'sm', pad: 'none', shadow: false, tilt: 0, width: 'full', pos: 'center' };
+  }
+
+  /** Igual ao servidor: sem nada escolhido, a caixa some do bloco. */
+  function boxIsEmpty(box) {
+    return !box.bg && box.border === 'none' && box.pad === 'none' && !box.shadow && !box.tilt && box.width === 'full';
+  }
+
+  function openBoxMenu(anchor, b) {
+    const menu = L.el('div', 'block-menu box-menu');
+    const box = Object.assign(boxDefaults(), b.box || {});
+    const apply = (save) => {
+      if (boxIsEmpty(box)) delete b.box;
+      else b.box = Object.assign({}, box);
+      const node = blockNode(b.id);
+      if (node) L.applyBlockExtras(node, b);
+      layout();
+      if (save) commit();
+    };
+    const set = (key, value) => {
+      // primeiro fundo ou borda: um respiro pequeno para o texto não encostar
+      if ((key === 'bg' || key === 'border') && value && value !== 'none' && !box.bg && box.border === 'none' && box.pad === 'none') {
+        box.pad = 'sm';
+        $$('.opt', padRow).forEach((o, i) => o.classList.toggle('active', i === 1));
+      }
+      box[key] = value;
+      apply(true);
+    };
+    const head = L.el('div', 'box-menu-head');
+    const back = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: '‹ Voltar' });
+    back.addEventListener('click', () => openBlockMenu(anchor, b));
+    head.append(back, L.el('p', 'popover-title', { text: 'Caixa do bloco' }));
+    menu.appendChild(head);
+
+    const s1 = section('Fundo');
+    s1.appendChild(swatchRow(BOX_BG_COLORS, box.bg, (c) => set('bg', c), { allowNone: true, noneLabel: 'Sem fundo' }));
+    menu.appendChild(s1);
+
+    const s2 = section('Borda');
+    s2.appendChild(optionRow(L.BOX_BORDERS, box.border, (v) => set('border', v), { wrap: true }));
+    s2.appendChild(L.el('p', 'menu-label', { text: 'Cor da borda' }));
+    s2.appendChild(swatchRow(L.ACCENT_COLORS.concat(['#ffffff']), box.bc, (c) => set('bc', c)));
+    s2.appendChild(L.el('p', 'menu-label', { text: 'Cantos' }));
+    s2.appendChild(optionRow(L.BOX_RADII, box.radius, (v) => set('radius', v), { wrap: true }));
+    menu.appendChild(s2);
+
+    const s3 = section('Respiro dentro da caixa');
+    const padRow = optionRow(L.BOX_PADS, box.pad, (v) => set('pad', v));
+    s3.appendChild(padRow);
+    s3.appendChild(L.el('p', 'menu-label', { text: 'Sombra' }));
+    s3.appendChild(optionRow({ 0: 'Sem sombra', 1: 'Sombra suave' }, box.shadow ? 1 : 0, (v) => set('shadow', v === '1')));
+    s3.appendChild(L.el('p', 'menu-label', { text: 'Inclinação' }));
+    const tiltRow = L.el('div', 'box-tilt');
+    const tilt = L.el('input', '', { type: 'range', min: '-4', max: '4', step: '1', value: String(box.tilt || 0), 'aria-label': 'Inclinação do bloco' });
+    const tiltVal = L.el('output', 'box-tilt-val', { text: (box.tilt || 0) + '°' });
+    tilt.addEventListener('input', () => {
+      box.tilt = Number(tilt.value);
+      tiltVal.textContent = box.tilt + '°';
+      apply(false);
+    });
+    tilt.addEventListener('change', commit);
+    tiltRow.append(tilt, tiltVal);
+    s3.appendChild(tiltRow);
+    menu.appendChild(s3);
+
+    const s4 = section('Largura');
+    s4.appendChild(optionRow(L.BOX_WIDTHS, box.width, (v) => set('width', v)));
+    s4.appendChild(L.el('p', 'menu-label', { text: 'Posição (quando não ocupa a linha toda)' }));
+    s4.appendChild(optionRow(L.BOX_POSITIONS, box.pos, (v) => set('pos', v)));
+    menu.appendChild(s4);
+
+    const clear = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Tirar a caixa' });
+    clear.addEventListener('click', () => {
+      delete b.box;
+      const node = blockNode(b.id);
+      if (node) L.applyBlockExtras(node, b);
+      layout();
+      commit();
+      openBlockMenu(anchor, b);
+    });
+    const foot = section();
+    foot.appendChild(clear);
+    menu.appendChild(foot);
+    openPopover(anchor, menu, { className: 'block-menu-popover' });
+  }
+
   // ---------------------------------------------------------------- barra de formatação
 
   const HIGHLIGHTS = ['#fff3a3', '#ffd6e0', '#d4f5dd', '#d6ecff', '#eadcff', '#ffe2c7'];
@@ -1732,6 +1853,7 @@
     ['color', 'text-color', 'Cor do texto'],
     ['highlight', 'highlighter', 'Marca-texto'],
     ['effects', 'sparkle', 'Efeitos de texto'],
+    ['font', 'type', 'Letra do trecho'],
     ['size', 'text-size', 'Tamanho'],
     null,
     ['link', 'link', 'Link'],
@@ -1783,6 +1905,10 @@
       openTextFx(btn, host);
       return;
     }
+    if (cmd === 'font') {
+      openTextFont(btn, host);
+      return;
+    }
     if (cmd === 'color' || cmd === 'highlight') {
       const colors = cmd === 'color' ? L.ACCENT_COLORS.concat([state.content.paper.ink]) : HIGHLIGHTS;
       const box = L.el('div', 'fmt-pop');
@@ -1792,7 +1918,7 @@
         else document.execCommand('hiliteColor', false, c || 'transparent');
         afterFormat(host);
         closePopover();
-      }, { allowNone: true, noneLabel: cmd === 'color' ? 'Cor da tinta' : 'Sem marca-texto', custom: cmd === 'color' }));
+      }, { allowNone: true, noneLabel: cmd === 'color' ? 'Cor da tinta' : 'Sem marca-texto', custom: true }));
       openPopover(btn, box, { keepFocus: true });
       return;
     }
@@ -1821,7 +1947,8 @@
   }
 
   // ----- efeitos em trechos de texto: marca-texto, sublinhado ondulado, brilho e contorno -----
-  const fxFamily = (c) => (c.startsWith('fx-hl-') ? 'hl' : c);
+  const fxFamily = (c) => (c.startsWith('fx-hl-') ? 'hl' : c.startsWith('fx-gradient-') ? 'grad' : c.startsWith('ff-') ? 'ff' : c);
+  const isFontClass = (c) => c.startsWith('ff-') && !!L.FONTS[c.slice(3)];
 
   function unwrapNode(node) {
     const parent = node.parentNode;
@@ -1831,7 +1958,7 @@
 
   /** Tira de um span as classes de efeito pedidas; se ele ficar vazio de atributos, some. */
   function dropFx(sp, test) {
-    Array.from(sp.classList).forEach((c) => { if (L.TEXT_FX[c] && test(c)) sp.classList.remove(c); });
+    Array.from(sp.classList).forEach((c) => { if ((L.TEXT_FX[c] || isFontClass(c)) && test(c)) sp.classList.remove(c); });
     if (!sp.className) sp.removeAttribute('class');
     if (!sp.attributes.length) unwrapNode(sp);
   }
@@ -1885,6 +2012,40 @@
     none.addEventListener('mousedown', (e) => e.preventDefault());
     none.addEventListener('click', () => pick(''));
     box.appendChild(none);
+    openPopover(btn, box, { keepFocus: true, className: 'text-fx-popover' });
+  }
+
+  /** Letra só para o trecho selecionado (classe ff-<letra>); cada nome aparece escrito na própria letra. */
+  function openTextFont(btn, host) {
+    const box = L.el('div', 'fmt-pop text-font-pop');
+    box.appendChild(L.el('p', 'menu-label', { text: 'Letra do trecho' }));
+    const list = L.el('div', 'text-font-list');
+    const pick = (key) => {
+      if (key) applyTextFx(host, 'ff-' + key);
+      else {
+        restoreRange();
+        const sel = getSelection();
+        const range = sel.rangeCount ? sel.getRangeAt(0) : null;
+        if (range && !range.collapsed) {
+          $$('span[class*="ff-"]', host).filter((sp) => range.intersectsNode(sp)).forEach((sp) => dropFx(sp, (c) => c.startsWith('ff-')));
+          afterFormat(host);
+        }
+      }
+      closePopover();
+    };
+    const none = L.el('button', 'text-font-opt', { type: 'button', text: 'Mesma letra do bloco' });
+    none.addEventListener('mousedown', (e) => e.preventDefault());
+    none.addEventListener('click', () => pick(''));
+    list.appendChild(none);
+    Object.entries(L.FONTS).forEach(([key, f]) => {
+      const opt = L.el('button', 'text-font-opt', { type: 'button', text: f.label, title: f.label });
+      opt.style.fontFamily = f.css;
+      opt.style.fontSize = Math.round(16 * f.scale) + 'px';
+      opt.addEventListener('mousedown', (e) => e.preventDefault());
+      opt.addEventListener('click', () => pick(key));
+      list.appendChild(opt);
+    });
+    box.appendChild(list);
     openPopover(btn, box, { keepFocus: true, className: 'text-fx-popover' });
   }
 
@@ -3596,20 +3757,54 @@
 
     const s3 = panelSection('Selo postal');
     const stamps = L.el('div', 'stamp-grid');
-    const none = L.el('button', 'stamp-btn stamp-none' + (!env.stamp ? ' active' : ''), { type: 'button', title: 'Sem selo', text: 'Sem' });
-    none.addEventListener('click', () => { $$('.stamp-btn', stamps).forEach((b) => b.classList.remove('active')); none.classList.add('active'); set('stamp', ''); });
+    const none = L.el('button', 'stamp-btn stamp-none' + (!env.stamp && !env.stampImage ? ' active' : ''), { type: 'button', title: 'Sem selo', text: 'Sem' });
+    none.addEventListener('click', () => { $$('.stamp-btn', stamps).forEach((b) => b.classList.remove('active')); none.classList.add('active'); delete env.stampImage; set('stamp', ''); });
     stamps.appendChild(none);
+    if (env.stampImage) {
+      const mine = L.el('button', 'stamp-btn active', { type: 'button', title: 'Selo com sua foto' });
+      mine.appendChild(L.photoStampEl(env.stampImage, ''));
+      mine.addEventListener('click', () => changeStampPhoto());
+      stamps.appendChild(mine);
+    }
     Object.entries(L.STAMPS).forEach(([key, def]) => {
-      const btn = L.el('button', 'stamp-btn' + (env.stamp === key ? ' active' : ''), { type: 'button', title: def.label });
+      const btn = L.el('button', 'stamp-btn' + (env.stamp === key && !env.stampImage ? ' active' : ''), { type: 'button', title: def.label });
       btn.appendChild(L.stampEl(key));
       btn.addEventListener('click', () => {
         $$('.stamp-btn', stamps).forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
+        const hadPhoto = !!env.stampImage;
+        delete env.stampImage;
         set('stamp', key);
+        if (hadPhoto) renderPanel();
       });
       stamps.appendChild(btn);
     });
     s3.appendChild(stamps);
+    // selo com uma foto sua (da biblioteca ou enviada agora)
+    const changeStampPhoto = async () => {
+      const src = await pickFromLibrary('Foto para o selo');
+      if (!src) return;
+      env.stampImage = src;
+      refresh();
+      commit();
+      renderPanel();
+    };
+    const photoRow = L.el('div', 'row wrap stamp-photo-row');
+    const photoBtn = L.el('button', 'btn btn-sm', { type: 'button' });
+    photoBtn.append(L.icon('image', 'ic-sm'), L.el('span', '', { text: env.stampImage ? 'Trocar a foto do selo' : 'Selo com sua foto' }));
+    photoBtn.addEventListener('click', changeStampPhoto);
+    photoRow.appendChild(photoBtn);
+    if (env.stampImage) {
+      const rmPhoto = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Tirar a foto' });
+      rmPhoto.addEventListener('click', () => {
+        delete env.stampImage;
+        refresh();
+        commit();
+        renderPanel();
+      });
+      photoRow.appendChild(rmPhoto);
+    }
+    s3.appendChild(photoRow);
 
     const s4 = panelSection('Abra quando…', 'Escrito no envelope. Na caixa da pessoa, essas cartas ficam guardadas numa seção à parte até ela abrir.');
     const label = L.el('input', '', { maxlength: '80', placeholder: 'Ex.: Abra quando estiver com saudade', value: env.label || '' });
@@ -3636,8 +3831,13 @@
     s5.appendChild(optionRow(L.EFFECTS, state.content.effect || 'none', (v) => {
       state.content.effect = v;
       commit();
-      L.playEffect(v, 3000);
+      drawEffectOpts();
+      L.playEffect(v, 3000, state.content.effectOpts);
     }, { wrap: true }));
+    const fxOpts = L.el('div', 'fx-opts');
+    s5.appendChild(fxOpts);
+    const drawEffectOpts = () => panelEffectOpts(fxOpts);
+    drawEffectOpts();
 
     const s6 = panelSection('Como o texto aparece');
     s6.appendChild(optionRow({ fade: 'Bloco a bloco', write: 'Escrevendo', none: 'Tudo de uma vez' }, state.content.reveal || 'fade', (v) => {
@@ -3647,6 +3847,92 @@
     s6.appendChild(L.el('p', 'panel-hint', { text: '"Escrevendo" faz o texto surgir letra por letra, como se você estivesse escrevendo naquela hora.' }));
 
     panelMusic();
+  }
+
+  // ----- efeito de abertura do seu jeito: emojis que caem e cores próprias -----
+  function effectOpts() {
+    const o = state.content.effectOpts && typeof state.content.effectOpts === 'object' ? state.content.effectOpts : {};
+    return { emojis: Array.isArray(o.emojis) ? o.emojis.slice(0, 3) : [], colors: Array.isArray(o.colors) ? o.colors.slice(0, 4) : [] };
+  }
+
+  function setEffectOpts(o) {
+    const out = {};
+    if (o.emojis.length) out.emojis = o.emojis;
+    if (o.colors.length) out.colors = o.colors;
+    if (Object.keys(out).length) state.content.effectOpts = out;
+    else delete state.content.effectOpts;
+    commit();
+  }
+
+  function panelEffectOpts(box) {
+    box.replaceChildren();
+    const kind = state.content.effect || 'none';
+    if (kind === 'none') return;
+    const o = effectOpts();
+    const redraw = () => panelEffectOpts(box);
+    const chip = (content, label, onRemove, color) => {
+      const c = L.el('span', 'fx-chip');
+      if (color) {
+        const dot = L.el('span', 'fx-chip-color');
+        dot.style.background = color;
+        c.appendChild(dot);
+      } else c.appendChild(L.el('span', 'fx-chip-emoji', { text: content }));
+      const x = L.el('button', 'fx-chip-x', { type: 'button', 'aria-label': 'Tirar ' + label, title: 'Tirar' });
+      x.appendChild(L.icon('x'));
+      x.addEventListener('click', onRemove);
+      c.appendChild(x);
+      return c;
+    };
+    if (kind === 'emoji') {
+      box.appendChild(L.el('p', 'menu-label', { text: 'Seus emojis (até 3)' }));
+      const row = L.el('div', 'fx-chips');
+      const list = o.emojis.length ? o.emojis : [];
+      list.forEach((em, i) => row.appendChild(chip(em, em, () => { o.emojis.splice(i, 1); setEffectOpts(o); redraw(); })));
+      if (list.length < 3) {
+        const add = L.el('button', 'btn btn-sm', { type: 'button' });
+        add.append(L.icon('plus', 'ic-sm'), L.el('span', '', { text: 'Emoji' }));
+        add.addEventListener('click', () => openEmojiPicker(add, (em) => {
+          if (!o.emojis.includes(em)) o.emojis.push(em);
+          setEffectOpts(o);
+          redraw();
+        }));
+        row.appendChild(add);
+        const emojiInput = L.el('input', 'fx-emoji-input', { maxlength: '16', placeholder: 'ou cole um', 'aria-label': 'Digite ou cole um emoji' });
+        emojiInput.addEventListener('change', () => {
+          const em = emojiInput.value.trim();
+          if (!em || /[\s<>&"]/.test(em) || o.emojis.includes(em)) return;
+          o.emojis.push(em.slice(0, 16));
+          setEffectOpts(o);
+          redraw();
+        });
+        row.appendChild(emojiInput);
+      }
+      box.appendChild(row);
+      if (!list.length) box.appendChild(L.el('p', 'panel-hint', { text: 'Sem escolher, caem ' + L.EFFECT_EMOJIS.join(' ') + '.' }));
+    } else {
+      box.appendChild(L.el('p', 'menu-label', { text: 'Suas cores (até 4, opcional)' }));
+      const row = L.el('div', 'fx-chips');
+      o.colors.forEach((c, i) => row.appendChild(chip('', c, () => { o.colors.splice(i, 1); setEffectOpts(o); redraw(); }, c)));
+      if (o.colors.length < 4) {
+        const add = L.el('label', 'btn btn-sm fx-color-add', { title: 'Escolher uma cor' });
+        add.append(L.icon('plus', 'ic-sm'), L.el('span', '', { text: 'Cor' }));
+        const input = L.el('input', 'visually-hidden', { type: 'color', value: '#e86a7e' });
+        input.addEventListener('change', () => {
+          const c = input.value.toLowerCase();
+          if (/^#[0-9a-f]{6}$/.test(c) && !o.colors.includes(c)) o.colors.push(c);
+          setEffectOpts(o);
+          redraw();
+        });
+        add.appendChild(input);
+        row.appendChild(add);
+      }
+      box.appendChild(row);
+      if (!o.colors.length) box.appendChild(L.el('p', 'panel-hint', { text: 'Sem escolher, o efeito usa as cores dele.' }));
+    }
+    const test = L.el('button', 'btn btn-sm btn-ghost', { type: 'button' });
+    test.append(L.icon('sparkle', 'ic-sm'), L.el('span', '', { text: 'Ver o efeito' }));
+    test.addEventListener('click', () => L.playEffect(kind, 3000, state.content.effectOpts));
+    box.appendChild(test);
   }
 
   // ----- música de fundo enquanto a pessoa lê -----
@@ -4357,13 +4643,43 @@
       { icon: 'paper', label: 'Trocar papel e letra', words: 'papel fonte letra cor cenario borda', run: tab('paper') },
       { icon: 'mail', label: 'Personalizar envelope', words: 'envelope selo carimbo efeito abra quando', run: tab('envelope') },
       { icon: 'layers', label: 'Ver camadas', words: 'camadas ordem adesivos', run: tab('layers') },
-      { icon: 'sparkle', label: 'Testar efeito de abertura', words: 'efeito confete coracoes', run: () => L.playEffect(state.content.effect || 'hearts', 3000) },
+      { icon: 'sparkle', label: 'Testar efeito de abertura', words: 'efeito confete coracoes', run: () => L.playEffect(state.content.effect || 'hearts', 3000, state.content.effectOpts) },
+      { icon: 'template', label: 'Salvar como meu modelo', hint: 'Para começar outras cartas do seu jeito', words: 'modelo template guardar reutilizar meu', run: saveAsTemplate },
+      { icon: 'copy', label: 'Duplicar carta', hint: 'Um rascunho novo com tudo igual', words: 'duplicar copia copiar clonar', run: duplicateLetter },
       { icon: 'history', label: 'Histórico de versões', words: 'versoes restaurar voltar', run: openVersions },
       { icon: 'eye', label: 'Abrir prévia', words: 'previa visualizar ver', run: () => openPreview() },
       { icon: 'send', label: 'Enviar carta', words: 'enviar destinatario mandar', run: () => $('[data-open-send]').click() },
       { icon: 'undo', label: 'Desfazer', words: 'voltar', run: () => restore(-1) },
       { icon: 'redo', label: 'Refazer', words: '', run: () => restore(1) },
     ];
+  }
+
+  /** "Salvar como meu modelo": guarda o conteúdo atual (sem destinatário) para começar outras cartas. */
+  async function saveAsTemplate() {
+    const name = window.prompt('Nome do seu modelo:', (state.title || 'Meu modelo').slice(0, 80));
+    if (name === null) return;
+    try {
+      const res = await api('template_save', { id: letterId, name: name.trim().slice(0, 80), content: state.content });
+      toast('Modelo guardado (' + res.count + ' de 30). Ele aparece em “Nova carta”.');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  /** Duplicar: salva o que falta e cria um rascunho novo com o mesmo conteúdo. */
+  async function duplicateLetter() {
+    try {
+      await flushSave();
+    } catch (err) {
+      toast(err.message, 'error');
+      return;
+    }
+    const form = L.el('form', '', { method: 'post', action: 'acoes.php', hidden: true });
+    [['_csrf', window.csrfToken ? window.csrfToken() : ''], ['acao', 'duplicar'], ['id', String(letterId)]].forEach(([k, v]) => {
+      form.appendChild(L.el('input', '', { type: 'hidden', name: k, value: v }));
+    });
+    document.body.appendChild(form);
+    form.submit();
   }
 
   function openPalette() {
@@ -4522,7 +4838,7 @@
         ? res.recipient + ' já vê o envelope lacrado. Ele só abre na data que você escolheu.'
         : res.recipient + ' vai encontrar a carta na caixa da próxima vez que entrar.';
       $('[data-sent-view]').textContent = 'Ver como ' + res.recipient + ' vai ver';
-      if (DATA.letter.sentBefore !== true) L.playEffect(state.content.effect, 2600);
+      if (DATA.letter.sentBefore !== true) L.playEffect(state.content.effect, 2600, state.content.effectOpts);
       DATA.letter.sentBefore = true;
       $$('[data-send-step]', dialog).forEach((s) => { s.hidden = s.dataset.sendStep !== 'done'; });
     } catch (err) {

@@ -19,6 +19,17 @@ $previews = [];
 foreach (letter_templates() as $key => $tpl) {
     $previews[$key] = build_template($key, $recipient['display'] ?? 'Você', $user['name']);
 }
+// modelos pessoais (salvos no editor com "Salvar como meu modelo")
+$mine = user_templates((int) $user['id']);
+foreach ($mine as $t) {
+    $preview = $t['content'];
+    if (strlen(json_encode($preview)) > 150000) {
+        // miniatura de modelo enorme (muitos desenhos): só o começo, para a página continuar leve
+        $preview['stickers'] = [];
+        $preview['blocks'] = array_slice($preview['blocks'], 0, 12);
+    }
+    $previews['meu-' . (int) $t['id']] = $preview;
+}
 
 page_head('Nova carta', ['css' => ['assets/css/letter.css'], 'letter_fonts' => true]);
 ?>
@@ -97,6 +108,23 @@ page_head('Nova carta', ['css' => ['assets/css/letter.css'], 'letter_fonts' => t
             </div>
         </section>
 
+        <?php if ($mine): ?>
+            <div class="section-title tpl-title"><h2>Meus modelos</h2><span class="muted small"><?= count($mine) ?> de <?= USER_TEMPLATE_LIMIT ?></span></div>
+            <div class="tpl-grid my-tpl-grid">
+                <?php foreach ($mine as $t): ?>
+                    <div class="my-tpl">
+                        <button class="tpl" name="meu_modelo" value="<?= (int) $t['id'] ?>">
+                            <span class="tpl-preview" aria-hidden="true"><span class="tpl-preview-inner" data-tpl="meu-<?= (int) $t['id'] ?>" inert></span></span>
+                            <strong><?= e($t['name']) ?></strong>
+                            <span>Guardado em <?= e(fmt_date($t['created_at'], false)) ?></span>
+                        </button>
+                        <button class="btn btn-sm btn-icon my-tpl-del" form="del-tpl-<?= (int) $t['id'] ?>" title="Apagar modelo" aria-label="Apagar o modelo <?= e($t['name']) ?>"
+                            data-confirm="Apagar o modelo &quot;<?= e($t['name']) ?>&quot;? As cartas feitas com ele continuam."><?= icon('trash', 'ic-sm') ?></button>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+
         <div class="section-title tpl-title"><h2>Ou comece por um modelo</h2></div>
         <div class="tpl-grid">
             <?php foreach (letter_templates() as $key => $tpl): ?>
@@ -107,7 +135,17 @@ page_head('Nova carta', ['css' => ['assets/css/letter.css'], 'letter_fonts' => t
                 </button>
             <?php endforeach; ?>
         </div>
+        <?php if (!$mine): ?>
+            <p class="muted small my-tpl-tip">Dica: no editor, toque em Buscar (<kbd>Ctrl K</kbd>) e escolha “Salvar como meu modelo” para guardar o seu jeito e começar outras cartas por ele.</p>
+        <?php endif; ?>
     </form>
+    <?php foreach ($mine as $t): ?>
+        <form method="post" action="acoes.php" id="del-tpl-<?= (int) $t['id'] ?>" hidden>
+            <?= csrf_field() ?>
+            <input type="hidden" name="acao" value="excluir_modelo">
+            <input type="hidden" name="modelo_id" value="<?= (int) $t['id'] ?>">
+        </form>
+    <?php endforeach; ?>
 </main>
 <?php
 page_foot(['assets/js/letter.js', 'assets/js/nova.js']);

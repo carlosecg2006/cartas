@@ -137,17 +137,98 @@ function create_letter(?int $recipientId, array $sender, string $template = 'bra
 
 function duplicate_letter(array $letter): int
 {
+    // os arquivos são compartilhados: cada carta registra os seus em letter_media
+    $title = mb_substr(($letter['title'] !== '' ? $letter['title'] : 'Carta') . ' (cópia)', 0, 150);
     $id = db_insert('letters', [
         'sender_id' => (int) $letter['sender_id'],
         'recipient_id' => null,
-        'title' => mb_substr('Cópia de ' . $letter['title'], 0, 150),
+        'title' => $title,
         'content' => json_encode($letter['content'], JSON_UNESCAPED_UNICODE),
         'status' => 'draft',
         'created_at' => now(),
         'updated_at' => now(),
-    ] + letter_derived('Cópia de ' . $letter['title'], $letter['content']));
+    ] + letter_derived($title, $letter['content']));
     sync_letter_media($id, $letter['content']);
     return $id;
+}
+
+// ---------- Modelos pessoais ("Salvar como meu modelo") ----------
+
+const USER_TEMPLATE_LIMIT = 30;
+
+/** Modelos de uma pessoa, do mais novo para o mais antigo (conteúdo já validado). */
+function user_templates(int $userId): array
+{
+    $rows = q_all('SELECT id, name, content, created_at FROM templates WHERE user_id = ? ORDER BY id DESC', [$userId]);
+    foreach ($rows as &$t) {
+        $t['content'] = sanitize_letter_content(json_decode((string) $t['content'], true) ?: []);
+    }
+    unset($t);
+    return $rows;
+}
+
+function find_user_template(int $userId, int $id): ?array
+{
+    $t = q_one('SELECT id, name, content, created_at FROM templates WHERE id = ? AND user_id = ?', [$id, $userId]);
+    if ($t) {
+        $t['content'] = sanitize_letter_content(json_decode((string) $t['content'], true) ?: []);
+    }
+    return $t;
+}
+
+/** Guarda o conteúdo (sem destinatário) como modelo. Só entram arquivos da própria pessoa. */
+function save_user_template(int $userId, string $name, array $content): int
+{
+    if ((int) q_val('SELECT COUNT(*) FROM templates WHERE user_id = ?', [$userId]) >= USER_TEMPLATE_LIMIT) {
+        throw new RuntimeException('Você já tem ' . USER_TEMPLATE_LIMIT . ' modelos. Apague algum em "Nova carta" para guardar outro.');
+    }
+    $content = sanitize_letter_content($content);
+    $content['envelope']['hideTitle'] = false;
+    $files = content_media($content);
+    if ($files) {
+        $ph = implode(',', array_fill(0, count($files), '?'));
+        $ok = array_column(q_all("SELECT filename FROM media WHERE user_id = ? AND filename IN ($ph)", array_merge([$userId], $files)), 'filename');
+        $bad = array_diff($files, $ok);
+        if ($bad) {
+            $content = strip_media($content, $bad);
+        }
+    }
+    $json = json_encode($content, JSON_UNESCAPED_UNICODE);
+    if (strlen($json) > 1500000) {
+        throw new RuntimeException('Essa carta é grande demais para virar modelo.');
+    }
+    $name = trim(plain($name, 80));
+    return db_insert('templates', [
+        'user_id' => $userId,
+        'name' => $name !== '' ? $name : 'Meu modelo',
+        'content' => $json,
+        'created_at' => now(),
+    ]);
+}
+
+/** Nova carta (rascunho) a partir de um modelo pessoal. */
+function create_letter_from_user_template(array $tpl, ?int $recipientId, array $sender): int
+{
+    $recipient = $recipientId && is_contact((int) $sender['id'], $recipientId) ? find_user($recipientId) : null;
+    $content = $tpl['content'];
+    $title = mb_substr((string) $tpl['name'], 0, 150);
+    $id = db_insert('letters', [
+        'sender_id' => (int) $sender['id'],
+        'recipient_id' => $recipient ? (int) $recipient['id'] : null,
+        'title' => $title,
+        'content' => json_encode($content, JSON_UNESCAPED_UNICODE),
+        'status' => 'draft',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ] + letter_derived($title, $content));
+    sync_letter_media($id, $content);
+    return $id;
+}
+
+/** Algum modelo pessoal usa este arquivo? (aí ele não pode sumir da hospedagem) */
+function media_in_templates(int $userId, string $file): bool
+{
+    return (bool) q_val('SELECT 1 FROM templates WHERE user_id = ? AND content LIKE ? LIMIT 1', [$userId, '%' . $file . '%']);
 }
 
 /** Guarda quais arquivos cada carta usa (é isso que libera o acesso de quem recebe). */
@@ -176,6 +257,9 @@ function gc_hidden_media(int $userId): void
     $rows = q_all('SELECT m.id, m.filename FROM media m WHERE m.user_id = ? AND m.in_library = 0
         AND NOT EXISTS (SELECT 1 FROM letter_media lm WHERE lm.filename = m.filename)', [$userId]);
     foreach ($rows as $m) {
+        if (media_in_templates($userId, $m['filename'])) {
+            continue;
+        }
         @unlink(UPLOAD_DIR . '/' . $m['filename']);
         q('DELETE FROM media WHERE id = ?', [(int) $m['id']]);
     }

@@ -122,6 +122,7 @@ function delete_account(int $userId, bool $keepSent = false): void
     q('DELETE FROM replies WHERE user_id = ?', [$userId]);
     q('DELETE FROM reactions WHERE user_id = ?', [$userId]);
     q('DELETE FROM interactions WHERE user_id = ?', [$userId]);
+    q('DELETE FROM templates WHERE user_id = ?', [$userId]);
 
     if (!$keepSent) {
         foreach (q_all('SELECT id FROM letters WHERE sender_id = ?', [$userId]) as $l) {

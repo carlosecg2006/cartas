@@ -670,3 +670,17 @@ legend { font-weight: 500; font-size: .9rem; color: var(--ink-2); margin-bottom:
 .btn.is-busy .ic { animation: spin-slow 1.6s linear infinite; }
 @keyframes spin-slow { to { transform: rotate(360deg); } }
 .tpl-title { margin-top: .5rem; }
+
+/* ================================================================
+   Meus modelos (nova.php)
+   ================================================================ */
+.my-tpl { position: relative; min-width: 0; }
+.my-tpl > .tpl { width: 100%; }
+.my-tpl-del {
+  position: absolute; top: .45rem; right: .45rem; z-index: 2;
+  background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--ink);
+  border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.my-tpl-del:hover { color: var(--danger, #c0392b); }
+.my-tpl strong { overflow-wrap: anywhere; }
+.my-tpl-tip { margin-top: 1.4rem; text-align: center; }

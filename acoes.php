@@ -24,6 +24,15 @@ if (in_array($action, ['criar', 'responder', 'duplicar'], true)
 switch ($action) {
     case 'criar':
         $para = !empty($_POST['para']) ? (int) $_POST['para'] : null;
+        if (input('meu_modelo') !== '') {
+            // começar por um modelo pessoal
+            $tpl = find_user_template((int) $user['id'], (int) input('meu_modelo'));
+            if (!$tpl) {
+                flash('Esse modelo não existe mais.', 'error');
+                redirect('nova.php');
+            }
+            redirect('editor.php?id=' . create_letter_from_user_template($tpl, $para, $user));
+        }
         if (input('assistente') === '1') {
             redirect('editor.php?id=' . create_with_assistant($para, $user) . '&assistente=1');
         }
@@ -46,6 +55,11 @@ switch ($action) {
             redirect('editor.php?id=' . $id);
         }
         break;
+
+    case 'excluir_modelo':
+        q('DELETE FROM templates WHERE id = ? AND user_id = ?', [(int) input('modelo_id'), (int) $user['id']]);
+        flash('Modelo apagado.');
+        redirect('nova.php');
 
     case 'desenviar':
         if ($mine) {

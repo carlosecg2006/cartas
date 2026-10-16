@@ -265,10 +265,20 @@ function db_schema(string $driver): array
             FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )$opts",
+        // versão 7: modelos pessoais ("Salvar como meu modelo")
+        "CREATE TABLE IF NOT EXISTS templates (
+            id $pk,
+            user_id INT NOT NULL,
+            name VARCHAR(80) NOT NULL DEFAULT '',
+            content $long NOT NULL,
+            created_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )$opts",
+        "CREATE INDEX idx_templates_user ON templates (user_id)",
     ];
 }
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 /** Atualiza o banco de instalações antigas uma única vez, sem perder dados. */
 function ensure_schema(): void
@@ -374,12 +384,14 @@ function db_migrate(): void
         try_exec($sql);
     }
 
-    // versão 6: blocos interativos (a tabela é criada pelo db_install, chamado antes; aqui é só garantia)
+    // versão 6: blocos interativos; versão 7: modelos pessoais
+    // (as tabelas são criadas pelo db_install, chamado antes; aqui é só garantia)
     foreach (db_schema(db_driver()) as $sql) {
-        if (str_contains($sql, 'CREATE TABLE IF NOT EXISTS interactions')) {
+        if (str_contains($sql, 'CREATE TABLE IF NOT EXISTS interactions') || str_contains($sql, 'CREATE TABLE IF NOT EXISTS templates')) {
             try_exec($sql);
         }
     }
+    try_exec('CREATE INDEX idx_templates_user ON templates (user_id)');
 
     if ($legacy) {
         // Tudo o que existia antes foi escrito por quem instalou o site

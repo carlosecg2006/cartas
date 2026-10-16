@@ -161,9 +161,19 @@
   const TEXT_FX = {
     'fx-hl-yellow': 'Marca-texto amarelo', 'fx-hl-pink': 'Marca-texto rosa', 'fx-hl-green': 'Marca-texto verde', 'fx-hl-blue': 'Marca-texto azul',
     'fx-wavy': 'Sublinhado ondulado', 'fx-glow': 'Brilho', 'fx-outline': 'Contorno',
+    'fx-gradient-sunset': 'Degradê pôr do sol', 'fx-gradient-ocean': 'Degradê oceano', 'fx-gradient-rainbow': 'Degradê arco-íris', 'fx-shadow': 'Sombra suave',
   };
+  // Espaçamento de letras e de linhas por bloco, e a "caixa" de qualquer bloco (espelham BLOCK_SPACING, BLOCK_LEADING e BOX_* do servidor)
+  const SPACINGS = { '': 'Normal', tight: 'Junto', wide: 'Solto', wider: 'Bem solto' };
+  const LEADINGS = { '': 'Normal', tight: 'Junto', loose: 'Arejado', looser: 'Bem arejado' };
+  const BOX_BORDERS = { none: 'Sem borda', solid: 'Linha', dashed: 'Tracejada', dotted: 'Pontilhada', double: 'Dupla' };
+  const BOX_RADII = { 0: 'Reto', sm: 'Suave', md: 'Redondo', round: 'Bem redondo' };
+  const BOX_PADS = { none: 'Nenhum', sm: 'Pouco', md: 'Bastante' };
+  const BOX_WIDTHS = { full: 'Inteira', w75: '3/4', w50: 'Metade' };
+  const BOX_POSITIONS = { center: 'Centro', left: 'Esquerda', right: 'Direita' };
 
-  const EFFECTS = { none: 'Nenhum', hearts: 'Corações', confetti: 'Confete', petals: 'Pétalas', stars: 'Estrelas', snow: 'Neve' };
+  const EFFECTS = { none: 'Nenhum', hearts: 'Corações', confetti: 'Confete', petals: 'Pétalas', stars: 'Estrelas', snow: 'Neve', emoji: 'Chuva do seu jeito' };
+  const EFFECT_EMOJIS = ['💖', '✨', '🌸']; // chuva do seu jeito sem emojis escolhidos
   const GALLERY_LAYOUTS = { scatter: 'Espalhadas', grid: 'Grade', strip: 'Filme' };
 
   const PAPER_COLORS = ['#fffdf6', '#ffffff', '#fdf1e6', '#fce8ec', '#eaf4ec', '#e8f0fb', '#f3ecfb', '#fff6cc', '#2d2a35'];
@@ -308,6 +318,44 @@
     // filtro de foto (blocos de foto, foto e texto e galeria)
     Array.from(node.classList).forEach((c) => { if (c.startsWith('imgf-')) node.classList.remove(c); });
     if (b.filter && IMAGE_FILTERS[b.filter]) node.classList.add('imgf-' + b.filter);
+    applyBlockExtras(node, b);
+  }
+
+  /**
+   * Opcionais de qualquer bloco: espaçamento de letras/linhas e a "caixa" (fundo, borda, cantos, respiro,
+   * sombra, inclinação, largura). Medidas em em/--u, então a carta muda só de escala em qualquer tela.
+   * Sem esses campos, nada muda no bloco (cartas antigas ficam idênticas).
+   */
+  function applyBlockExtras(node, b) {
+    Array.from(node.classList).forEach((c) => { if (/^(ls-|lh-|box-|has-box$)/.test(c)) node.classList.remove(c); });
+    if (b.spacing && SPACINGS[b.spacing]) node.classList.add('ls-' + b.spacing);
+    if (b.leading && LEADINGS[b.leading]) node.classList.add('lh-' + b.leading);
+    // trechos com outra letra (ff-*) se ajustam ao tamanho da letra do bloco
+    if (b.font && FONTS[b.font]) node.style.setProperty('--block-fs', FONTS[b.font].scale);
+    else node.style.removeProperty('--block-fs');
+    const box = b.box;
+    if (!box || typeof box !== 'object') {
+      if (node.style.rotate) node.style.rotate = '';
+      node.style.removeProperty('--box-bg');
+      node.style.removeProperty('--box-bc');
+      return;
+    }
+    node.classList.add('has-box');
+    if (/^#[0-9a-f]{6}$/i.test(box.bg || '')) node.style.setProperty('--box-bg', box.bg);
+    else node.style.removeProperty('--box-bg');
+    if (box.border && box.border !== 'none' && BOX_BORDERS[box.border]) {
+      node.classList.add('box-bd-' + box.border);
+      node.style.setProperty('--box-bc', /^#[0-9a-f]{6}$/i.test(box.bc || '') ? box.bc : '#3b3340');
+    } else node.style.removeProperty('--box-bc');
+    if (box.radius && box.radius !== '0' && BOX_RADII[box.radius]) node.classList.add('box-r-' + box.radius);
+    if (box.pad && box.pad !== 'none' && BOX_PADS[box.pad]) node.classList.add('box-p-' + box.pad);
+    if (box.shadow) node.classList.add('box-shadow');
+    if (box.width && box.width !== 'full' && BOX_WIDTHS[box.width]) {
+      node.classList.add('box-' + box.width, 'box-pos-' + (BOX_POSITIONS[box.pos] ? box.pos : 'center'));
+    }
+    const tilt = Math.max(-4, Math.min(4, Math.round(Number(box.tilt) || 0)));
+    // "rotate" (e não transform): convive com a animação de entrada dos blocos e não muda a altura
+    node.style.rotate = tilt ? tilt + 'deg' : '';
   }
 
   /**
@@ -1369,6 +1417,19 @@
     return wrap;
   }
 
+  /** Selo com a foto de quem escreveu. Se a foto não abrir (carta ainda lacrada), volta ao selo desenhado. */
+  function photoStampEl(src, fallbackKey) {
+    const wrap = el('span', 'stamp stamp-photo');
+    const img = el('img', '', { src: mediaUrl(src), alt: '', loading: 'lazy', draggable: 'false' });
+    img.addEventListener('error', () => {
+      const alt = stampEl(fallbackKey);
+      if (alt) wrap.replaceWith(alt);
+      else if (wrap.parentNode) wrap.parentNode.remove();
+    });
+    wrap.appendChild(img);
+    return wrap;
+  }
+
   /** Carimbo postal com a data de envio. */
   function postmarkEl(date) {
     const d = date ? new Date(date) : new Date();
@@ -1413,7 +1474,8 @@
     if (toName) address.appendChild(el('span', 'env-label', { text: 'Para ' + toName }));
     wrap.appendChild(address);
 
-    const stamp = stampEl(env.stamp);
+    const stamp = env.stampImage && /^[a-f0-9]{32}\.(jpg|png|webp|gif)$/.test(env.stampImage)
+      ? photoStampEl(env.stampImage, env.stamp) : stampEl(env.stamp);
     if (stamp) {
       const corner = el('div', 'env-stamp');
       corner.appendChild(stamp);
@@ -1430,9 +1492,11 @@
    * Feito com animações CSS de transform/opacity: o celular executa direto na placa de vídeo,
    * separado da página, então o efeito nunca deixa a rolagem engasgar.
    */
-  function playEffect(kind, duration) {
+  function playEffect(kind, duration, opts) {
     if (!kind || kind === 'none' || window.matchMedia('(prefers-reduced-motion: reduce)').matches
       || document.documentElement.dataset.reduceMotion === '1') return;
+    opts = opts && typeof opts === 'object' ? opts : {};
+    const custom = (opts.colors || []).filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 4);
     const palettes = {
       hearts: ['#e05a6d', '#f08ca0', '#c43b52', '#f7b6c2'],
       confetti: ['#e05a6d', '#f2b84b', '#4f9d8a', '#5b8fd9', '#9b7be0', '#f08c4a'],
@@ -1440,12 +1504,14 @@
       stars: ['#f5d77a', '#fff3c4', '#f2b84b'],
       snow: ['#ffffff', '#eef4fb'],
     };
-    const colors = palettes[kind] || palettes.confetti;
+    const colors = custom.length ? custom : (palettes[kind] || palettes.confetti);
+    const emojis = kind === 'emoji' ? ((opts.emojis || []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 3)) : [];
+    if (kind === 'emoji' && !emojis.length) emojis.push(...EFFECT_EMOJIS);
     const total = duration || 5200;
     const rnd = (x, y) => x + Math.random() * (y - x);
     // menos partículas em telas pequenas: o efeito continua cheio, com metade do trabalho
     const area = Math.min(1, Math.max(0.5, (innerWidth * innerHeight) / (1280 * 800)));
-    const count = Math.round((kind === 'stars' ? 40 : 56) * area);
+    const count = Math.round((kind === 'stars' ? 40 : kind === 'emoji' ? 38 : 56) * area);
     const shape = (color) => {
       if (kind === 'hearts') {
         return 'url("data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 18"><path d="M10 17S1 11.5 1 5.6A4.6 4.6 0 0 1 10 3.4 4.6 4.6 0 0 1 19 5.6C19 11.5 10 17 10 17z" fill="' + color + '"/></svg>') + '") center / contain no-repeat';
@@ -1457,13 +1523,14 @@
     };
     const layer = el('div', 'fx-layer fx-' + kind, { 'aria-hidden': 'true' });
     for (let i = 0; i < count; i++) {
-      const size = kind === 'snow' ? rnd(4, 9) : kind === 'stars' ? rnd(10, 20) : rnd(9, 17);
+      const size = kind === 'snow' ? rnd(4, 9) : kind === 'stars' ? rnd(10, 20) : kind === 'emoji' ? rnd(18, 34) : rnd(9, 17);
       const fall = kind === 'snow' ? rnd(5500, 9000) : rnd(3200, 5400);
       const node = el('i', 'fx');
       node.style.cssText = '--x:' + rnd(0, 100).toFixed(1) + 'vw;--y:' + rnd(0, 100).toFixed(1) + 'vh;--dx:' + rnd(-12, 12).toFixed(1) + 'vw;'
         + '--r0:' + rnd(0, 360).toFixed(0) + 'deg;--r1:' + rnd(-540, 540).toFixed(0) + 'deg;--s:' + size.toFixed(1) + 'px;'
         + '--d:' + fall.toFixed(0) + 'ms;--delay:' + (kind === 'stars' ? rnd(0, 1600) : rnd(-fall * 0.6, Math.max(0, total - fall - 400))).toFixed(0) + 'ms;'
-        + 'background:' + shape(colors[i % colors.length]);
+        + (kind === 'emoji' ? '' : 'background:' + shape(colors[i % colors.length]));
+      if (kind === 'emoji') node.textContent = emojis[i % emojis.length];
       layer.appendChild(node);
     }
     document.body.appendChild(layer);
@@ -1473,7 +1540,8 @@
 
   window.Letter = {
     FONTS, PAPERS, BORDERS, SCENES, LINERS, DIVIDERS, FRAMES, TAPES, TEXT_STYLES,
-    DOODLES, STAMPS, EFFECTS, GALLERY_LAYOUTS,
+    DOODLES, STAMPS, EFFECTS, GALLERY_LAYOUTS, EFFECT_EMOJIS,
+    SPACINGS, LEADINGS, BOX_BORDERS, BOX_RADII, BOX_PADS, BOX_WIDTHS, BOX_POSITIONS, applyBlockExtras, photoStampEl,
     SHAPES, SHAPE_COLORS, STICKER_ANIMS, STICKER_OUTLINES, IMAGE_FILTERS, TEXT_FX, shapeSvg,
     PAPER_COLORS, INK_COLORS, ACCENT_COLORS, SIZE_MUL,
     uid, el, icon, mediaUrl, unitPx, setFluid, parseMusicUrl, musicEmbed, isDark, fmtTime,

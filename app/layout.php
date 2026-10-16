@@ -4,7 +4,10 @@ declare(strict_types=1);
 const LETTER_FONTS_URL = 'https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Dancing+Script:wght@400;700'
     . '&family=Gloria+Hallelujah&family=Homemade+Apple&family=Indie+Flower&family=Lora:ital,wght@0,400;0,700;1,400'
     . '&family=Nunito:ital,wght@0,400;0,700;1,400&family=Patrick+Hand&family=Playfair+Display:ital,wght@0,400;0,700;1,400'
-    . '&family=Quicksand:wght@400;700&family=Shadows+Into+Light&family=Special+Elite&display=swap';
+    . '&family=Quicksand:wght@400;700&family=Shadows+Into+Light&family=Special+Elite'
+    . '&family=Amatic+SC:wght@700&family=Cormorant+Garamond:ital,wght@0,400;0,700;1,400&family=Courier+Prime:ital,wght@0,400;0,700;1,400'
+    . '&family=Fredoka:wght@400;600&family=Great+Vibes&family=Kalam:wght@400;700&family=Nanum+Pen+Script&family=Pacifico'
+    . '&family=Permanent+Marker&family=Reenie+Beanie&family=Sacramento&family=Satisfy&display=swap';
 
 const UI_FONTS_URL = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700'
     . '&family=Instrument+Serif:ital@0;1&family=Caveat:wght@500;700&display=swap';

@@ -50,6 +50,18 @@ function letter_themes(): array
             'paper' => ['style' => 'plain', 'color' => '#fffaf0', 'ink' => '#1e4d2b', 'font' => 'dancing', 'border' => 'double', 'scene' => 'night'],
             'envelope' => ['color' => '#8c2f39', 'liner' => 'stars', 'seal' => '★', 'sealColor' => '#b8862b', 'stamp' => 'mountain'],
             'effect' => 'snow'],
+        'aquarela' => ['label' => 'Aquarela', 'emoji' => '🎨',
+            'paper' => ['style' => 'watercolor', 'color' => '#fffdf8', 'ink' => '#4a3a5c', 'font' => 'satisfy', 'border' => 'none', 'scene' => 'lavender'],
+            'envelope' => ['color' => '#cdbfe6', 'liner' => 'flowers', 'seal' => '✿', 'sealColor' => '#7b2d8b', 'stamp' => 'rose'],
+            'effect' => 'petals'],
+        'caderno' => ['label' => 'Caderno', 'emoji' => '📓',
+            'paper' => ['style' => 'notebook', 'color' => '#ffffff', 'ink' => '#1f2a44', 'font' => 'kalam', 'border' => 'none', 'scene' => 'wood'],
+            'envelope' => ['color' => '#b7cfe8', 'liner' => 'checks', 'seal' => '★', 'sealColor' => '#1f4e79', 'stamp' => 'star'],
+            'effect' => 'confetti'],
+        'praia' => ['label' => 'Praia', 'emoji' => '🏖️',
+            'paper' => ['style' => 'plain', 'color' => '#fffaf0', 'ink' => '#1f4e79', 'font' => 'pacifico', 'border' => 'polaroid', 'scene' => 'beach'],
+            'envelope' => ['color' => '#f3d9a4', 'liner' => 'stripes', 'seal' => '☀', 'sealColor' => '#b8862b', 'stamp' => 'beach'],
+            'effect' => 'confetti'],
     ];
 }
 

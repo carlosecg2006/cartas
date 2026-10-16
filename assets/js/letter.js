@@ -522,19 +522,17 @@
       return { done: s === 0, parts: [[Math.floor(s / 86400), 'dias'], [Math.floor((s % 86400) / 3600), 'horas'], [Math.floor((s % 3600) / 60), 'min'], [s % 60, 'seg']] };
     }
     if (now < d) return { parts: [[0, 'anos'], [0, 'meses'], [0, 'dias']] };
-    let y = now.getFullYear() - d.getFullYear();
-    let mo = now.getMonth() - d.getMonth();
-    let day = now.getDate() - d.getDate();
-    if (now.getHours() * 60 + now.getMinutes() < d.getHours() * 60 + d.getMinutes()) day--;
-    if (day < 0) {
-      mo--;
-      day += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
-    }
-    if (mo < 0) {
-      y--;
-      mo += 12;
-    }
-    return { parts: [[y, 'anos'], [mo, 'meses'], [day, 'dias']] };
+    // meses inteiros desde a data (31/jan + 1 mês = 28/fev; 29/fev + 1 ano = 28/fev), depois os dias que sobram
+    const plusMonths = (k) => {
+      const last = new Date(d.getFullYear(), d.getMonth() + k + 1, 0).getDate();
+      return new Date(d.getFullYear(), d.getMonth() + k, Math.min(d.getDate(), last), d.getHours(), d.getMinutes());
+    };
+    let months = (now.getFullYear() - d.getFullYear()) * 12 + now.getMonth() - d.getMonth();
+    let anchor = plusMonths(months);
+    if (anchor > now) anchor = plusMonths(--months);
+    let day = Math.round((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())) / 86400000);
+    if (now.getHours() * 60 + now.getMinutes() < anchor.getHours() * 60 + anchor.getMinutes()) day--;
+    return { parts: [[Math.floor(months / 12), 'anos'], [months % 12, 'meses'], [day, 'dias']] };
   }
 
   function renderCounter(b, ctx) {

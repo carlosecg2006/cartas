@@ -9,6 +9,8 @@ function db_error_hint(Throwable $e): string
 {
     $m = $e->getMessage();
     return match (true) {
+        // nome do banco errado: o MySQL responde "acesso negado ao banco X" (1044), não "banco não existe"
+        (bool) preg_match('/1044|Access denied for user .* to database/i', $m) => 'Esse banco de dados não existe ou o usuário não tem acesso a ele. Confira o nome (no InfinityFree ele começa com if0_).',
         (bool) preg_match('/1045|Access denied/i', $m) => 'O usuário ou a senha do banco não conferem.',
         (bool) preg_match('/1049|Unknown database/i', $m) => 'Esse banco de dados não existe. Confira o nome (no InfinityFree ele começa com if0_).',
         (bool) preg_match('/2002|getaddrinfo|Connection refused|timed out/i', $m) => 'Não encontrei o servidor do banco. Confira o "host" (no InfinityFree é algo como sql208.infinityfree.com).',
@@ -70,6 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$errors) {
             try {
                 db_install();
+                // banco novo (ou zerado): marcadores de versão antigos na pasta storage não valem mais,
+                // senão as colunas acrescentadas pelas atualizações nunca seriam criadas
+                foreach (glob(ROOT . '/storage/.schema-*') ?: [] as $flag) {
+                    @unlink($flag);
+                }
                 if (!db_ready()) {
                     $id = db_insert('users', [
                         'name' => $name,

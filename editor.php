@@ -24,6 +24,7 @@ $data = [
     'friends' => array_map(fn($f) => ['id' => (int) $f['id'], 'name' => $f['display']], $friends),
     'sender' => first_name($user['name']),
     'today' => fmt_date_long(now()),
+    'themes' => letter_themes(),
 ];
 
 page_head('Editor', [

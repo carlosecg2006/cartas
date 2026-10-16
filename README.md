@@ -25,18 +25,23 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 - **Neste dia**: cartas trocadas na mesma data em anos anteriores aparecem na caixa
 - **Primeiros passos** para quem acabou de entrar, e **ideias para começar** a escrever no editor
 - **Anotações privadas** sobre cada pessoa da lista
-- **8 modelos prontos** para começar (aniversário, saudade, obrigado, "abra quando…", fim de ano, desculpa, bilhete, em branco)
+- **Assistente "Me ajuda a escrever"**: escolha a relação (amor, melhor amigo, mãe…), a ocasião e o tom (romântico, divertido, poético…), conte com suas palavras o que quer dizer e cole o link da trilha sonora; sai um rascunho com estilo combinando e trechos `[destacados]` para você completar
+- **Escrever com IA (opcional)**: com uma chave do Claude em **Conta → Sobre o site**, a IA escreve a carta inteira a partir das suas respostas (se ela falhar, cai no rascunho com frases prontas)
+- **8 modelos prontos** para começar (aniversário, saudade, obrigado, "abra quando…", fim de ano, desculpa, bilhete, em branco) e **13 estilos prontos** (papel + envelope + efeito de uma vez)
 - **Editor com blocos (como no Notion)**
   - Texto, títulos, citação, listas, lista de desejos, destaque, foto, **galeria** (espalhada, grade ou filme), **foto e texto lado a lado**, **mensagem de voz gravada no navegador**, música do YouTube/Spotify, segredo, divisórias, assinatura e espaçamento
+  - **Blocos interativos**: sanfona (abre ao tocar), linha do tempo, **contador** ("juntos há…" / "faltam…", ao vivo), **quiz** (quem recebe responde e você vê a resposta), **vale/cupom** (quem recebe usa e ganha carimbo), poema, lugar, duas colunas e botão com link
+  - **Efeitos de texto**: marca-texto em 4 cores, sublinhado ondulado, brilho e contorno; filtros de foto (P&B, sépia, vintage, sonho…)
   - `/` numa linha vazia abre o menu de blocos; atalhos `#`, `-`, `[]`, `>`, `---`
   - Barra de formatação ao selecionar texto, blocos arrastáveis pela alça
   - **`Ctrl+K`**: busca qualquer ação
   - **Histórico de versões** com prévia e restauração, desfazer/refazer, salvamento automático e contagem de palavras
 - **Adesivos livres (como no Canva)**
-  - Emojis, rabiscos desenhados à mão (com troca de cor), fitas washi, bilhetes, desenho livre e imagens próprias
+  - Emojis, rabiscos desenhados à mão (com troca de cor), **formas** (coração, estrela, balão de fala, selo…), fitas washi, bilhetes, desenho livre e imagens próprias
+  - **Animações** (flutuar, pulsar, balançar, girar, brilhar, quicar), contorno de figurinha e filtros nas imagens
   - **Guias de alinhamento que grudam** ao arrastar (segure `Alt` para soltar livre), girar, redimensionar, espelhar, transparência
   - **Travar posição**, menu do botão direito, **painel de camadas** e atalhos (`Ctrl+D`, `[`, `]`, `Ctrl+L`, `Delete`)
-- Papel, cor, tinta, 12 letras, bordas e cenário
+- Papel (inclui aquarela, linho, caderno, partitura e degradê), cor, tinta, **24 letras**, bordas e cenário
 - **Envelope**: cor, forro, selo de cera, **selo postal ilustrado**, **carimbo com a data de envio** e o texto **"Abra quando…"**
 - **Efeito ao abrir**: corações, confete, pétalas, estrelas ou neve
 - Data mínima para abrir, confirmação de leitura, reações e respostas
@@ -44,7 +49,8 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 - **Várias páginas** (bloco "Nova página"), **raspadinha** e **texto aparecendo como se estivesse sendo escrito**
 - **Figurinhas da internet**: envie ou cole (Ctrl+V) qualquer imagem; se tiver fundo liso, ele é apagado automaticamente
 - **Biblioteca pessoal**: tudo o que você enviou fica guardado para usar em outras cartas
-- **Música enquanto lê**: um link do YouTube ou um arquivo de música seu começa a tocar quando a pessoa abre o envelope
+- **Trilha sonora**: um link do YouTube ou um arquivo de música seu começa a tocar quando a pessoa abre o envelope; link do Spotify mostra o player para ela tocar
+- **Sem spoiler**: antes de abrir, quem recebe não vê o resumo da carta (nem na busca) e, se você quiser, nem o título
 - **Aniversários**: avisos no painel dias antes do aniversário de quem está na sua lista
 
 **Recebendo**
@@ -82,7 +88,8 @@ Requisitos: PHP 8.1 ou mais novo com PDO MySQL, GD e DOM (todas as hospedagens c
 2. **Não apague** o `config.php` nem a pasta `storage` (é lá que ficam as fotos e os áudios). O ZIP não traz esses arquivos, então substituir tudo é seguro.
 3. Abra o site: o banco se atualiza sozinho na primeira visita, sem perder cartas.
    (Se a hospedagem estiver lenta nessa primeira visita, é normal demorar alguns segundos uma única vez.)
-4. Para conferir os avisos no celular, vá em **Conta → Avisos no celular → Mandar um aviso de teste**. Algumas hospedagens gratuitas bloqueiam conexões de saída; se for o caso, o botão mostra o erro e o resto do site continua funcionando normalmente.
+4. Envie também o arquivo `app/vendor-anthropic.phar` (3,5 MB): é a biblioteca oficial do Claude usada pela escrita com IA. Para ativar a IA, crie uma chave em [console.anthropic.com](https://console.anthropic.com) e cole em **Conta → Sobre o site** (cada carta custa alguns centavos, cobrados na sua conta da Anthropic). Sem chave, o assistente funciona com frases prontas.
+5. Para conferir os avisos no celular, vá em **Conta → Avisos no celular → Mandar um aviso de teste**. Algumas hospedagens gratuitas bloqueiam conexões de saída; se for o caso, o botão mostra o erro e o resto do site continua funcionando normalmente.
 
 ## Rodar no seu computador
 

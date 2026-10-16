@@ -281,6 +281,8 @@ function sanitize_letter_content($raw): array
             'sealColor' => color_or($env['sealColor'] ?? null, '#a8323e'),
             'stamp' => pick($env['stamp'] ?? '', array_merge([''], STAMP_NAMES), ''),
             'label' => plain($env['label'] ?? '', 80),
+            // surpresa: quem recebe só vê o título depois de abrir
+            'hideTitle' => !empty($env['hideTitle']),
         ],
         'effect' => pick($raw['effect'] ?? 'none', EFFECT_NAMES, 'none'),
         'reveal' => pick($raw['reveal'] ?? 'fade', REVEAL_MODES, 'fade'),
@@ -507,11 +509,15 @@ function sanitize_sticker(array $s, array $blockIds): ?array
 function sanitize_bgm($raw): array
 {
     $raw = is_array($raw) ? $raw : [];
-    $kind = pick($raw['kind'] ?? 'none', ['none', 'file', 'youtube'], 'none');
+    $kind = pick($raw['kind'] ?? 'none', ['none', 'file', 'youtube', 'spotify'], 'none');
     $src = (string) ($raw['src'] ?? '');
     $mid = (string) ($raw['mid'] ?? '');
     if ($kind === 'file' && preg_match(AUDIO_RE, $src)) {
         return ['kind' => 'file', 'src' => $src, 'name' => plain($raw['name'] ?? '', 80), 'volume' => num($raw['volume'] ?? 0.6, 0.05, 1, 0.6)];
+    }
+    if ($kind === 'spotify' && preg_match('/^[A-Za-z0-9]{22}$/', $mid)) {
+        // O Spotify não toca sozinho: vira um player pequeno que a pessoa toca
+        return ['kind' => 'spotify', 'skind' => pick($raw['skind'] ?? null, SPOTIFY_KINDS, 'track'), 'mid' => $mid, 'name' => plain($raw['name'] ?? '', 80)];
     }
     if ($kind === 'youtube' && preg_match('/^[A-Za-z0-9_-]{11}$/', $mid)) {
         return ['kind' => 'youtube', 'mid' => $mid, 'name' => plain($raw['name'] ?? '', 80), 'start' => (int) num($raw['start'] ?? 0, 0, 36000, 0), 'volume' => num($raw['volume'] ?? 0.6, 0.05, 1, 0.6)];
@@ -623,5 +629,19 @@ function strip_media(array $content, array $files): array
     unset($b);
     $content['stickers'] = array_values(array_filter($content['stickers'], fn($s) => !(($s['kind'] ?? '') === 'image' && isset($bad[$s['src'] ?? '']))));
     return $content;
+}
+
+/** Link do YouTube ou do Spotify → provedor e identificador (null se não reconhecer). */
+function parse_music_url(string $url): ?array
+{
+    $url = trim($url);
+    if (preg_match('~(?:youtu\.be/|youtube(?:-nocookie)?\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})~', $url, $m)) {
+        $start = preg_match('~[?&](?:t|start)=(\d+)~', $url, $t) ? min(36000, (int) $t[1]) : 0;
+        return ['provider' => 'youtube', 'kind' => 'video', 'mid' => $m[1], 'start' => $start];
+    }
+    if (preg_match('~open\.spotify\.com/(?:intl-[a-z-]+/)?(?:embed/)?(track|album|playlist|episode)/([A-Za-z0-9]{22})~', $url, $m)) {
+        return ['provider' => 'spotify', 'kind' => $m[1], 'mid' => $m[2]];
+    }
+    return null;
 }
 

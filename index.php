@@ -76,7 +76,8 @@ $newReplies = (int) q_val("SELECT COUNT(*) FROM replies p JOIN letters l ON l.id
 $birthdays = upcoming_birthdays($uid, 21, $contacts);
 
 // ---------- Favoritas e busca ----------
-$visibleSql = "(l.sender_id = ? OR (l.recipient_id = ? AND l.status = 'sent' AND " . sql_delivered() . ' AND (l.open_at IS NULL OR l.open_at <= ?)))';
+// cartas recebidas só entram na busca, nas favoritas e no "Neste dia" depois de abertas (nada de spoiler)
+$visibleSql = "(l.sender_id = ? OR (l.recipient_id = ? AND l.status = 'sent' AND l.first_opened_at IS NOT NULL AND " . sql_delivered() . ' AND (l.open_at IS NULL OR l.open_at <= ?)))';
 $visibleParams = [$uid, $uid, now()];
 $favIds = array_map('intval', array_column(q_all('SELECT f.letter_id FROM favorites f JOIN letters l ON l.id = f.letter_id
     WHERE f.user_id = ? AND ' . $visibleSql, array_merge([$uid], $visibleParams)), 'letter_id'));
@@ -237,7 +238,7 @@ function mail_item(array $l, array $user): void
     <a class="mail-item mail-<?= $state ?>" href="carta.php?id=<?= (int) $l['id'] ?>">
         <div class="mail-env" data-envelope="<?= envelope_json($l, first_name($user['name']), $transit || $locked) ?>"></div>
         <div class="mail-info">
-            <strong><?= $transit ? 'Carta a caminho' : e($l['title'] ?: 'Uma carta') ?></strong>
+            <strong><?= $transit ? 'Carta a caminho' : e(letter_title_for($l, (int) $user['id'], 'Uma carta')) ?></strong>
             <span class="mail-from">de <?= e($l['from']) ?></span>
             <div class="tags">
                 <?php if ($transit): ?>

@@ -146,3 +146,17 @@
 .envelope.quick .env-flap { transition: transform .35s cubic-bezier(.4, .1, .3, 1), z-index 0s linear .17s; }
 .envelope.quick .env-letter { transition-duration: .45s; }
 .envelope-stage.animating { cursor: pointer; }
+
+/* Trilha do Spotify: player pequeno que a pessoa toca */
+.bgm-player.bgm-spotify { flex-wrap: wrap; width: min(300px, calc(100vw - 32px)); padding: .4rem .45rem .45rem; border-radius: 16px; }
+.bgm-spotify .bgm-hint-inline { flex: 1; font-size: .78rem; color: var(--ink-2); padding: 0 .3rem; }
+.bgm-spotify .bgm-close {
+  display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%;
+  background: var(--hover-2); color: var(--ink); font-size: 1rem; cursor: pointer;
+}
+.bgm-spotify-frame { width: 100%; height: 80px; border: 0; border-radius: 12px; margin-top: .35rem; }
+.bgm-spotify.mini { width: auto; }
+.bgm-spotify.mini .bgm-spotify-frame, .bgm-spotify.mini .bgm-hint-inline { display: none; }
+.bgm-spotify.mini .bgm-close::after { content: '🎵'; }
+.bgm-spotify.mini .bgm-close { font-size: 0; }
+.bgm-spotify.mini .bgm-close::after { font-size: .9rem; }

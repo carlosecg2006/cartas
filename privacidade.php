@@ -48,6 +48,7 @@ page_head('Privacidade', ['nav' => (bool) $user]);
             <li><b>YouTube e Spotify</b>: só quando uma carta tem música desses serviços, e só ao abrir essa carta.</li>
             <li><b>Avisos no celular</b> (Google, Mozilla, Apple ou Microsoft, conforme o navegador): recebem apenas um “toque” vazio, sem nenhum conteúdo. O texto do aviso o seu celular busca direto aqui.</li>
             <li><b>cdnjs</b>: só quando você usa “Salvar imagem” em uma carta.</li>
+            <li><b>Claude (Anthropic)</b>: só se quem cuida do site ativou a escrita com IA <i>e</i> você escolher “Escrever com IA” ao criar uma carta. Aí o nome da pessoa, a relação, a ocasião, o tom e o que você contou vão para a IA escrever o rascunho. Nada mais da sua conta é enviado.</li>
         </ul>
     </section>
 

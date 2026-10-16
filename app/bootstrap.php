@@ -38,6 +38,8 @@ require APP_DIR . '/people.php';
 require APP_DIR . '/letters.php';
 require APP_DIR . '/templates.php';
 require APP_DIR . '/themes.php';
+require APP_DIR . '/compose.php';
+require APP_DIR . '/ai.php';
 require APP_DIR . '/push.php';
 require APP_DIR . '/invites.php';
 require APP_DIR . '/layout.php';

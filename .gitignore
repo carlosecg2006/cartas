@@ -8,3 +8,4 @@ node_modules/
 /storage/.schema-*
 /storage/sessions/
 /storage/export-*.zip
+/.claude/

@@ -102,6 +102,21 @@
   function startMusic() {
     const bgm = data.content && data.content.bgm;
     if (!bgm || bgm.kind === 'none') return;
+    if (bgm.kind === 'spotify') {
+      // O Spotify não toca sozinho: um player pequeno no canto, para a pessoa tocar no ▶
+      const box = Letter.el('div', 'bgm-player bgm-spotify');
+      box.appendChild(Letter.el('span', 'bgm-hint-inline', { text: '🎵 Trilha sonora desta carta: toque no ▶' }));
+      const close = Letter.el('button', 'bgm-close', { type: 'button', 'aria-label': 'Esconder trilha sonora', text: '×' });
+      close.addEventListener('click', () => box.classList.toggle('mini'));
+      box.appendChild(close);
+      box.appendChild(Letter.el('iframe', 'bgm-spotify-frame', {
+        src: 'https://open.spotify.com/embed/' + bgm.skind + '/' + bgm.mid + '?utm_source=generator',
+        allow: 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture', loading: 'lazy',
+        title: 'Trilha sonora (Spotify)', referrerpolicy: 'strict-origin-when-cross-origin',
+      }));
+      document.body.appendChild(box);
+      return;
+    }
     const volume = Math.max(0.05, Math.min(1, bgm.volume ?? 0.6));
     const bar = Letter.el('div', 'bgm-player');
     const toggle = Letter.el('button', 'bgm-toggle', { type: 'button', 'aria-label': 'Pausar música' });

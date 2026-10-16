@@ -643,3 +643,30 @@ legend { font-weight: 500; font-size: .9rem; color: var(--ink-2); margin-bottom:
 :root[data-reduce-motion="1"] *, :root[data-reduce-motion="1"] *::before, :root[data-reduce-motion="1"] *::after {
   animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important;
 }
+
+/* Assistente de carta (Nova carta) */
+.assistant { display: grid; gap: 1.1rem; margin-bottom: 2.4rem; border-color: var(--accent-line); }
+.assistant h2 { margin: 0 0 .2rem; }
+.assistant-head p { margin: 0; }
+.assistant-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .9rem; }
+.assistant label { display: grid; gap: .35rem; font-weight: 500; }
+.assistant .check { display: flex; }
+.chip-field { border: 0; padding: 0; margin: 0; }
+.chip-field legend { font-weight: 500; margin-bottom: .45rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.chip { position: relative; }
+.chip input { position: absolute; opacity: 0; pointer-events: none; }
+.chip span {
+  display: inline-block; padding: .35rem .75rem; border: 1px solid var(--line-2); border-radius: 999px;
+  background: var(--field); font-size: .88rem; font-weight: 500; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.chip span:hover { border-color: var(--ink-2); }
+.chip input:checked + span { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+.chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+[data-music-hint].bad { color: var(--danger); }
+.assistant-foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 1rem; }
+.assistant-foot .btn { margin-left: auto; }
+.btn.is-busy { opacity: .8; cursor: progress; }
+.btn.is-busy .ic { animation: spin-slow 1.6s linear infinite; }
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+.tpl-title { margin-top: .5rem; }

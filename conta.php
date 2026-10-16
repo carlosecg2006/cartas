@@ -70,6 +70,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('Contato do site salvo.');
             redirect('conta.php#site');
         }
+    } elseif ($action === 'ia_chave' && $user['role'] === 'admin') {
+        $key = trim(input('chave'));
+        if (input('remover') === '1') {
+            set_setting('anthropic_api_key', '');
+            flash('Escrita com IA desligada.');
+        } elseif (!preg_match('/^sk-ant-[A-Za-z0-9_\-]{20,200}$/', $key)) {
+            $errors[] = 'Essa não parece uma chave da API do Claude (ela começa com sk-ant-).';
+        } else {
+            set_setting('anthropic_api_key', $key);
+            flash('Escrita com IA ativada. Teste criando uma carta nova pelo assistente.');
+        }
+        if (!$errors) {
+            redirect('conta.php#site');
+        }
     } elseif ($action === 'apagar') {
         if (!password_verify(input('senha_apagar'), $user['password_hash'])) {
             $errors[] = 'Para apagar a conta, digite sua senha atual.';
@@ -256,6 +270,25 @@ page_head('Minha conta');
                 <input type="email" name="email" class="grow" placeholder="seu-email@exemplo.com" value="<?= e(site_contact()['email']) ?>" aria-label="E-mail de contato do site">
                 <button class="btn">Salvar</button>
             </form>
+
+            <h3 class="small-title">Escrever com IA (opcional)</h3>
+            <p class="muted small">Com uma chave da API do Claude, o assistente de “Nova carta” escreve o texto a partir da relação, do tom e do que a pessoa conta. Cada carta custa poucos centavos de dólar, cobrados na sua conta da Anthropic. Sem chave, o assistente continua funcionando com um rascunho pronto para completar.</p>
+            <?php if (ai_key() !== ''): ?>
+                <form method="post" class="row wrap">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="acao" value="ia_chave">
+                    <span class="grow">✅ Ativada (chave terminando em <code><?= e(substr(ai_key(), -4)) ?></code>)<?= ai_available() ? '' : ' — mas esta hospedagem não tem o suporte necessário (phar/curl).' ?></span>
+                    <button class="btn btn-ghost" name="remover" value="1" data-confirm="Desligar a escrita com IA?">Desligar</button>
+                </form>
+            <?php else: ?>
+                <form method="post" class="row wrap">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="acao" value="ia_chave">
+                    <input type="password" name="chave" class="grow" placeholder="sk-ant-…" autocomplete="off" aria-label="Chave da API do Claude">
+                    <button class="btn">Ativar</button>
+                </form>
+                <p class="small muted">Crie a chave em <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Ela fica guardada só no banco do site e nunca aparece para ninguém.</p>
+            <?php endif; ?>
         </section>
     <?php endif; ?>
 

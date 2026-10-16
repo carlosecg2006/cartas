@@ -91,6 +91,7 @@ page_head('Editor', [
                 <p class="small muted">Só a pessoa escolhida vai ver esta carta.</p>
             <?php endif; ?>
 
+            <label class="check"><input type="checkbox" data-hide-title> Esconder o título até a pessoa abrir (surpresa total)</label>
             <label class="check"><input type="checkbox" data-schedule-toggle> Só pode ser aberta a partir de uma data</label>
             <div class="schedule" data-schedule hidden>
                 <input type="datetime-local" name="open_at" data-open-at>

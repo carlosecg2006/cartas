@@ -14,7 +14,7 @@ if (!$user) {
 $uid = (int) $user['id'];
 session_write_close();
 
-$letter = q_one("SELECT l.id, l.title, l.sender_id, l.open_at, s.name AS sender_name FROM letters l JOIN users s ON s.id = l.sender_id
+$letter = q_one("SELECT l.id, l.title, l.meta, l.sender_id, l.open_at, s.name AS sender_name FROM letters l JOIN users s ON s.id = l.sender_id
     WHERE l.recipient_id = ? AND l.status = 'sent' AND l.first_opened_at IS NULL AND " . sql_delivered() . ' ORDER BY l.sent_at DESC LIMIT 1', [$uid]);
 $reply = q_one('SELECT p.letter_id, p.message, p.created_at, u.id AS uid, u.name FROM replies p JOIN letters l ON l.id = p.letter_id JOIN users u ON u.id = p.user_id
     WHERE (l.sender_id = ? OR (l.recipient_id = ? AND l.status = \'sent\' AND (l.open_at IS NULL OR l.open_at <= ?)))
@@ -29,7 +29,8 @@ if ($reply && (!$letter || $reply['created_at'] >= q_val('SELECT sent_at FROM le
     $locked = $letter['open_at'] && strtotime($letter['open_at']) > time();
     $out = [
         'title' => 'Carta nova de ' . $name,
-        'body' => $locked ? 'Ela está lacrada até ' . fmt_date($letter['open_at']) . '.' : ($letter['title'] ?: 'Toque para abrir o envelope.'),
+        'body' => $locked ? 'Ela está lacrada até ' . fmt_date($letter['open_at']) . '.'
+            : (!empty(json_decode((string) $letter['meta'], true)['envelope']['hideTitle']) ? 'Toque para abrir o envelope.' : ($letter['title'] ?: 'Toque para abrir o envelope.')),
         'url' => './carta.php?id=' . (int) $letter['id'],
     ];
 }

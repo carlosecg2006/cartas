@@ -31,7 +31,7 @@ $otherId = $isSender ? (int) $letter['recipient_id'] : (int) $letter['sender_id'
 $isFav = (bool) q_val('SELECT 1 FROM favorites WHERE user_id = ? AND letter_id = ?', [$uid, (int) $letter['id']]);
 $data = [
     'id' => (int) $letter['id'],
-    'title' => $seal === 'transit' ? '' : $letter['title'],
+    'title' => $seal === 'transit' ? '' : letter_title_for($letter, $uid),
     'toName' => $isSender ? first_name($toName) : first_name($user['name']),
     'envelope' => $content['envelope'],
     'paperColor' => $content['paper']['color'],
@@ -50,7 +50,7 @@ $data = [
     'reduceMotion' => (int) ($user['reduce_motion'] ?? 0) === 1,
 ];
 
-page_head($seal === 'transit' ? 'Carta a caminho' : ($letter['title'] ?: 'Carta'), [
+page_head($seal === 'transit' ? 'Carta a caminho' : letter_title_for($letter, $uid, 'Carta'), [
     'css' => ['assets/css/letter.css', 'assets/css/viewer.css'],
     'letter_fonts' => true,
     'body' => 'page-viewer',
@@ -81,7 +81,7 @@ page_head($seal === 'transit' ? 'Carta a caminho' : ($letter['title'] ?: 'Carta'
 
     <section class="envelope-stage" data-envelope-stage>
         <p class="eyebrow"><?= $isSender ? ($data['sentAt'] ? 'Enviada em ' . e(fmt_date_long($letter['sent_at'])) : 'Rascunho') : 'De ' . e($fromName) . ($seal !== 'transit' ? ' · ' . e(fmt_date_long($letter['sent_at'])) : '') ?></p>
-        <h1 class="stage-title"><?= $seal === 'transit' ? 'Uma carta está a caminho' : e($letter['title'] ?: 'Uma carta para você') ?></h1>
+        <h1 class="stage-title"><?= $seal === 'transit' ? 'Uma carta está a caminho' : e(letter_title_for($letter, $uid)) ?></h1>
         <div class="envelope-holder" data-envelope></div>
         <p class="stage-hint" data-hint>
             <?php if ($seal === 'transit'): ?>

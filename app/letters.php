@@ -66,6 +66,28 @@ function sql_delivered(string $alias = 'l'): string
     return "($alias.delivered_at IS NULL OR $alias.delivered_at <= '" . now() . "')";
 }
 
+/**
+ * O que quem está olhando pode saber de uma carta antes de abrir.
+ * Quem recebe não vê trecho nenhum antes de abrir, e não vê o título se quem escreveu pediu surpresa.
+ */
+function letter_unopened_for(array $l, int $viewerId): bool
+{
+    return (int) ($l['recipient_id'] ?? 0) === $viewerId && (int) ($l['sender_id'] ?? 0) !== $viewerId && empty($l['first_opened_at']);
+}
+
+function letter_title_for(array $l, int $viewerId, string $fallback = 'Uma carta para você'): string
+{
+    if (letter_unopened_for($l, $viewerId) && !empty($l['content']['envelope']['hideTitle'])) {
+        return $fallback;
+    }
+    return (string) ($l['title'] ?: $fallback);
+}
+
+function letter_excerpt_for(array $l, int $viewerId): string
+{
+    return letter_unopened_for($l, $viewerId) ? '' : (string) ($l['excerpt'] ?? '');
+}
+
 /** Colunas para listas (sem o conteúdo inteiro, que pode ser grande). */
 const LETTER_LIST_COLS = 'l.id, l.sender_id, l.recipient_id, l.title, l.status, l.open_at, l.sent_at, l.delivered_at, '
     . 'l.first_opened_at, l.last_opened_at, l.open_count, l.created_at, l.updated_at, l.meta';

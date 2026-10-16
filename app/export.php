@@ -88,6 +88,8 @@ function export_letter_html(array $l): string
     $html .= '</div>';
     if (($c['bgm']['kind'] ?? 'none') === 'youtube') {
         $html .= '<p class="music">🎶 Música da carta: <a href="https://www.youtube.com/watch?v=' . e($c['bgm']['mid']) . '">YouTube</a></p>';
+    } elseif (($c['bgm']['kind'] ?? 'none') === 'spotify') {
+        $html .= '<p class="music">🎶 Música da carta: <a href="https://open.spotify.com/' . e($c['bgm']['skind']) . '/' . e($c['bgm']['mid']) . '">Spotify</a></p>';
     } elseif (($c['bgm']['kind'] ?? 'none') === 'file') {
         $html .= '<p class="music">🎶 Música da carta:<br><audio controls src="arquivos/' . e($c['bgm']['src']) . '"></audio></p>';
     }

@@ -95,11 +95,15 @@ page_head($person['display'], ['body' => 'page-person', 'css' => ['assets/css/le
                         ], JSON_UNESCAPED_UNICODE)) ?>"></div>
                         <div class="tl-info">
                             <span class="tl-dir"><?= $l['mine'] ? 'Você → ' . e($pname) : e($pname) . ' → você' ?> · <?= e(fmt_date($l['sent_at'], false)) ?></span>
-                            <strong><?= e($l['title'] ?: 'Uma carta') ?><?= in_array((int) $l['id'], $favIds, true) ? ' <span class="fav-dot">★</span>' : '' ?></strong>
+                            <strong><?= e(letter_title_for($l, $uid, 'Uma carta')) ?><?= in_array((int) $l['id'], $favIds, true) ? ' <span class="fav-dot">★</span>' : '' ?></strong>
                             <?php if ($locked): ?>
                                 <span class="tag tag-scheduled">Abre em <?= e(fmt_date($l['open_at'])) ?></span>
                             <?php else: ?>
-                                <p class="found-snippet"><?= e(mb_strimwidth($l['excerpt'], 0, 120, '…')) ?></p>
+                                <?php if (letter_unopened_for($l, $uid)): ?>
+                                    <span class="tag tag-new">Ainda não aberta 💌</span>
+                                <?php else: ?>
+                                    <p class="found-snippet"><?= e(mb_strimwidth($l['excerpt'], 0, 120, '…')) ?></p>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                     </a>

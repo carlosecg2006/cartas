@@ -3261,10 +3261,13 @@
       body.replaceChildren();
       if (cur.kind !== 'none') {
         const card = L.el('div', 'bgm-current');
-        card.appendChild(L.icon(cur.kind === 'youtube' ? 'play' : 'music'));
+        card.appendChild(L.icon(cur.kind === 'file' ? 'music' : 'play'));
         const info = L.el('div', 'bgm-info');
-        info.appendChild(L.el('strong', '', { text: cur.name || (cur.kind === 'youtube' ? 'Vídeo do YouTube' : 'Sua música') }));
-        info.appendChild(L.el('span', 'small muted', { text: cur.kind === 'youtube' ? 'YouTube' + (cur.start ? ' · começa em ' + L.fmtTime(cur.start) : '') : 'Arquivo de áudio' }));
+        info.appendChild(L.el('strong', '', { text: cur.name || ({ youtube: 'Vídeo do YouTube', spotify: 'Música do Spotify' }[cur.kind] || 'Sua música') }));
+        info.appendChild(L.el('span', 'small muted', {
+          text: cur.kind === 'youtube' ? 'YouTube' + (cur.start ? ' · começa em ' + L.fmtTime(cur.start) : '')
+            : cur.kind === 'spotify' ? 'Spotify · a pessoa toca no ▶ (não toca sozinho)' : 'Arquivo de áudio',
+        }));
         card.appendChild(info);
         const remove = L.el('button', 'icon-btn', { type: 'button', title: 'Tirar música', 'aria-label': 'Tirar música' });
         remove.appendChild(L.icon('x'));
@@ -3276,6 +3279,7 @@
           const audio = L.el('audio', 'bgm-test', { controls: true, preload: 'none', src: L.mediaUrl(cur.src) });
           body.appendChild(audio);
         }
+        if (cur.kind === 'spotify') return; // o volume do Spotify é controlado no próprio player
         body.appendChild(L.el('p', 'menu-label', { text: 'Volume' }));
         const range = L.el('input', '', { type: 'range', min: '5', max: '100', value: String(Math.round((cur.volume ?? 0.6) * 100)), 'aria-label': 'Volume' });
         range.addEventListener('change', () => { cur.volume = Number(range.value) / 100; commit(); });
@@ -3297,16 +3301,20 @@
 
       // nenhuma música: link do YouTube ou arquivo
       const linkRow = L.el('form', 'bgm-link');
-      const input = L.el('input', '', { placeholder: 'Cole um link do YouTube', inputmode: 'url', 'aria-label': 'Link do YouTube' });
+      const input = L.el('input', '', { placeholder: 'Cole um link do YouTube ou do Spotify', inputmode: 'url', 'aria-label': 'Link da música' });
       const ok = L.el('button', 'btn btn-sm', { type: 'submit', text: 'Usar' });
       linkRow.append(input, ok);
       linkRow.addEventListener('submit', (e) => {
         e.preventDefault();
         const parsed = L.parseMusicUrl(input.value);
-        if (!parsed || parsed.provider !== 'youtube') {
-          toast(parsed && parsed.provider === 'spotify'
-            ? 'O Spotify não deixa tocar sozinho. Use um link do YouTube ou envie o arquivo da música.'
-            : 'Não reconheci esse link do YouTube.', 'error');
+        if (!parsed) {
+          toast('Não reconheci esse link. Cole o endereço de uma música do YouTube ou do Spotify.', 'error');
+          return;
+        }
+        if (parsed.provider === 'spotify') {
+          // o Spotify não toca sozinho: vira um player pequeno que a pessoa toca
+          setBgm({ kind: 'spotify', skind: parsed.kind, mid: parsed.mid, name: '' });
+          toast('O Spotify não deixa tocar sozinho: a pessoa vai ver um player e tocar no ▶. Para tocar sozinha, use o YouTube.');
           return;
         }
         const t = input.value.match(/[?&](?:t|start)=(\d+)/);
@@ -4038,6 +4046,8 @@
   }
 
   $('[data-open-send]').addEventListener('click', () => {
+    const hideBox = $('[data-hide-title]');
+    if (hideBox) hideBox.checked = !!state.content.envelope.hideTitle;
     $$('[data-send-step]', dialog).forEach((s) => { s.hidden = s.dataset.sendStep !== 'choose'; });
     scheduleToggle.checked = !!DATA.letter.openAt;
     const stored = DATA.letter.openAt ? new Date(DATA.letter.openAt) : null;
@@ -4082,6 +4092,16 @@
       }
       when = d.toISOString();
     }
+    // trechos [entre colchetes] do assistente que ainda não foram completados
+    const pending = JSON.stringify(state.content.blocks).match(/<mark>\[[^\]]*\]<\/mark>/g);
+    if (pending && !window.confirm('Ainda tem ' + pending.length + ' trecho(s) destacado(s) para completar, como ' + pending[0].replace(/<\/?mark>/g, '') + '. Enviar assim mesmo?')) {
+      return;
+    }
+    const hide = $('[data-hide-title]', dialog);
+    if (hide && !!state.content.envelope.hideTitle !== hide.checked) {
+      state.content.envelope.hideTitle = hide.checked;
+      commit();
+    }
     const btn = $('[data-send-submit]');
     btn.disabled = true;
     try {
@@ -4120,4 +4140,13 @@
   // Foca o primeiro texto vazio para já sair escrevendo
   const firstEmpty = blocks().find((b) => TEXT_TYPES.includes(b.type) && !b.html);
   if (firstEmpty && !isMobile()) focusBlock(firstEmpty.id, 'start');
+
+  // Carta criada pelo assistente: explica os trechos para completar
+  if (new URLSearchParams(location.search).get('assistente')) {
+    const marks = JSON.stringify(state.content.blocks).match(/<mark>\[/g);
+    setTimeout(() => toast(marks
+      ? 'Pronto! Complete os ' + marks.length + ' trechos [destacados] com as suas palavras e deixe a carta com a sua cara.'
+      : 'Pronto! Leia, mude o que quiser e deixe a carta com a sua cara.'), 600);
+    window.history.replaceState(null, '', location.pathname + '?id=' + letterId);
+  }
 })();

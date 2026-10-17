@@ -163,6 +163,33 @@
     'fx-wavy': 'Sublinhado ondulado', 'fx-glow': 'Brilho', 'fx-outline': 'Contorno',
   };
 
+  // ---------- Tela livre (espelham PAPER_FORMATS, IMAGE_MASKS e DRAW_BRUSHES em app/content.php) ----------
+  // Formato do papel: largura de projeto (--dw) e altura mínima proporcional (--fmt-h, em cqw, no CSS)
+  const FORMATS = {
+    '': { label: 'Carta', hint: 'Cresce com o texto' },
+    square: { label: 'Quadrado', hint: '1:1', ratio: 1 },
+    postcard: { label: 'Cartão-postal', hint: 'Deitado, 3:2', ratio: 2 / 3 },
+    note: { label: 'Bilhete', hint: 'Pequeno e estreito', ratio: 1.25 },
+    story: { label: 'Story', hint: 'Em pé, 9:16', ratio: 16 / 9 },
+  };
+  // Molduras e recortes das fotos soltas. path: recorte em 0..100 (o mesmo desenho vale para a tela e para a imagem salva)
+  const MASKS = {
+    '': { label: 'Original' },
+    circle: { label: 'Círculo', crop: 1 },
+    rounded: { label: 'Cantos redondos' },
+    heart: { label: 'Coração', crop: 1, path: 'M50 95C18 72 2 55 4 33 6 13 30 3 50 25 70 3 94 13 96 33 98 55 82 72 50 95Z' },
+    star: { label: 'Estrela', crop: 1, path: 'M50 2 62 36 98 37 69 59 80 96 50 75 20 96 31 59 2 37 38 36Z' },
+    arch: { label: 'Arco', crop: 1.25 },
+    blob: { label: 'Mancha', crop: 1, path: 'M54 4C77 4 97 21 93 46 90 66 97 85 74 93 52 101 29 93 15 79 1 64 3 39 15 23 25 9 38 4 54 4Z' },
+    polaroid: { label: 'Polaroid', crop: 1 },
+    stamp: { label: 'Selo' },
+  };
+  const BRUSHES = { '': 'Caneta', marker: 'Marcador', pencil: 'Lápis', chalk: 'Giz', neon: 'Neon' };
+
+  function maskUrl(d) {
+    return 'url("data:image/svg+xml,' + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><path d='" + d + "'/></svg>") + '")';
+  }
+
   const EFFECTS = { none: 'Nenhum', hearts: 'Corações', confetti: 'Confete', petals: 'Pétalas', stars: 'Estrelas', snow: 'Neve' };
   const GALLERY_LAYOUTS = { scatter: 'Espalhadas', grid: 'Grade', strip: 'Filme' };
 
@@ -255,7 +282,8 @@
     paper.className = 'paper paper-' + (usesImage ? 'image' : (p.style === 'image' ? 'plain' : (p.style || 'lined')))
       + ' border-' + (p.border || 'none') + ' size-' + (p.size || 'md') + (p.layout === 2 ? ' layout-2' : '')
       + (paper.dataset.fluid === '1' ? ' paper-fluid' : '')
-      + ((usesImage ? p.veilDark : isDark(p.color)) ? ' paper-dark' : '');
+      + ((usesImage ? p.veilDark : isDark(p.color)) ? ' paper-dark' : '')
+      + (p.format && FORMATS[p.format] ? ' has-fmt fmt-' + p.format : '');
     const font = FONTS[p.font] || FONTS.caveat;
     paper.style.setProperty('--paper', p.color || '#fffdf6');
     paper.style.setProperty('--ink', p.ink || '#3b3340');
@@ -1019,9 +1047,12 @@
       case 'emoji':
         node.appendChild(el('span', 'st-emoji', { text: s.char }));
         break;
-      case 'image':
-        node.appendChild(el('img', s.fi && IMAGE_FILTERS[s.fi] ? 'imgf-' + s.fi : '', { src: mediaUrl(s.src), alt: '', draggable: 'false' }));
+      case 'image': {
+        const img = el('img', s.fi && IMAGE_FILTERS[s.fi] ? 'imgf-' + s.fi : '', { src: mediaUrl(s.src), alt: '', draggable: 'false' });
+        if (s.mask && MASKS[s.mask]) node.appendChild(photoFrame(img, s.mask));
+        else node.appendChild(img);
         break;
+      }
       case 'shape':
         node.appendChild(shapeSvg(s));
         break;
@@ -1030,6 +1061,7 @@
         t.style.fontFamily = (FONTS[s.font] || FONTS.caveat).css;
         t.style.setProperty('--st-scale', (FONTS[s.font] || FONTS.caveat).scale);
         t.style.color = s.color || '#3b3340';
+        textExtras(t, s);
         node.appendChild(t);
         break;
       }
@@ -1045,6 +1077,10 @@
         svg.setAttribute('viewBox', '0 0 ' + s.vw + ' ' + s.vh);
         svg.setAttribute('class', 'st-drawing');
         (s.paths || []).forEach((p) => {
+          if (p.b && BRUSHES[p.b]) {
+            svg.appendChild(brushStroke(p));
+            return;
+          }
           const path = document.createElementNS(ns, 'path');
           path.setAttribute('d', p.d);
           path.setAttribute('stroke', p.c);
@@ -1088,6 +1124,119 @@
     return svg;
   }
 
+  // ---------- Tela livre: fotos com moldura, textos com mais opções e pincéis ----------
+
+  /** Foto solta dentro de uma moldura/recorte (tudo em medidas relativas: muda só de escala). */
+  function photoFrame(img, mask) {
+    const def = MASKS[mask];
+    const fr = el('div', 'st-photo mk-' + mask);
+    if (def.path) {
+      img.style.webkitMaskImage = maskUrl(def.path);
+      img.style.maskImage = maskUrl(def.path);
+    }
+    fr.appendChild(img);
+    return fr;
+  }
+
+  /** Fundo, negrito, itálico, alinhamento, tamanho e texto em curva (campos opcionais). */
+  function textExtras(t, s) {
+    if (s.bg && /^#[0-9a-f]{6}$/i.test(s.bg)) {
+      t.classList.add('has-bg');
+      t.style.setProperty('--st-bg', s.bg);
+    }
+    if (s.bd) t.style.fontWeight = '700';
+    if (s.it) t.style.fontStyle = 'italic';
+    if (s.al === 'left' || s.al === 'right') t.style.textAlign = s.al;
+    const fs = Number(s.fs) || 1;
+    if (fs !== 1) {
+      t.classList.add('has-fs');
+      t.style.setProperty('--st-fs', Math.max(0.4, Math.min(4, fs)));
+    }
+    const cv = Math.max(-100, Math.min(100, Number(s.cv) || 0));
+    if (cv) {
+      t.classList.add('st-curved');
+      t.replaceChildren(curvedText(s, cv, Math.max(0.4, Math.min(4, fs))));
+    }
+  }
+
+  /**
+   * Texto em arco (SVG textPath). O desenho tem 1000 de largura e ocupa a largura do adesivo,
+   * então a letra acompanha o tamanho do adesivo em qualquer tela.
+   */
+  function curvedText(s, cv, fs) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const font = FONTS[s.font] || FONTS.caveat;
+    const F = 85 * font.scale * fs;
+    const h = (Math.abs(cv) / 100) * 500; // flecha do arco (100 = meio círculo)
+    const R = (500 * 500 + h * h) / (2 * h);
+    const up = cv > 0;
+    const label = String(s.text || '').replace(/\s*\n\s*/g, ' ');
+    // a caixa recorta só o trecho do arco ocupado pelo texto (estimado pelo nº de letras: igual em qualquer tela)
+    const half = Math.min(Math.PI / 2, Math.max(0.05, Math.min(1000, Array.from(label).length * F * 0.52) / (2 * R)));
+    const sagText = Math.min(h, R * (1 - Math.cos(half)));
+    const top = up ? F * 1.05 : sagText + F * 1.05; // ponto mais alto (∩) ou mais baixo (∪) do arco
+    const yb = up ? top + h : top - h; // altura das pontas do arco
+    const H = up ? top + sagText + F * 0.45 : top + F * 0.45;
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 1000 ' + H.toFixed(1));
+    svg.setAttribute('class', 'st-arc');
+    svg.setAttribute('aria-hidden', 'true');
+    Object.assign(svg.dataset, { f: F.toFixed(2), h: h.toFixed(2), r: R.toFixed(2), yb: yb.toFixed(2), up: up ? '1' : '' });
+    const id = 'arc-' + (s.id || 'x') + '-' + Math.random().toString(36).slice(2, 7);
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('id', id);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('d', 'M0 ' + yb.toFixed(1) + ' A' + R.toFixed(1) + ' ' + R.toFixed(1) + ' 0 0 ' + (up ? 1 : 0) + ' 1000 ' + yb.toFixed(1));
+    const text = document.createElementNS(ns, 'text');
+    text.setAttribute('font-size', F.toFixed(1));
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('fill', 'currentColor');
+    const tp = document.createElementNS(ns, 'textPath');
+    tp.setAttribute('href', '#' + id);
+    tp.setAttribute('startOffset', '50%');
+    tp.textContent = label;
+    text.appendChild(tp);
+    svg.append(path, text);
+    return svg;
+  }
+
+  /**
+   * Camadas de cada pincel (largura, opacidade, deslocamento e tracejado proporcionais à espessura s).
+   * Usadas pelo SVG do adesivo e pela prévia do desenho no editor.
+   */
+  function brushLayers(b, c, s) {
+    const L = (color, w, o, dx, dy, dash) => ({ c: color, w: w * s, o, dx: (dx || 0) * s, dy: (dy || 0) * s, dash: dash ? [dash[0] * s, dash[1] * s] : null });
+    switch (b) {
+      case 'marker': return [L(c, 1.6, 0.45)];
+      case 'pencil': return [L(c, 0.7, 0.75), L(c, 0.4, 0.4, 0.3, -0.25), L(c, 0.4, 0.35, -0.28, 0.3)];
+      case 'chalk': return [L(c, 1, 0.6, 0, 0, [1.1, 0.45]), L(c, 0.7, 0.55, 0.18, 0.15, [0.5, 0.8]), L('#ffffff', 0.25, 0.35, 0, 0, [0.2, 1.3])];
+      case 'neon': return [L(c, 3.2, 0.18), L(c, 1.9, 0.4), L(c, 1, 0.95), L('#ffffff', 0.38, 0.9)];
+      default: return [L(c, 1, 1)];
+    }
+  }
+
+  /** Traço com pincel: camadas de SVG simples (sem filtros), igual na tela, na impressão e na imagem salva. */
+  function brushStroke(p) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(ns, 'g');
+    g.setAttribute('class', 'brush-' + p.b);
+    const n = (v) => String(Math.round(v * 100) / 100);
+    brushLayers(p.b, p.c, Number(p.s) || 3).forEach((ly) => {
+      const path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', p.d);
+      path.setAttribute('stroke', ly.c);
+      path.setAttribute('stroke-width', n(ly.w));
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke-linecap', p.b === 'marker' ? 'square' : 'round');
+      path.setAttribute('stroke-linejoin', 'round');
+      if (ly.o < 1) path.setAttribute('stroke-opacity', String(ly.o));
+      if (ly.dx || ly.dy) path.setAttribute('transform', 'translate(' + n(ly.dx) + ' ' + n(ly.dy) + ')');
+      if (ly.dash) path.setAttribute('stroke-dasharray', n(ly.dash[0]) + ' ' + n(ly.dash[1]));
+      g.appendChild(path);
+    });
+    return g;
+  }
+
   function doodleSvg(name, color) {
     const ns = 'http://www.w3.org/2000/svg';
     const def = DOODLES[name] || DOODLES.heart;
@@ -1114,7 +1263,17 @@
     // assim a posição não depende do momento em que a carta foi medida
     const width = paper.clientWidth || 1;
     const blocks = paper.querySelector('.paper-inner');
-    const contentBottom = blocks ? blocks.offsetTop + blocks.offsetHeight : 0;
+    // fim natural do conteúdo: o .paper-inner estica junto com o min-height do papel (flex),
+    // então medir a caixa dele faria a altura oscilar entre "com" e "sem" espaço para os adesivos
+    let contentBottom = 0;
+    if (blocks) {
+      const cs = getComputedStyle(blocks);
+      const last = blocks.lastElementChild;
+      const natural = last
+        ? last.offsetTop + last.offsetHeight + (parseFloat(getComputedStyle(last).marginBottom) || 0) + (parseFloat(cs.paddingBottom) || 0)
+        : blocks.offsetHeight;
+      contentBottom = blocks.offsetTop + Math.min(blocks.offsetHeight, Math.max(natural, parseFloat(cs.minHeight) || 0));
+    }
     const items = [];
     stickers.forEach((s) => {
       const node = layer.querySelector('.sticker[data-id="' + s.id + '"]');
@@ -1150,7 +1309,7 @@
   /** Quantos px de tela vale 1 unidade de projeto neste papel. */
   function unitPx(paper) {
     if (paper.classList.contains('paper-fluid')) return 1;
-    const dw = paper.classList.contains('layout-2') ? 600 : 760;
+    const dw = parseFloat(getComputedStyle(paper).getPropertyValue('--dw')) || (paper.classList.contains('layout-2') ? 600 : 760);
     return (paper.clientWidth || dw) / dw;
   }
 
@@ -1209,7 +1368,7 @@
     const p = content.paper || {};
     const scene = el('div', 'letter-scene');
     const pages = splitPages(content);
-    const fluid = !(content.stickers || []).length;
+    const fluid = !(content.stickers || []).length && !(p.format && FORMATS[p.format]);
     const papers = pages.map((pg) => buildPaper(scene, pg, p, fluid, opts));
     let current = 0;
     const seen = new Set();
@@ -1471,6 +1630,146 @@
     setTimeout(() => layer.remove(), total + 200);
   }
 
+  // ---------- Imagem salva (html2canvas): recortes e textos em curva viram canvas ----------
+  // O html2canvas não entende máscara CSS, object-fit nem fontes dentro de SVG; no clone usado
+  // para a imagem, cada foto recortada e cada texto em curva é pintado num canvas com o mesmo desenho.
+
+  function coverDraw(ctx, img, x, y, w, h) {
+    const iw = img.naturalWidth || w;
+    const ih = img.naturalHeight || h;
+    const sc = Math.max(w / iw, h / ih);
+    const sw = w / sc;
+    const sh = h / sc;
+    ctx.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, x, y, w, h);
+  }
+
+  function clipMask(ctx, mask, w, h) {
+    const def = MASKS[mask] || {};
+    if (def.path) {
+      const p = new Path2D();
+      p.addPath(new Path2D(def.path), new DOMMatrix().scale(w / 100, h / 100));
+      ctx.clip(p);
+      return;
+    }
+    ctx.beginPath();
+    if (mask === 'circle') ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+    else if (mask === 'rounded') ctx.roundRect(0, 0, w, h, w * 0.12);
+    else if (mask === 'arch') ctx.roundRect(0, 0, w, h, [w / 2, w / 2, 0, 0]);
+    else ctx.rect(0, 0, w, h);
+    ctx.clip();
+  }
+
+  function bakePhoto(fr, srcImg, scale) {
+    const mask = (fr.className.match(/\bmk-(\S+)/) || [])[1];
+    const img = fr.querySelector('img');
+    if (!img || !srcImg || !srcImg.complete || !srcImg.naturalWidth) return;
+    const stamp = mask === 'stamp';
+    const box = stamp ? fr : img;
+    const w = box.offsetWidth;
+    const h = box.offsetHeight;
+    if (!w || !h) return;
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(w * scale);
+    cv.height = Math.round(h * scale);
+    const ctx = cv.getContext('2d');
+    ctx.scale(scale, scale);
+    const filter = getComputedStyle(img).filter;
+    if (filter && filter !== 'none') ctx.filter = filter;
+    cv.style.cssText = 'display:block;width:100%;height:' + h + 'px';
+    if (stamp) {
+      // papel branco de selo, com a borda ondulada igual à do CSS (.mk-stamp: --sc = 6% da largura)
+      const pad = parseFloat(getComputedStyle(fr).paddingLeft) || 0;
+      const sc = w * 0.06;
+      ctx.save();
+      ctx.filter = 'none';
+      ctx.fillStyle = '#fffefa';
+      ctx.beginPath();
+      ctx.rect(sc / 2, sc / 2, w - sc, h - sc);
+      const dots = (len, at) => {
+        const n = Math.max(1, Math.round(len / sc));
+        const tile = len / n;
+        const r = Math.min(tile, sc) / 2;
+        for (let i = 0; i < n; i++) at(tile * (i + 0.5), r);
+      };
+      const dot = (x, y, r) => { ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, Math.PI * 2); };
+      dots(w, (x, r) => { dot(x, sc / 2, r); dot(x, h - sc / 2, r); });
+      dots(h, (y, r) => { dot(sc / 2, y, r); dot(w - sc / 2, y, r); });
+      ctx.fill();
+      ctx.restore();
+      ctx.drawImage(srcImg, pad, pad, w - pad * 2, h - pad * 2);
+      fr.style.padding = '0';
+      fr.style.background = 'none';
+      fr.style.webkitMask = 'none';
+      fr.style.mask = 'none';
+      fr.replaceChildren(cv);
+      return;
+    }
+    clipMask(ctx, mask, w, h);
+    coverDraw(ctx, srcImg, 0, 0, w, h);
+    img.replaceWith(cv);
+  }
+
+  function bakeArc(svg, scale) {
+    const w = svg.clientWidth || svg.getBoundingClientRect().width;
+    const vb = (svg.getAttribute('viewBox') || '').split(/\s+/).map(Number);
+    if (!w || vb.length !== 4) return;
+    const k = w / 1000;
+    const h = vb[3] * k;
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(w * scale);
+    cv.height = Math.round(h * scale);
+    const ctx = cv.getContext('2d');
+    ctx.scale(scale * k, scale * k);
+    const host = svg.parentNode;
+    const cs = getComputedStyle(host);
+    const F = Number(svg.dataset.f);
+    const sag = Number(svg.dataset.h);
+    const R = Number(svg.dataset.r);
+    const yb = Number(svg.dataset.yb);
+    const up = svg.dataset.up === '1';
+    ctx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + F + 'px ' + cs.fontFamily;
+    ctx.textBaseline = 'alphabetic';
+    const fill = cs.webkitTextFillColor;
+    const outline = host.classList.contains('st-outline');
+    ctx.fillStyle = fill && !/^rgba\(0, 0, 0, 0\)$/.test(fill) ? fill : cs.color;
+    ctx.strokeStyle = cs.color;
+    ctx.lineWidth = F * 0.045;
+    const text = (svg.querySelector('textPath') || {}).textContent || '';
+    const chars = Array.from(text);
+    const widths = chars.map((c) => ctx.measureText(c).width);
+    const total = widths.reduce((a, b) => a + b, 0);
+    const cy = up ? yb - sag + R : yb + sag - R;
+    let d = -total / 2;
+    chars.forEach((c, i) => {
+      const mid = d + widths[i] / 2;
+      const th = up ? -Math.PI / 2 + mid / R : Math.PI / 2 - mid / R;
+      ctx.save();
+      ctx.translate(500 + R * Math.cos(th), cy + R * Math.sin(th));
+      ctx.rotate(up ? th + Math.PI / 2 : th - Math.PI / 2);
+      if (outline) ctx.strokeText(c, -widths[i] / 2, 0);
+      else ctx.fillText(c, -widths[i] / 2, 0);
+      ctx.restore();
+      d += widths[i];
+    });
+    cv.style.cssText = 'display:block;width:100%;height:' + h + 'px';
+    svg.replaceWith(cv);
+  }
+
+  /** Para o onclone do html2canvas: troca recortes e curvas por canvas no documento clonado. */
+  function prepareExport(doc, scale) {
+    scale = scale || 2;
+    // no clone as animações de entrada recomeçariam do zero (blocos e adesivos invisíveis)
+    doc.querySelectorAll('.paper.reveal').forEach((p) => p.classList.remove('reveal'));
+    const originals = Array.from(document.querySelectorAll('.st-photo img'));
+    Array.from(doc.querySelectorAll('.st-photo')).forEach((fr, i) => {
+      try { bakePhoto(fr, originals[i], scale); } catch (e) { /* fica como o html2canvas conseguir */ }
+    });
+    Array.from(doc.querySelectorAll('.st-curved svg.st-arc')).forEach((svg) => {
+      try { bakeArc(svg, scale); } catch (e) { /* idem */ }
+    });
+  }
+
+
   window.Letter = {
     FONTS, PAPERS, BORDERS, SCENES, LINERS, DIVIDERS, FRAMES, TAPES, TEXT_STYLES,
     DOODLES, STAMPS, EFFECTS, GALLERY_LAYOUTS,
@@ -1482,5 +1781,6 @@
     EXTRA_RENDERERS, normalizeUrl, parseCounterDate, counterParts,
     stickerEl, updateStickerBox, fillSticker, layoutStickers, anchorTop,
     renderLetter, renderEnvelope,
+    FORMATS, MASKS, BRUSHES, brushLayers, brushStroke, prepareExport,
   };
 })();

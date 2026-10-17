@@ -972,3 +972,70 @@ button.quiz-opt:focus-visible { outline: 2px solid color-mix(in srgb, var(--ink)
   50% { opacity: 1; transform: translate3d(var(--x), var(--y), 0) scale(1); }
 }
 @media print { .fx-layer { display: none !important; } }
+
+/* =====================================================================
+   Tela livre: formatos de papel, textos soltos com mais opções,
+   fotos com moldura/recorte e pincéis. Tudo em medidas relativas
+   (cqw, %, em): o desenho só muda de escala entre telas.
+   ===================================================================== */
+
+/* ---------- formatos do papel ---------- */
+/* largura de projeto própria e altura mínima proporcional; texto maior que o formato faz o papel crescer */
+.paper.fmt-square { --dw: 600; max-width: 600px; --fmt-h: 100cqw; }
+.paper.fmt-postcard { --dw: 750; max-width: 750px; --fmt-h: 66.667cqw; }
+.paper.fmt-note { --dw: 420; max-width: 420px; --fmt-h: 125cqw; }
+.paper.fmt-story { --dw: 450; max-width: 450px; --fmt-h: 177.778cqw; }
+.paper.has-fmt > .paper-inner { min-height: var(--fmt-h); }
+@media print {
+  .paper.fmt-square { max-width: 160mm; }
+  .paper.fmt-postcard { max-width: 186mm; }
+  .paper.fmt-note { max-width: 110mm; }
+  .paper.fmt-story { max-width: 95mm; }
+}
+
+/* ---------- textos soltos: tamanho, fundo e curva ---------- */
+.st-text.has-fs { font-size: max(12px, calc(var(--w) * .085cqw * var(--st-scale, 1) * var(--st-fs, 1))); }
+.st-text.has-bg { background-color: var(--st-bg); }
+.st-none.has-bg, .st-neon.has-bg, .st-outline.has-bg, .st-shadow.has-bg { padding: .2em .5em; border-radius: .3em; }
+.st-bubble.has-bg::after { border-top-color: var(--st-bg); }
+.st-ticket.has-bg { box-shadow: inset 0 0 0 .22em var(--st-bg), inset 0 0 0 .3em rgba(160, 110, 20, .35); }
+.st-curved svg.st-arc { display: block; width: 100%; height: auto; overflow: visible; }
+.st-curved text { text-shadow: none; -webkit-text-fill-color: currentColor; }
+.st-curved.st-outline text { fill: none; stroke: currentColor; stroke-width: .045em; -webkit-text-fill-color: transparent; }
+.st-curved.st-neon text { fill: #fffaf6; -webkit-text-fill-color: #fffaf6; }
+.st-curved.st-neon svg.st-arc { filter: drop-shadow(0 0 .1em currentColor) drop-shadow(0 0 .3em currentColor); }
+.st-curved.st-shadow svg.st-arc { filter: drop-shadow(.07em .07em 0 #f4a3b5); }
+
+/* ---------- fotos soltas: molduras e recortes ---------- */
+.st-photo { position: relative; }
+.st-photo img { display: block; width: 100%; height: auto; }
+.mk-circle img, .mk-heart img, .mk-star img, .mk-blob img, .mk-polaroid img { aspect-ratio: 1; object-fit: cover; }
+.mk-circle img { border-radius: 50%; }
+.mk-rounded img { border-radius: calc(var(--w) * .12cqw); }
+.mk-arch img { aspect-ratio: 4 / 5; object-fit: cover; border-radius: 50% 50% 0 0 / 40% 40% 0 0; }
+.mk-heart img, .mk-star img, .mk-blob img {
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+}
+.mk-polaroid {
+  background: #fffefa; padding: 6% 6% 20%;
+  box-shadow: 0 calc(var(--w) * .012cqw) calc(var(--w) * .04cqw) rgba(40, 20, 30, .28);
+}
+.mk-polaroid img { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06); }
+/* selo: papel branco com a borda ondulada (mesma técnica da borda "Ondulada" do papel) */
+.mk-stamp {
+  --sc: calc(var(--w) * .06cqw);
+  background: #fffefa; padding: 7%;
+  -webkit-mask:
+    radial-gradient(closest-side, #000 96%, transparent) top left / var(--sc) var(--sc) round no-repeat,
+    radial-gradient(closest-side, #000 96%, transparent) bottom left / var(--sc) var(--sc) round no-repeat,
+    radial-gradient(closest-side, #000 96%, transparent) top left / var(--sc) var(--sc) no-repeat round,
+    radial-gradient(closest-side, #000 96%, transparent) top right / var(--sc) var(--sc) no-repeat round,
+    linear-gradient(#000 0 0) center / calc(100% - var(--sc)) calc(100% - var(--sc)) no-repeat;
+  mask:
+    radial-gradient(closest-side, #000 96%, transparent) top left / var(--sc) var(--sc) round no-repeat,
+    radial-gradient(closest-side, #000 96%, transparent) bottom left / var(--sc) var(--sc) round no-repeat,
+    radial-gradient(closest-side, #000 96%, transparent) top left / var(--sc) var(--sc) no-repeat round,
+    radial-gradient(closest-side, #000 96%, transparent) top right / var(--sc) var(--sc) no-repeat round,
+    linear-gradient(#000 0 0) center / calc(100% - var(--sc)) calc(100% - var(--sc)) no-repeat;
+}

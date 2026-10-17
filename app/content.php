@@ -45,6 +45,11 @@ const STICKER_ANIMS = ['', 'float', 'pulse', 'wiggle', 'spin', 'sparkle', 'bounc
 const STICKER_OUTLINES = ['', 'white', 'shadow', 'both'];
 const IMAGE_FILTERS = ['', 'pb', 'sepia', 'vintage', 'quente', 'frio', 'desbotado', 'contraste', 'sonho'];
 const SHAPE_NAMES = ['circle', 'square', 'rounded', 'heart', 'star', 'blob', 'arrow', 'bubble', 'ribbon', 'badge', 'cloud', 'sparkle4'];
+// Tela livre: formato do papel, moldura/recorte das fotos soltas, pincéis do desenho e alinhamento dos textos soltos
+const PAPER_FORMATS = ['square', 'postcard', 'note', 'story'];
+const IMAGE_MASKS = ['circle', 'heart', 'star', 'arch', 'blob', 'rounded', 'polaroid', 'stamp'];
+const DRAW_BRUSHES = ['marker', 'pencil', 'chalk', 'neon'];
+const TEXT_STICKER_ALIGNS = ['left', 'right'];
 // Efeitos de texto (classes aceitas em <span>): marca-texto, sublinhado ondulado, brilho e contorno
 const TEXT_FX_CLASSES = ['fx-hl-yellow', 'fx-hl-pink', 'fx-hl-green', 'fx-hl-blue', 'fx-wavy', 'fx-glow', 'fx-outline'];
 const REACTION_EMOJIS = ['❤️', '🥹', '😂', '😭', '🤗', '🔥', '✨', '🫶'];
@@ -342,6 +347,11 @@ function sanitize_letter_content($raw): array
         'blocks' => [],
         'stickers' => [],
     ];
+    // formato do papel (quadrado, cartão-postal…): ausente = carta comum
+    $format = pick($p['format'] ?? '', PAPER_FORMATS, '');
+    if ($format !== '') {
+        $content['paper']['format'] = $format;
+    }
 
     $ids = [];
     foreach (array_slice(is_array($raw['blocks'] ?? null) ? $raw['blocks'] : [], 0, 300) as $b) {
@@ -574,7 +584,8 @@ function sanitize_sticker(array $s, array $blockIds): ?array
     ];
     switch ($sticker['kind']) {
         case 'emoji':
-            $sticker['char'] = plain($s['char'] ?? '', 16);
+            // qualquer emoji do teclado: texto curto, sem marcação
+            $sticker['char'] = trim(str_replace(['<', '>'], '', plain($s['char'] ?? '', 16)));
             if ($sticker['char'] === '') {
                 return null;
             }
@@ -586,12 +597,30 @@ function sanitize_sticker(array $s, array $blockIds): ?array
             }
             $sticker['src'] = $src;
             $sticker['fi'] = pick($s['fi'] ?? '', IMAGE_FILTERS, '');
+            $mask = pick($s['mask'] ?? '', IMAGE_MASKS, '');
+            if ($mask !== '') {
+                $sticker['mask'] = $mask;
+            }
             break;
         case 'text':
             $sticker['text'] = plain($s['text'] ?? '', 300);
             $sticker['font'] = pick($s['font'] ?? null, LETTER_FONTS, 'caveat');
             $sticker['color'] = color_or($s['color'] ?? null, '#3b3340');
             $sticker['style'] = pick($s['style'] ?? null, TEXT_STICKER_STYLES, 'none');
+            // opcionais: fundo, negrito, itálico, alinhamento, tamanho e curva (ausente = como antes)
+            $extra = [
+                'bg' => color_or($s['bg'] ?? null, ''),
+                'bd' => !empty($s['bd']),
+                'it' => !empty($s['it']),
+                'al' => pick($s['al'] ?? '', TEXT_STICKER_ALIGNS, ''),
+                'fs' => num($s['fs'] ?? 1, 0.4, 4, 1),
+                'cv' => (float) round(num($s['cv'] ?? 0, -100, 100, 0)),
+            ];
+            foreach ($extra as $k => $v) {
+                if ($v !== '' && $v !== false && $v !== 1.0 && $v !== 0.0) {
+                    $sticker[$k] = $v;
+                }
+            }
             break;
         case 'tape':
             $sticker['pattern'] = pick($s['pattern'] ?? null, TAPE_PATTERNS, 'pink');
@@ -610,14 +639,25 @@ function sanitize_sticker(array $s, array $blockIds): ?array
             $sticker['vw'] = num($s['vw'] ?? 100, 1, 5000, 100);
             $sticker['vh'] = num($s['vh'] ?? 100, 1, 5000, 100);
             $sticker['paths'] = [];
+            $budget = 200000; // soma dos traços de um desenho: mantém o JSON da carta pequeno
             foreach (array_slice(is_array($s['paths'] ?? null) ? $s['paths'] : [], 0, 150) as $path) {
                 $d = is_array($path) ? ($path['d'] ?? '') : '';
                 if (is_string($d) && $d !== '' && strlen($d) <= 30000 && preg_match('/^[MLQCZmlqcz0-9.,\s-]+$/', $d)) {
-                    $sticker['paths'][] = [
+                    $budget -= strlen($d);
+                    if ($budget < 0) {
+                        break;
+                    }
+                    $stroke = [
                         'd' => $d,
                         'c' => color_or($path['c'] ?? null, '#3b3340'),
                         's' => num($path['s'] ?? 3, 0.5, 40, 3),
                     ];
+                    // pincel (marcador, lápis, giz, neon); ausente = caneta, como sempre foi
+                    $brush = pick($path['b'] ?? '', DRAW_BRUSHES, '');
+                    if ($brush !== '') {
+                        $stroke['b'] = $brush;
+                    }
+                    $sticker['paths'][] = $stroke;
                 }
             }
             if (!$sticker['paths']) {

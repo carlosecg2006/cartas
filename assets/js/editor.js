@@ -108,8 +108,14 @@
     return state.content.paper;
   }
 
+  /** Papel com formato (quadrado, postal…): o desenho é fixo, como numa carta com adesivos. */
+  function hasFormat() {
+    const f = state.content.paper.format;
+    return !!(f && L.FORMATS[f]);
+  }
+
   function renderAll(focus) {
-    paper.dataset.fluid = stickers().length ? '' : '1';
+    paper.dataset.fluid = stickers().length || hasFormat() ? '' : '1';
     L.applyPaper(scene, paper, paperOpts());
     renderBlocks();
     renderStickers();
@@ -148,7 +154,7 @@
     requestAnimationFrame(() => {
       layoutQueued = false;
       // primeiro adesivo: o papel passa a mudar só de escala (posições exatas em qualquer tela)
-      const fluid = !stickers().length;
+      const fluid = !stickers().length && !hasFormat();
       if ((paper.dataset.fluid === '1') !== fluid) {
         L.setFluid(paper, fluid);
         if (!fluid && paper.clientWidth < 560 && !layout.told) {
@@ -1980,22 +1986,194 @@
     'Coisinhas': ['☕', '🍵', '🍓', '🍒', '🍑', '🍕', '🍦', '🍫', '📚', '✏️', '📝', '🧸', '🪴', '🕯️', '🧩', '🎨', '✈️', '🏠', '🐶', '🐱', '🐰', '🐻'],
   };
 
+
+  // ----- busca de emojis, recentes e "cole qualquer emoji" -----
+  // Palavras em português (sem acento) para a busca: "emoji palavra palavra…"
+  const EMOJI_WORDS = [
+    '❤️ coracao amor vermelho', '🩷 coracao rosa amor', '🧡 coracao laranja', '💛 coracao amarelo amizade', '💚 coracao verde', '🩵 coracao azul claro',
+    '💙 coracao azul', '💜 coracao roxo', '🖤 coracao preto', '🤍 coracao branco', '🤎 coracao marrom', '💕 coracoes amor dois', '💞 coracoes girando',
+    '💓 coracao batendo', '💗 coracao crescendo', '💖 coracao brilhando', '💘 coracao flecha cupido', '💝 coracao presente laco', '💌 carta amor envelope',
+    '❣️ coracao exclamacao', '💔 coracao partido triste', '❤️‍🔥 coracao fogo paixao', '❤️‍🩹 coracao curativo', '😍 apaixonado olhos coracao', '🥰 carinho amor fofo',
+    '😘 beijo amor', '😚 beijinho', '💋 beijo boca batom', '🫶 maos coracao amor', '💏 beijo casal', '💑 casal amor', '👩‍❤️‍👨 casal amor', '🌹 rosa flor amor',
+    '😀 feliz sorriso', '😃 feliz alegre', '😄 rindo feliz', '😁 sorrisao', '😆 risada', '😅 suor alivio', '😂 chorando de rir risada', '🤣 rolando de rir',
+    '🥲 sorriso lagrima', '😊 sorriso timido fofo', '😇 anjo inocente', '🙂 sorriso leve', '🙃 de cabeca para baixo ironia', '😉 piscadinha', '😌 aliviado calmo',
+    '😋 delicia gostoso comida', '😛 lingua', '😜 piscando lingua brincadeira', '🤪 maluco doido', '😝 lingua olhos fechados', '🤑 dinheiro rico', '🤗 abraco',
+    '🤭 risadinha segredo', '🫢 surpresa boca', '🤫 silencio segredo', '🤔 pensando duvida', '🫡 continencia respeito', '🤐 boca fechada segredo',
+    '🤨 desconfiado', '😐 neutro', '😑 sem expressao', '😶 sem boca', '😏 malicioso', '😒 entediado', '🙄 revirando os olhos', '😬 constrangido',
+    '😮‍💨 suspiro cansado', '🤥 mentira', '😴 dormindo sono', '😪 sono', '🤤 babando', '😷 doente mascara', '🤒 febre doente', '🤕 machucado',
+    '🤢 enjoo', '🤮 vomito nojo', '🥵 calor quente', '🥶 frio gelado', '🥴 tonto', '😵 tontura', '🤯 cabeca explodindo chocado', '🤠 cowboy chapeu',
+    '🥳 festa aniversario comemoracao', '🥸 disfarce', '😎 oculos legal estiloso', '🤓 nerd oculos', '🧐 monoculo curioso', '😕 confuso', '😟 preocupado',
+    '🙁 triste', '😮 surpreso', '😯 espantado', '😲 chocado', '😳 envergonhado corado', '🥺 por favor pidao olhos', '🥹 emocionado segurando lagrimas',
+    '😦 assustado', '😨 medo', '😰 ansioso', '😥 triste aliviado', '😢 chorando triste lagrima', '😭 chorando muito', '😱 grito susto', '😖 confuso',
+    '😣 perseverante', '😞 decepcionado', '😓 suando', '😩 cansado', '😫 exausto', '🥱 bocejo sono', '😤 bravo bufando', '😡 raiva bravo', '😠 bravo',
+    '🤬 palavrao raiva', '😈 diabinho travesso', '💀 caveira morri', '👻 fantasma halloween', '👽 alien', '🤖 robo', '💩 coco', '🤡 palhaco',
+    '😺 gato sorrindo', '😻 gato apaixonado', '🙈 macaco nao vejo vergonha', '🙉 macaco nao ouco', '🙊 macaco nao falo', '🫠 derretendo', '🤩 estrelas encantado',
+    '👋 tchau oi aceno', '🤚 mao', '✋ mao pare', '👌 ok perfeito', '🤌 italiano', '✌️ paz vitoria', '🤞 dedos cruzados sorte', '🫰 coracao dedos',
+    '🤟 te amo maos', '🤘 rock', '🤙 me liga', '👈 esquerda', '👉 direita', '👆 cima', '👇 baixo', '👍 joinha legal sim', '👎 nao ruim',
+    '✊ punho forca', '👊 soco', '👏 palmas aplausos parabens', '🙌 viva comemorar', '👐 maos abertas', '🤲 maos juntas', '🤝 aperto de mao acordo',
+    '🙏 por favor obrigado reza', '💪 forca musculo', '🫂 abraco', '👀 olhos olhando', '👄 boca', '🧠 cerebro inteligente',
+    '👶 bebe', '👧 menina', '👦 menino', '👩 mulher', '👨 homem', '👵 avo vovo', '👴 avo vovo', '👰 noiva casamento', '🤵 noivo casamento',
+    '🤰 gravida', '👪 familia', '💃 danca dancando', '🕺 danca', '🧚 fada', '🧜 sereia', '🦸 heroi', '👑 coroa rei rainha princesa',
+    '🐶 cachorro cao', '🐱 gato', '🐭 rato', '🐹 hamster', '🐰 coelho', '🦊 raposa', '🐻 urso', '🐼 panda', '🐨 coala', '🐯 tigre', '🦁 leao',
+    '🐮 vaca', '🐷 porco', '🐸 sapo', '🐵 macaco', '🐔 galinha', '🐧 pinguim', '🐦 passaro', '🐤 pintinho', '🦆 pato', '🦉 coruja', '🦄 unicornio',
+    '🐝 abelha', '🦋 borboleta', '🐞 joaninha', '🐢 tartaruga', '🐍 cobra', '🐙 polvo', '🐠 peixe', '🐬 golfinho', '🐳 baleia', '🦈 tubarao',
+    '🦩 flamingo', '🦒 girafa', '🐘 elefante', '🦔 ourico', '🐾 patinhas pegadas', '🐕 cachorro', '🐈 gato',
+    '🌸 flor cerejeira sakura', '🌷 tulipa flor', '🌻 girassol flor', '🌼 flor margarida', '🌺 hibisco flor', '🪻 lavanda flor', '💐 buque flores',
+    '🌹 rosa flor', '🥀 flor murcha', '🍀 trevo sorte', '🌿 folha erva', '🍃 folhas vento', '🍂 folhas outono', '🍁 folha bordo outono', '🌱 broto planta',
+    '🌵 cacto', '🌴 palmeira praia', '🌳 arvore', '🌲 pinheiro', '🪴 planta vaso', '🍄 cogumelo',
+    '🌙 lua noite', '🌕 lua cheia', '⭐ estrela', '🌟 estrela brilhante', '✨ brilho estrelinhas magia', '💫 estrela tonto', '☀️ sol', '🌞 sol sorrindo',
+    '🌈 arco iris', '☁️ nuvem', '⛅ sol nuvem', '🌧️ chuva', '⛈️ tempestade', '❄️ neve floco frio', '☃️ boneco de neve', '🔥 fogo quente', '💧 gota agua',
+    '🌊 onda mar praia', '🌍 mundo terra', '🌎 mundo', '🪐 planeta', '☄️ cometa', '⚡ raio energia',
+    '🍎 maca', '🍓 morango', '🍒 cereja', '🍑 pessego', '🍉 melancia', '🍌 banana', '🍇 uva', '🍍 abacaxi', '🥑 abacate', '🍋 limao', '🥥 coco',
+    '🍕 pizza', '🍔 hamburguer', '🍟 batata frita', '🌭 cachorro quente', '🌮 taco', '🍣 sushi', '🍜 lamen', '🍝 macarrao', '🥐 croissant', '🥞 panqueca',
+    '🍿 pipoca cinema', '🍩 rosquinha donut', '🍪 biscoito cookie', '🍫 chocolate', '🍬 bala doce', '🍭 pirulito', '🍦 sorvete', '🍨 sorvete', '🧁 cupcake bolinho',
+    '🍰 bolo fatia', '🎂 bolo aniversario', '☕ cafe xicara', '🍵 cha', '🧋 cha bolha', '🥤 refrigerante', '🍷 vinho', '🍺 cerveja', '🍻 brinde cerveja',
+    '🥂 brinde taca champanhe', '🍾 champanhe comemorar', '🧃 suco',
+    '🎉 festa confete comemoracao', '🎊 confete festa', '🎈 balao festa', '🎁 presente', '🎀 laco', '🪩 globo balada', '🎄 natal arvore', '🎅 papai noel natal',
+    '🎃 abobora halloween', '🎆 fogos', '🎇 fogos', '🧨 bombinha', '🏆 trofeu vitoria', '🥇 medalha ouro primeiro', '🎓 formatura', '💍 anel casamento noivado',
+    '💎 diamante joia', '🎵 musica nota', '🎶 musica notas', '🎤 microfone cantar', '🎧 fone musica', '🎸 violao guitarra', '🎹 piano', '🥁 bateria',
+    '📸 camera foto', '📷 camera foto', '🎬 cinema filme', '🎮 videogame jogo', '🎨 arte pintura', '🧩 quebra cabeca', '🧸 ursinho pelucia', '🪁 pipa',
+    '⚽ futebol bola', '🏀 basquete', '🎾 tenis', '🏐 volei', '🏖️ praia ferias', '🏝️ ilha', '⛰️ montanha', '🏕️ acampamento', '🗼 torre', '🗽 estatua',
+    '✈️ aviao viagem', '🚗 carro', '🚲 bicicleta', '🚀 foguete', '⛵ barco', '🚂 trem', '🏠 casa lar', '🏡 casa jardim', '🏰 castelo', '⛪ igreja',
+    '📚 livros estudo', '📖 livro', '✏️ lapis', '🖊️ caneta', '📝 anotacao', '📌 alfinete', '📎 clipe', '✂️ tesoura', '📅 calendario data', '⏰ despertador',
+    '⌛ ampulheta tempo', '💡 ideia lampada', '🔑 chave', '🔒 cadeado', '🕯️ vela', '🪞 espelho', '🛁 banho', '🧺 cesta piquenique', '🧳 mala viagem',
+    '💰 dinheiro', '💸 dinheiro voando', '📱 celular', '💻 computador', '✉️ envelope carta', '📮 correio', '📦 caixa pacote', '🎟️ ingresso', '🗺️ mapa',
+    '💯 cem perfeito', '✅ certo feito', '❌ errado x', '❓ pergunta', '❗ exclamacao', '💤 sono dormir', '💬 conversa balao', '💭 pensamento',
+    '♾️ infinito para sempre', '☮️ paz', '☯️ yin yang', '🔆 brilho', '🆗 ok', '🆒 legal', '🆕 novo', '🔝 top', '🎯 alvo', '🧿 olho grego protecao',
+    '🍀 sorte trevo', '🪄 varinha magica', '🔮 bola de cristal', '🏳️‍🌈 bandeira arco iris orgulho', '🇧🇷 brasil bandeira', '🇵🇹 portugal bandeira',
+  ];
+
+  let emojiIndex = null;
+  function emojiSearch(query) {
+    if (!emojiIndex) {
+      emojiIndex = [];
+      const seen = new Set();
+      EMOJI_WORDS.forEach((line) => {
+        const i = line.indexOf(' ');
+        const em = line.slice(0, i);
+        if (seen.has(em)) return;
+        seen.add(em);
+        emojiIndex.push([em, ' ' + line.slice(i + 1)]);
+      });
+    }
+    const words = normalize(query).split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    return emojiIndex.filter(([, kw]) => words.every((w) => kw.includes(' ' + w))).map(([em]) => em).slice(0, 80);
+  }
+
+  const RECENT_EMOJIS_KEY = 'emojis-recentes';
+  function recentEmojis() {
+    try {
+      const list = JSON.parse(localStorage.getItem(RECENT_EMOJIS_KEY) || '[]');
+      return Array.isArray(list) ? list.filter((e) => typeof e === 'string' && e.length <= 32).slice(0, 24) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function rememberEmoji(em) {
+    try {
+      const list = [em].concat(recentEmojis().filter((x) => x !== em)).slice(0, 24);
+      localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(list));
+    } catch (e) { /* navegador sem armazenamento: só não guarda os recentes */ }
+  }
+
+  /** Confere um emoji colado: curto, sem marcação e com pelo menos um símbolo de emoji. */
+  function cleanEmoji(text) {
+    let t = String(text || '').replace(/[<>]/g, '').trim();
+    if (!t) return '';
+    // guarda só o primeiro "caractere visível" (um emoji pode ter vários códigos, como 👩‍❤️‍👨)
+    if (window.Intl && Intl.Segmenter) {
+      const first = new Intl.Segmenter('pt', { granularity: 'grapheme' }).segment(t)[Symbol.iterator]().next().value;
+      if (first) t = first.segment;
+    }
+    if (Array.from(t).length > 16) return '';
+    return /\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u{1F3FB}-\u{1F3FF}]/u.test(t) ? t : '';
+  }
+
+  /** Grade de emojis com busca, recentes e campo para colar qualquer emoji. */
+  function emojiBrowser(onPick, opts) {
+    opts = opts || {};
+    const box = L.el('div', 'emoji-browser');
+    const pick = (em) => {
+      rememberEmoji(em);
+      onPick(em);
+      if (opts.stay) drawRecents();
+    };
+    const button = (em) => {
+      const btn = L.el('button', 'emoji-btn', { type: 'button', text: em, title: em });
+      btn.addEventListener('click', () => pick(em));
+      return btn;
+    };
+    const search = L.el('input', 'emoji-search', { type: 'search', placeholder: 'Buscar emoji (coração, festa, gato…)', 'aria-label': 'Buscar emoji', enterkeyhint: 'search' });
+    const results = L.el('div', 'emoji-results');
+    const recents = L.el('div', 'emoji-recents');
+    const sets = L.el('div', 'emoji-sets');
+    const drawRecents = () => {
+      const list = recentEmojis();
+      recents.replaceChildren();
+      if (!list.length) return;
+      recents.appendChild(L.el('p', 'menu-label', { text: 'Usados há pouco' }));
+      const grid = L.el('div', 'emoji-grid');
+      list.forEach((em) => grid.appendChild(button(em)));
+      recents.appendChild(grid);
+    };
+    Object.entries(EMOJI_SETS).forEach(([name, list]) => {
+      sets.appendChild(L.el('p', 'menu-label', { text: name }));
+      const grid = L.el('div', 'emoji-grid');
+      list.forEach((em) => grid.appendChild(button(em)));
+      sets.appendChild(grid);
+    });
+    search.addEventListener('input', () => {
+      const q = search.value.trim();
+      results.replaceChildren();
+      recents.hidden = !!q;
+      sets.hidden = !!q;
+      if (!q) return;
+      const pasted = cleanEmoji(q);
+      const found = emojiSearch(q);
+      if (pasted && !found.includes(pasted)) found.unshift(pasted);
+      if (!found.length) {
+        results.appendChild(L.el('p', 'panel-hint', { text: 'Nada com esse nome. Tente outra palavra ou cole o emoji abaixo.' }));
+        return;
+      }
+      const grid = L.el('div', 'emoji-grid');
+      found.forEach((em) => grid.appendChild(button(em)));
+      results.appendChild(grid);
+    });
+    search.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const first = results.querySelector('.emoji-btn');
+      if (first) first.click();
+    });
+    // qualquer emoji do teclado do celular (ou do computador: Win + . / Ctrl + Cmd + Espaço)
+    const paste = L.el('form', 'emoji-paste');
+    const input = L.el('input', '', { type: 'text', placeholder: 'Cole qualquer emoji', 'aria-label': 'Cole ou digite qualquer emoji', maxlength: '32', autocomplete: 'off' });
+    const use = L.el('button', 'btn btn-sm', { type: 'submit', text: 'Usar' });
+    paste.append(input, use);
+    paste.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const em = cleanEmoji(input.value);
+      if (!em) {
+        toast('Isso não parece um emoji. Use o teclado de emojis do celular, ou Win + . no computador.', 'error');
+        return;
+      }
+      input.value = '';
+      pick(em);
+    });
+    drawRecents();
+    box.append(search, results, recents, sets, paste);
+    return box;
+  }
+
   function openEmojiPicker(anchor, onPick) {
     const box = L.el('div', 'emoji-picker');
-    Object.entries(EMOJI_SETS).forEach(([name, list]) => {
-      box.appendChild(L.el('p', 'menu-label', { text: name }));
-      const grid = L.el('div', 'emoji-grid');
-      list.forEach((em) => {
-        const btn = L.el('button', 'emoji-btn', { type: 'button', text: em });
-        btn.addEventListener('click', () => {
-          closePopover();
-          onPick(em);
-        });
-        grid.appendChild(btn);
-      });
-      box.appendChild(grid);
-    });
-    openPopover(anchor, box, { className: 'emoji-popover' });
+    box.appendChild(emojiBrowser((em) => {
+      closePopover();
+      onPick(em);
+    }));
+    // no celular, o teclado só abre se a pessoa tocar na busca
+    openPopover(anchor, box, { className: 'emoji-popover', keepFocus: isMobile() });
   }
 
   // ---------------------------------------------------------------- imagens
@@ -2424,7 +2602,7 @@
       openStickerContext(e, s);
     });
     // teclado: focar seleciona; Enter edita o texto
-    node.addEventListener('focus', () => { if (selectedSticker !== s.id) selectSticker(s.id); });
+    node.addEventListener('focus', () => { if (selectedSticker !== s.id && !multiSel.has(s.id) && !multiMode) selectSticker(s.id); });
     node.addEventListener('keydown', (e) => {
       if (e.target !== node || e.key !== 'Enter' || s.lk) return;
       if (s.kind === 'text') {
@@ -2438,6 +2616,7 @@
   }
 
   function selectSticker(id) {
+    multiSel.clear();
     selectedSticker = id;
     refreshSelection();
   }
@@ -2445,7 +2624,8 @@
   function refreshSelection() {
     $$('.sticker', layer).forEach((n) => {
       const on = n.dataset.id === selectedSticker;
-      n.classList.toggle('selected', on);
+      n.classList.toggle('selected', on || multiSel.has(n.dataset.id));
+      n.classList.toggle('in-group', multiSel.has(n.dataset.id));
       $$('.sh', n).forEach((h) => h.remove());
       const st = stickers().find((x) => x.id === n.dataset.id);
       if (on && st && !st.lk) addHandles(n, st);
@@ -2510,7 +2690,7 @@
 
   /** Toque longo (500 ms) no celular abre o menu do adesivo. */
   function longPress(e, s, node) {
-    if (e.pointerType !== 'touch') return;
+    if (e.pointerType !== 'touch' || multiMode || multiSel.size) return;
     node._longPressed = false;
     const x0 = e.clientX;
     const y0 = e.clientY;
@@ -2538,6 +2718,16 @@
 
   function stickerPointerDown(e, s, node) {
     if (e.button !== 0 || node.querySelector('[contenteditable="true"], [contenteditable="plaintext-only"]')) return;
+    if (e.shiftKey || multiMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleInGroup(s.id);
+      return;
+    }
+    if (multiSel.size >= 2 && multiSel.has(s.id)) {
+      groupDrag(e, node);
+      return;
+    }
     const wasSelected = selectedSticker === s.id;
     // no toque, o primeiro toque só seleciona: assim dá para rolar a página passando por cima
     if (e.pointerType === 'touch' && !wasSelected) {
@@ -2617,6 +2807,7 @@
       if (mode === 'resize') {
         const d = Math.hypot(ev.clientX - cx, ev.clientY - cy);
         s.w = round(Math.max(2, Math.min(100, (w0 * d) / d0)));
+        showReadout(ev.clientX, ev.clientY, 'Tamanho ' + Math.round(s.w) + '%');
       } else {
         let r = r0 + ((Math.atan2(ev.clientY - cy, ev.clientX - cx) - a0) * 180) / Math.PI;
         r = ((r + 540) % 360) - 180;
@@ -2624,11 +2815,13 @@
           if (Math.abs(r - snap) < 4) r = snap;
         }
         s.r = round(r);
+        showReadout(ev.clientX, ev.clientY, 'Giro ' + Math.round(s.r) + '°');
       }
       L.updateStickerBox(node, s);
       positionStickerBar();
     };
     const up = () => {
+      hideReadout();
       target.removeEventListener('pointermove', move);
       target.removeEventListener('pointerup', up);
       target.removeEventListener('pointercancel', up);
@@ -2668,10 +2861,12 @@
     s.r = round(r);
     L.updateStickerBox(node, s);
     positionStickerBar();
+    showReadout((e.touches[0].clientX + e.touches[1].clientX) / 2, Math.min(e.touches[0].clientY, e.touches[1].clientY), Math.round(s.w) + '% · ' + Math.round(s.r) + '°');
   }, { passive: false });
   const endPinch = (e) => {
     if (!pinch || e.touches.length >= 2) return;
     pinch = null;
+    hideReadout();
     lastPinchAt = Date.now();
     layout();
     commit();
@@ -2736,6 +2931,10 @@
     const node = stickerNode(s.id);
     const t = $('.st-text', node);
     if (!t || t.isContentEditable) return;
+    if (t.classList.contains('st-curved')) {
+      t.classList.remove('st-curved');
+      t.textContent = s.text || '';
+    }
     t.contentEditable = 'plaintext-only';
     if (t.contentEditable !== 'plaintext-only') t.contentEditable = 'true';
     node.classList.add('editing-text');
@@ -2760,6 +2959,7 @@
         return;
       }
       node.setAttribute('aria-label', stickerLabel(cur));
+      if (cur.cv) refreshStickerNode(cur);
       layout();
       commit();
     };
@@ -2815,6 +3015,7 @@
       ['chevron-down', 'Enviar para trás', '[', () => restack(s, 'back')],
       ['flip', 'Espelhar', '', () => flipSticker(s)],
       ['star', 'Animação e efeitos', '', () => { const n = stickerNode(s.id); if (n) openStickerFx(n, s); }],
+      ['checks', 'Selecionar vários', 'Shift+clique', () => startMultiMode(s)],
       [s.lk ? 'unlock' : 'lock', s.lk ? 'Destravar' : 'Travar posição', 'Ctrl+L', () => toggleLock(s)],
       ['trash', 'Excluir', 'Del', () => deleteSticker(s.id), 'danger'],
     ];
@@ -2841,6 +3042,10 @@
   }
 
   function buildStickerBar() {
+    if (multiSel.size >= 2) {
+      buildGroupBar();
+      return;
+    }
     stickerBar.replaceChildren();
     const s = stickers().find((x) => x.id === selectedSticker);
     stickerBar.classList.toggle('show', !!s);
@@ -2881,6 +3086,7 @@
         }, { wrap: true }));
         openPopover(e.currentTarget, box);
       });
+      btn('type', 'Formatar: negrito, tamanho, fundo e curva', (e) => openTextFormat(e.currentTarget, s));
       sep();
     }
     if (s.kind === 'doodle') {
@@ -2912,6 +3118,7 @@
           commit();
         })());
       });
+      btn('image', 'Moldura e recorte', (e) => openMaskPicker(e.currentTarget, s));
       sep();
     }
     if (s.kind === 'shape') {
@@ -3015,11 +3222,11 @@
 
   function positionStickerBar() {
     const node = selectedSticker ? stickerNode(selectedSticker) : null;
-    if (!node) {
+    const rect = multiSel.size >= 2 ? groupRect() : node && node.getBoundingClientRect();
+    if (!rect) {
       stickerBar.classList.remove('show');
       return;
     }
-    const rect = node.getBoundingClientRect();
     const w = stickerBar.offsetWidth;
     const vw = document.documentElement.clientWidth;
     let top = rect.bottom + 14;
@@ -3030,8 +3237,10 @@
   window.addEventListener('scroll', positionStickerBar, { passive: true });
 
   document.addEventListener('pointerdown', (e) => {
-    if (selectedSticker && !e.target.closest('.sticker') && !stickerBar.contains(e.target) && !(popover && popover.contains(e.target))) {
+    if ((selectedSticker || multiSel.size || multiMode) && !e.target.closest('.sticker') && !stickerBar.contains(e.target) && !(popover && popover.contains(e.target))) {
       selectedSticker = null;
+      multiSel.clear();
+      multiMode = false;
       refreshSelection();
     }
   });
@@ -3073,13 +3282,415 @@
     }
   });
 
-  // ----- desenho à mão livre -----
+  // ----- vários adesivos de uma vez (Shift+clique, Ctrl+A, ou "Selecionar vários" no celular) -----
+  // Cada ação em grupo (mover, alinhar, distribuir, duplicar, excluir, travar) é um passo só no desfazer.
+  const multiSel = new Set();
+  let multiMode = false;
+  const groupStickers = () => stickers().filter((x) => multiSel.has(x.id));
+
+  function setGroup(ids) {
+    multiSel.clear();
+    ids.forEach((id) => multiSel.add(id));
+    selectedSticker = null;
+    if (multiSel.size === 1) {
+      selectedSticker = ids[0];
+      multiSel.clear();
+    }
+    refreshSelection();
+  }
+
+  /** Shift+clique (ou toque no modo "Selecionar vários"): entra ou sai do grupo. */
+  function toggleInGroup(id) {
+    const ids = multiSel.size ? Array.from(multiSel) : (selectedSticker ? [selectedSticker] : []);
+    const i = ids.indexOf(id);
+    if (i >= 0) ids.splice(i, 1);
+    else ids.push(id);
+    setGroup(ids);
+  }
+
+  function startMultiMode(s) {
+    multiMode = true;
+    setGroup([s.id]);
+    toast('Toque nos outros adesivos para juntar. Toque fora do papel para terminar.');
+  }
+
+  function clearGroup() {
+    multiMode = false;
+    if (!multiSel.size) return false;
+    multiSel.clear();
+    refreshSelection();
+    return true;
+  }
+
+  /** Retângulo (na tela) de cada adesivo do grupo, relativo ao papel. */
+  function groupBoxes(onlyUnlocked) {
+    const pr = paper.getBoundingClientRect();
+    return groupStickers().filter((s) => !(onlyUnlocked && s.lk)).map((s) => {
+      const n = stickerNode(s.id);
+      if (!n) return null;
+      const r = n.getBoundingClientRect();
+      return { s, n, left: r.left - pr.left, top: r.top - pr.top, right: r.right - pr.left, bottom: r.bottom - pr.top, w: r.width, h: r.height };
+    }).filter(Boolean);
+  }
+
+  function groupRect() {
+    let rect = null;
+    groupStickers().forEach((s) => {
+      const r = stickerNode(s.id)?.getBoundingClientRect();
+      if (!r) return;
+      rect = rect ? {
+        left: Math.min(rect.left, r.left), top: Math.min(rect.top, r.top), right: Math.max(rect.right, r.right), bottom: Math.max(rect.bottom, r.bottom),
+      } : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    });
+    if (rect) {
+      rect.width = rect.right - rect.left;
+      rect.height = rect.bottom - rect.top;
+    }
+    return rect;
+  }
+
+  /** Desloca um adesivo (dx, dy em px da tela) e o prende de novo ao bloco certo. */
+  function shiftSticker(box, dx, dy) {
+    const pr = paper.getBoundingClientRect();
+    const s = box.s;
+    if (dx) {
+      s.x = round(Math.max(-20, Math.min(120, s.x + (dx / (pr.width || 1)) * 100)));
+      box.n.style.setProperty('--x', s.x);
+    }
+    if (dy) {
+      const cy = (parseFloat(box.n.style.top) || 0) + dy;
+      box.n.style.top = cy + 'px';
+      reanchor(s, cy);
+    }
+  }
+
+  function alignGroup(where) {
+    const boxes = groupBoxes(true);
+    if (boxes.length < 2) return;
+    const minL = Math.min(...boxes.map((b) => b.left));
+    const maxR = Math.max(...boxes.map((b) => b.right));
+    const minT = Math.min(...boxes.map((b) => b.top));
+    const maxB = Math.max(...boxes.map((b) => b.bottom));
+    boxes.forEach((b) => {
+      if (where === 'left') shiftSticker(b, minL - b.left, 0);
+      else if (where === 'center') shiftSticker(b, (minL + maxR) / 2 - (b.left + b.right) / 2, 0);
+      else if (where === 'right') shiftSticker(b, maxR - b.right, 0);
+      else if (where === 'top') shiftSticker(b, 0, minT - b.top);
+      else if (where === 'middle') shiftSticker(b, 0, (minT + maxB) / 2 - (b.top + b.bottom) / 2);
+      else if (where === 'bottom') shiftSticker(b, 0, maxB - b.bottom);
+    });
+    layout();
+    commit();
+  }
+
+  /** Espaços iguais entre os adesivos (o primeiro e o último ficam onde estão). */
+  function distributeGroup(axis) {
+    const boxes = groupBoxes(true);
+    if (boxes.length < 3) {
+      toast('Para distribuir, selecione pelo menos 3 adesivos soltos.');
+      return;
+    }
+    const a = axis === 'h' ? ['left', 'right', 'w'] : ['top', 'bottom', 'h'];
+    boxes.sort((p, q) => (p[a[0]] + p[a[1]]) - (q[a[0]] + q[a[1]]));
+    const span = Math.max(...boxes.map((b) => b[a[1]])) - Math.min(...boxes.map((b) => b[a[0]]));
+    const total = boxes.reduce((n, b) => n + b[a[2]], 0);
+    const gap = (span - total) / (boxes.length - 1);
+    let pos = boxes[0][a[0]];
+    boxes.forEach((b) => {
+      const d = pos - b[a[0]];
+      if (axis === 'h') shiftSticker(b, d, 0);
+      else shiftSticker(b, 0, d);
+      pos += b[a[2]] + gap;
+    });
+    layout();
+    commit();
+  }
+
+  function duplicateGroup() {
+    const copies = groupStickers().map((s) => {
+      const copy = JSON.parse(JSON.stringify(s));
+      copy.id = L.uid();
+      copy.x = Math.min(100, s.x + 4);
+      copy.y = s.y + 3;
+      copy.lk = false;
+      stickers().push(copy);
+      layer.appendChild(buildSticker(copy));
+      return copy.id;
+    });
+    setGroup(copies);
+    layout();
+    commit();
+  }
+
+  function deleteGroup() {
+    const ids = new Set(multiSel);
+    state.content.stickers = stickers().filter((s) => !ids.has(s.id));
+    ids.forEach((id) => stickerNode(id)?.remove());
+    multiSel.clear();
+    multiMode = false;
+    selectedSticker = null;
+    refreshSelection();
+    layout();
+    commit();
+  }
+
+  function lockGroup() {
+    const list = groupStickers();
+    const lock = list.some((s) => !s.lk);
+    list.forEach((s) => {
+      s.lk = lock;
+      const n = stickerNode(s.id);
+      if (n) L.updateStickerBox(n, s);
+    });
+    refreshSelection();
+    commit();
+  }
+
+  /** Arrastar qualquer adesivo do grupo leva o grupo inteiro. */
+  function groupDrag(e, node) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (document.activeElement && document.activeElement.isContentEditable) document.activeElement.blur();
+    const pr = paper.getBoundingClientRect();
+    const items = groupStickers().filter((s) => !s.lk).map((s) => {
+      const n = stickerNode(s.id);
+      return n ? { s, n, cx0: (s.x * pr.width) / 100, cy0: parseFloat(n.style.top) || 0 } : null;
+    }).filter(Boolean);
+    if (!items.length) return;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let moved = false;
+    node.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      if (pinch) return;
+      const dx = ev.clientX - sx;
+      const dy = ev.clientY - sy;
+      if (!moved && Math.hypot(dx, dy) < 3) return;
+      moved = true;
+      items.forEach((it) => {
+        it.s.x = round(((it.cx0 + dx) / pr.width) * 100);
+        it.n.style.setProperty('--x', it.s.x);
+        it.n.style.top = it.cy0 + dy + 'px';
+        it.n.classList.add('moving');
+      });
+      positionStickerBar();
+    };
+    const up = () => {
+      node.removeEventListener('pointermove', move);
+      node.removeEventListener('pointerup', up);
+      node.removeEventListener('pointercancel', up);
+      items.forEach((it) => {
+        it.n.classList.remove('moving');
+        if (moved) reanchor(it.s, parseFloat(it.n.style.top) || 0);
+      });
+      if (moved) {
+        layout();
+        commit();
+      }
+    };
+    node.addEventListener('pointermove', move);
+    node.addEventListener('pointerup', up);
+    node.addEventListener('pointercancel', up);
+  }
+
+  function buildGroupBar() {
+    stickerBar.replaceChildren();
+    stickerBar.classList.add('show');
+    const list = groupStickers();
+    const btn = (ic, title, fn, cls) => {
+      const b = L.el('button', 'sb-btn ' + (cls || ''), { type: 'button', title, 'aria-label': title });
+      b.appendChild(L.icon(ic));
+      b.addEventListener('click', fn);
+      stickerBar.appendChild(b);
+      return b;
+    };
+    stickerBar.appendChild(L.el('span', 'sb-count', { text: list.length + ' selecionados' }));
+    btn('align-center', 'Alinhar e distribuir', (e) => {
+      const box = L.el('div', 'ctx-menu align-menu');
+      const item = (label, fn) => {
+        const it = L.el('button', 'ctx-item', { type: 'button', text: label });
+        it.addEventListener('click', () => { closePopover(); fn(); });
+        box.appendChild(it);
+      };
+      box.appendChild(L.el('p', 'menu-label', { text: 'Alinhar' }));
+      item('À esquerda', () => alignGroup('left'));
+      item('Ao centro', () => alignGroup('center'));
+      item('À direita', () => alignGroup('right'));
+      item('Em cima', () => alignGroup('top'));
+      item('No meio', () => alignGroup('middle'));
+      item('Embaixo', () => alignGroup('bottom'));
+      box.appendChild(L.el('p', 'menu-label', { text: 'Distribuir (espaços iguais)' }));
+      item('Na horizontal', () => distributeGroup('h'));
+      item('Na vertical', () => distributeGroup('v'));
+      openPopover(e.currentTarget, box);
+    });
+    btn('copy', 'Duplicar (Ctrl+D)', duplicateGroup);
+    const allLocked = list.every((s) => s.lk);
+    btn(allLocked ? 'unlock' : 'lock', allLocked ? 'Destravar todos' : 'Travar todos (Ctrl+L)', lockGroup);
+    stickerBar.appendChild(L.el('span', 'sb-sep'));
+    btn('trash', 'Excluir todos (Delete)', deleteGroup, 'danger');
+    btn('x', 'Tirar a seleção (Esc)', () => clearGroup());
+  }
+
+  // atalhos do grupo; Ctrl+A seleciona todos os adesivos quando o foco está no papel (não num texto)
+  document.addEventListener('keydown', (e) => {
+    const ae = document.activeElement;
+    if (ae && (ae.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(ae.tagName))) return;
+    if (document.querySelector('dialog[open]') || drawing) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.altKey && e.key.toLowerCase() === 'a') {
+      const onCanvas = !ae || ae === document.body || canvas.contains(ae) || stickerBar.contains(ae);
+      if (!onCanvas || !stickers().length) return;
+      e.preventDefault();
+      setGroup(stickers().map((s) => s.id));
+      return;
+    }
+    if (multiSel.size < 2) return;
+    if (mod && e.key.toLowerCase() === 'l') {
+      e.preventDefault();
+      lockGroup();
+    } else if (mod && e.key.toLowerCase() === 'd') {
+      e.preventDefault();
+      duplicateGroup();
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      deleteGroup();
+    } else if (e.key === 'Escape') {
+      clearGroup();
+    } else if (e.key.startsWith('Arrow') && !mod) {
+      e.preventDefault();
+      const step = e.shiftKey ? 2 : 0.5;
+      groupStickers().filter((s) => !s.lk).forEach((s) => {
+        if (e.key === 'ArrowLeft') s.x = round(s.x - step);
+        if (e.key === 'ArrowRight') s.x = round(s.x + step);
+        if (e.key === 'ArrowUp') s.y = round(s.y - step);
+        if (e.key === 'ArrowDown') s.y = round(s.y + step);
+        const n = stickerNode(s.id);
+        if (n) L.updateStickerBox(n, s);
+      });
+      layout();
+      typed();
+    }
+  });
+
+  // ----- medida ao vivo enquanto redimensiona ou gira -----
+  const readout = L.el('div', 'drag-readout', { 'aria-hidden': 'true' });
+  function showReadout(x, y, text) {
+    readout.textContent = text;
+    if (!readout.isConnected) document.body.appendChild(readout);
+    const vw = document.documentElement.clientWidth;
+    readout.style.left = Math.min(vw - 110, x + 16) + 'px';
+    readout.style.top = Math.max(8, y - 40) + 'px';
+  }
+  function hideReadout() {
+    readout.remove();
+  }
+
+  // ----- texto solto: negrito, itálico, alinhamento, tamanho, fundo e curva -----
+  function openTextFormat(anchor, s) {
+    const box = L.el('div', 'fmt-pop text-format-pop');
+    const live = () => {
+      const n = stickerNode(s.id);
+      if (n) L.fillSticker(n, s);
+      refreshSelection();
+      layout();
+    };
+    const apply = () => {
+      live();
+      commit();
+    };
+    const setOpt = (key, value, empty) => {
+      if (value === empty) delete s[key];
+      else s[key] = value;
+    };
+    box.appendChild(L.el('p', 'menu-label', { text: 'Estilo da letra' }));
+    const row = L.el('div', 'opt-row');
+    [['bold', 'Negrito', 'bd'], ['italic', 'Itálico', 'it']].forEach(([ic, label, key]) => {
+      const b = L.el('button', 'opt' + (s[key] ? ' active' : ''), { type: 'button', title: label, 'aria-label': label, 'aria-pressed': s[key] ? 'true' : 'false' });
+      b.appendChild(L.icon(ic));
+      b.addEventListener('click', () => {
+        setOpt(key, !s[key], false);
+        b.classList.toggle('active', !!s[key]);
+        b.setAttribute('aria-pressed', s[key] ? 'true' : 'false');
+        apply();
+      });
+      row.appendChild(b);
+    });
+    box.appendChild(row);
+    box.appendChild(L.el('p', 'menu-label', { text: 'Alinhamento' }));
+    box.appendChild(optionRow({ left: 'À esquerda', center: 'Centralizado', right: 'À direita' }, s.al || 'center', (v) => {
+      setOpt('al', v, 'center');
+      apply();
+    }, { render: (btn, v, label) => { btn.appendChild(L.icon('align-' + v)); btn.setAttribute('aria-label', label); btn.title = label; } }));
+    const slider = (label, min, max, step, value, fmt, onInput) => {
+      const wrap = L.el('div', 'range-row');
+      const out = L.el('output', '', { text: fmt(value) });
+      const r = L.el('input', '', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(value), 'aria-label': label });
+      r.addEventListener('input', () => {
+        out.textContent = fmt(Number(r.value));
+        onInput(Number(r.value));
+        live();
+      });
+      r.addEventListener('change', commit);
+      box.appendChild(L.el('p', 'menu-label', { text: label }));
+      wrap.append(r, out);
+      box.appendChild(wrap);
+      return r;
+    };
+    slider('Tamanho da letra', 40, 300, 5, Math.round((s.fs || 1) * 100), (v) => v + '%', (v) => setOpt('fs', v / 100, 1));
+    box.appendChild(L.el('p', 'menu-label', { text: 'Fundo' }));
+    box.appendChild(swatchRow(['#ffffff', '#fff3a3', '#ffd6e0', '#d4f5dd', '#d6ecff', '#eadcff', '#3b3340'], s.bg || '', (c) => {
+      setOpt('bg', c, '');
+      apply();
+    }, { allowNone: true, noneLabel: 'Sem fundo' }));
+    const curve = slider('Curva (arco para cima ou para baixo)', -100, 100, 1, s.cv || 0,
+      (v) => (v === 0 ? 'reta' : (v > 0 ? '∩ ' : '∪ ') + Math.abs(v)), (v) => setOpt('cv', v, 0));
+    const straight = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Deixar reto' });
+    straight.addEventListener('click', () => {
+      curve.value = '0';
+      curve.dispatchEvent(new Event('input'));
+      commit();
+    });
+    box.appendChild(straight);
+    openPopover(anchor, box, { className: 'text-format-popover' });
+  }
+
+  // ----- foto solta: moldura e recorte -----
+  function openMaskPicker(anchor, s) {
+    const box = L.el('div', 'fmt-pop mask-pop');
+    box.appendChild(L.el('p', 'menu-label', { text: 'Moldura e recorte' }));
+    const grid = L.el('div', 'mask-grid');
+    Object.entries(L.MASKS).forEach(([key, def]) => {
+      const b = L.el('button', 'mask-tile' + ((s.mask || '') === key ? ' active' : ''), { type: 'button', title: def.label, 'aria-pressed': (s.mask || '') === key ? 'true' : 'false' });
+      const thumb = L.el('span', 'mask-thumb');
+      const mini = L.stickerEl({ id: 'mask-' + key, kind: 'image', src: s.src, mask: key || undefined, fi: s.fi, x: 50, w: 100, r: 0 });
+      mini.classList.add('mini');
+      thumb.appendChild(mini);
+      b.append(thumb, L.el('span', '', { text: def.label }));
+      b.addEventListener('click', () => {
+        $$('.mask-tile', grid).forEach((t) => { t.classList.toggle('active', t === b); t.setAttribute('aria-pressed', t === b ? 'true' : 'false'); });
+        if (key) s.mask = key;
+        else delete s.mask;
+        refreshStickerNode(s);
+        commit();
+      });
+      grid.appendChild(b);
+    });
+    box.appendChild(grid);
+    openPopover(anchor, box, { className: 'mask-popover' });
+  }
+
+  // ----- desenho à mão livre: pincéis, espessura, cor, borracha e desfazer -----
   let drawing = null;
+  const DRAW_MAX_POINTS = 6000; // por desenho: mantém o JSON da carta pequeno
+  // quanto cada pincel passa da linha central (em espessuras), para a caixa do desenho não cortar o traço
+  const BRUSH_REACH = { '': 0.5, marker: 0.85, pencil: 0.65, chalk: 0.65, neon: 1.65 };
 
   function startDrawing() {
     if (drawing) return;
     closeSheetOnMobile();
     selectedSticker = null;
+    multiSel.clear();
     refreshSelection();
     const pr = paper.getBoundingClientRect();
     // cartas compridas: limita a nitidez para o canvas não passar de ~16 milhões de pixels
@@ -3093,18 +3704,31 @@
     ctx.scale(dpr, dpr);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    drawing = { cv, ctx, strokes: [], color: state.content.paper.ink, size: 4 };
+    drawing = { cv, ctx, strokes: [], actions: [], color: state.content.paper.ink, size: 4, brush: '', erasing: false, points: 0, warned: false, queued: false };
     scene.classList.add('drawing-mode');
 
     const bar = L.el('div', 'draw-bar');
     bar.appendChild(L.el('span', 'draw-title', { text: 'Desenhe no papel' }));
+    const tools = Object.assign({}, L.BRUSHES, { eraser: 'Borracha' });
+    bar.appendChild(optionRow(tools, '', (v) => {
+      drawing.erasing = v === 'eraser';
+      if (!drawing.erasing) drawing.brush = v;
+      cv.classList.toggle('erasing', drawing.erasing);
+    }, { className: 'draw-tools' }));
     bar.appendChild(swatchRow(L.ACCENT_COLORS.concat(['#ffffff']), drawing.color, (c) => { drawing.color = c; }));
-    bar.appendChild(optionRow({ 2: 'Fino', 4: 'Médio', 9: 'Grosso' }, 4, (v) => { drawing.size = Number(v); }));
+    const sizeWrap = L.el('label', 'draw-size');
+    const dot = L.el('span', 'draw-size-dot', { 'aria-hidden': 'true' });
+    const size = L.el('input', '', { type: 'range', min: '1', max: '40', step: '1', value: '4', 'aria-label': 'Espessura do traço' });
+    const showSize = () => {
+      drawing.size = Number(size.value);
+      dot.style.setProperty('--d', Math.max(3, Math.min(26, drawing.size)) + 'px');
+    };
+    size.addEventListener('input', showSize);
+    showSize();
+    sizeWrap.append(dot, size);
+    bar.appendChild(sizeWrap);
     const undo = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Desfazer traço' });
-    undo.addEventListener('click', () => {
-      drawing.strokes.pop();
-      redrawCanvas();
-    });
+    undo.addEventListener('click', undoDrawAction);
     const cancel = L.el('button', 'btn btn-sm btn-ghost', { type: 'button', text: 'Cancelar' });
     cancel.addEventListener('click', () => stopDrawing(false));
     const done = L.el('button', 'btn btn-sm btn-primary', { type: 'button', text: 'Concluir' });
@@ -3117,25 +3741,53 @@
       e.preventDefault();
       cv.setPointerCapture(e.pointerId);
       const r = cv.getBoundingClientRect();
-      const stroke = { c: drawing.color, s: drawing.size, pts: [[e.clientX - r.left, e.clientY - r.top]] };
-      drawing.strokes.push(stroke);
-      const move = (ev) => {
-        const p = [ev.clientX - r.left, ev.clientY - r.top];
-        const last = stroke.pts[stroke.pts.length - 1];
-        if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 1.5) return;
-        stroke.pts.push(p);
-        ctx.strokeStyle = stroke.c;
-        ctx.lineWidth = stroke.s;
-        ctx.beginPath();
-        ctx.moveTo(last[0], last[1]);
-        ctx.lineTo(p[0], p[1]);
-        ctx.stroke();
-      };
+      const at = (ev) => [ev.clientX - r.left, ev.clientY - r.top];
+      let move;
+      if (drawing.erasing) {
+        // borracha: apaga os traços inteiros em que encostar (um passo no "Desfazer traço")
+        const erased = [];
+        const rub = (ev) => {
+          const removed = eraseAt(at(ev));
+          if (removed.length) {
+            erased.push(...removed);
+            redrawCanvas();
+          }
+        };
+        rub(e);
+        move = rub;
+        drawing.pendingErase = erased;
+      } else {
+        if (drawing.points >= DRAW_MAX_POINTS) {
+          warnDrawLimit();
+          return;
+        }
+        const stroke = { c: drawing.color, s: drawing.size, b: drawing.brush, pts: [at(e)] };
+        drawing.points++;
+        drawing.strokes.push(stroke);
+        drawing.actions.push({ add: stroke });
+        move = (ev) => {
+          const p = at(ev);
+          const last = stroke.pts[stroke.pts.length - 1];
+          if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 1.5) return;
+          if (drawing.points >= DRAW_MAX_POINTS) {
+            warnDrawLimit();
+            return;
+          }
+          stroke.pts.push(p);
+          drawing.points++;
+          queueRedraw();
+        };
+        redrawCanvas();
+      }
       const up = () => {
         cv.removeEventListener('pointermove', move);
         cv.removeEventListener('pointerup', up);
         cv.removeEventListener('pointercancel', up);
-        redrawCanvas();
+        if (drawing && drawing.pendingErase) {
+          if (drawing.pendingErase.length) drawing.actions.push({ erase: drawing.pendingErase });
+          drawing.pendingErase = null;
+        }
+        if (drawing) redrawCanvas();
       };
       cv.addEventListener('pointermove', move);
       cv.addEventListener('pointerup', up);
@@ -3143,13 +3795,90 @@
     });
   }
 
+  function warnDrawLimit() {
+    if (drawing.warned) return;
+    drawing.warned = true;
+    toast('Este desenho chegou ao limite de detalhes. Conclua e comece outro desenho para continuar.');
+  }
+
+  /** Traços que a borracha (no ponto p) toca. Sai da lista e volta com "Desfazer traço". */
+  function eraseAt(p) {
+    const reach = Math.max(6, drawing.size);
+    const hit = [];
+    drawing.strokes.forEach((st, index) => {
+      const lim = reach + (st.s * (BRUSH_REACH[st.b || ''] || 0.5));
+      const pts = st.pts;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i];
+        const b = pts[i + 1] || a;
+        if (segDist(p, a, b) <= lim) {
+          hit.push({ stroke: st, index });
+          break;
+        }
+      }
+    });
+    hit.slice().reverse().forEach((h) => drawing.strokes.splice(h.index, 1));
+    hit.forEach((h) => { drawing.points -= h.stroke.pts.length; });
+    return hit;
+  }
+
+  function segDist(p, a, b) {
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len = dx * dx + dy * dy;
+    const t = len ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len)) : 0;
+    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+  }
+
+  function undoDrawAction() {
+    const act = drawing.actions.pop();
+    if (!act) return;
+    if (act.add) {
+      const i = drawing.strokes.indexOf(act.add);
+      if (i >= 0) {
+        drawing.strokes.splice(i, 1);
+        drawing.points -= act.add.pts.length;
+      }
+    } else if (act.erase) {
+      // devolve na mesma ordem em que estavam
+      act.erase.slice().sort((a, b) => a.index - b.index).forEach((h) => {
+        drawing.strokes.splice(Math.min(h.index, drawing.strokes.length), 0, h.stroke);
+        drawing.points += h.stroke.pts.length;
+      });
+    }
+    redrawCanvas();
+  }
+
+  function queueRedraw() {
+    if (drawing.queued) return;
+    drawing.queued = true;
+    requestAnimationFrame(() => {
+      if (!drawing) return;
+      drawing.queued = false;
+      redrawCanvas();
+    });
+  }
+
   function redrawCanvas() {
     const { cv, ctx } = drawing;
     ctx.clearRect(0, 0, cv.width, cv.height);
-    drawing.strokes.forEach((st) => {
-      ctx.strokeStyle = st.c;
-      ctx.lineWidth = st.s;
-      ctx.stroke(new Path2D(smoothPath(st.pts, 0, 0)));
+    drawing.strokes.forEach((st) => paintStroke(ctx, st));
+  }
+
+  /** Prévia do traço no canvas com as mesmas camadas do adesivo final (L.brushLayers). */
+  function paintStroke(ctx, st) {
+    const path = new Path2D(smoothPath(st.pts, 0, 0));
+    L.brushLayers(st.b || '', st.c, st.s).forEach((ly) => {
+      ctx.save();
+      ctx.globalAlpha = ly.o;
+      ctx.strokeStyle = ly.c;
+      ctx.lineWidth = ly.w;
+      ctx.lineCap = st.b === 'marker' ? 'square' : 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash(ly.dash || []);
+      if (ly.dx || ly.dy) ctx.translate(ly.dx, ly.dy);
+      ctx.stroke(path);
+      ctx.restore();
     });
   }
 
@@ -3175,15 +3904,15 @@
     bar.remove();
     scene.classList.remove('drawing-mode');
     if (!keep || !strokes.length) return;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, maxS = 0;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, pad = 0;
     strokes.forEach((st) => {
-      maxS = Math.max(maxS, st.s);
+      pad = Math.max(pad, st.s * (BRUSH_REACH[st.b || ''] || 0.5));
       st.pts.forEach(([x, y]) => {
         minX = Math.min(minX, x); minY = Math.min(minY, y);
         maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
       });
     });
-    const pad = maxS / 2 + 2;
+    pad += 2;
     minX -= pad; minY -= pad; maxX += pad; maxY += pad;
     const bw = maxX - minX;
     const bh = maxY - minY;
@@ -3191,7 +3920,8 @@
     addSticker({
       kind: 'drawing',
       vw: round(bw), vh: round(bh),
-      paths: strokes.map((st) => ({ d: smoothPath(st.pts, minX, minY), c: st.c, s: st.s })),
+      // "b" (pincel) só entra quando não é a caneta: desenhos antigos continuam iguais
+      paths: strokes.map((st) => Object.assign({ d: smoothPath(st.pts, minX, minY), c: st.c, s: st.s }, st.b ? { b: st.b } : {})),
       w: round((bw / width) * 100),
       x: round(((minX + bw / 2) / width) * 100),
       r: 0,
@@ -3320,17 +4050,8 @@
   var shapeColor = L.SHAPE_COLORS[0]; // var: o painel pode ser desenhado antes desta linha rodar
 
   function panelStickers() {
-    const s1 = panelSection('Emojis', 'Toque para colocar no papel e depois arraste, gire e redimensione.');
-    Object.entries(EMOJI_SETS).forEach(([name, list]) => {
-      s1.appendChild(L.el('p', 'menu-label', { text: name }));
-      const grid = L.el('div', 'emoji-grid');
-      list.forEach((em) => {
-        const btn = L.el('button', 'emoji-btn', { type: 'button', text: em });
-        btn.addEventListener('click', () => addSticker({ kind: 'emoji', char: em, w: 11 }));
-        grid.appendChild(btn);
-      });
-      s1.appendChild(grid);
-    });
+    const s1 = panelSection('Emojis', 'Toque para colocar no papel e depois arraste, gire e redimensione. Busque pelo nome ou cole qualquer emoji.');
+    s1.appendChild(emojiBrowser((em) => addSticker({ kind: 'emoji', char: em, w: 11 }), { stay: true }));
 
     const sd = panelSection('Rabiscos', 'Desenhos feitos à mão. Depois dá para trocar a cor.');
     const dgrid = L.el('div', 'doodle-grid');
@@ -3408,6 +4129,25 @@
       commit();
     };
 
+    const sfmt = panelSection('Formato', 'O tamanho da folha. Se o texto passar do formato, o papel cresce.');
+    const fgrid = L.el('div', 'format-grid');
+    Object.entries(L.FORMATS).forEach(([key, def]) => {
+      const on = (p.format || '') === key;
+      const btn = L.el('button', 'format-tile' + (on ? ' active' : ''), { type: 'button', 'aria-pressed': on ? 'true' : 'false', 'data-format': key || 'letter' });
+      const shape = L.el('span', 'format-shape');
+      shape.style.setProperty('--ar', def.ratio ? String(1 / def.ratio) : '0.72');
+      btn.append(shape, L.el('b', '', { text: def.label }), L.el('small', '', { text: def.hint }));
+      btn.addEventListener('click', () => {
+        if (key) p.format = key;
+        else delete p.format;
+        renderAll();
+        commit();
+        renderPanel();
+      });
+      fgrid.appendChild(btn);
+    });
+    sfmt.appendChild(fgrid);
+
     // Estilos prontos: papel, letra, cenário, envelope e efeito de uma vez (um passo no desfazer)
     if (DATA.themes && Object.keys(DATA.themes).length) {
       const st = panelSection('Estilos prontos', 'Um toque muda papel, letra, cenário, envelope e efeito juntos.');
@@ -3435,6 +4175,7 @@
       });
       st.appendChild(tg);
     }
+
 
     const s1 = panelSection('Papel');
     const grid = L.el('div', 'paper-grid');
@@ -3894,7 +4635,7 @@
     }
     const list = L.el('div', 'layer-list');
     stickers().slice().reverse().forEach((s) => {
-      const row = L.el('div', 'layer-row' + (s.id === selectedSticker ? ' active' : ''));
+      const row = L.el('div', 'layer-row' + (s.id === selectedSticker || multiSel.has(s.id) ? ' active' : ''));
       const thumb = L.el('span', 'layer-thumb');
       const mini = L.stickerEl(Object.assign({}, s, { x: 50, w: 100, r: 0, o: 1 }));
       mini.classList.add('mini');

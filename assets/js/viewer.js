@@ -561,7 +561,11 @@
         pp.hidden = false;
         rendered.relayoutAll();
         try {
-          return await window.html2canvas(pp, { scale, backgroundColor: null, useCORS: true, logging: false });
+          return await window.html2canvas(pp, {
+            scale, backgroundColor: null, useCORS: true, logging: false,
+            // recortes de foto e textos em curva viram canvas (o html2canvas não desenha máscaras CSS)
+            onclone: (doc) => Letter.prepareExport && Letter.prepareExport(doc, scale),
+          });
         } finally {
           pp.hidden = wasHidden;
         }

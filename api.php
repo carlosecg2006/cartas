@@ -237,7 +237,11 @@ switch ($action) {
             json_error('Resposta inválida.');
         }
         q('DELETE FROM interactions WHERE letter_id = ? AND block_id = ? AND user_id = ?', [(int) $letter['id'], $blockId, $uid]);
-        db_insert('interactions', ['letter_id' => (int) $letter['id'], 'block_id' => $blockId, 'user_id' => $uid, 'value' => $value, 'created_at' => now()]);
+        try {
+            db_insert('interactions', ['letter_id' => (int) $letter['id'], 'block_id' => $blockId, 'user_id' => $uid, 'value' => $value, 'created_at' => now()]);
+        } catch (PDOException $e) {
+            // dois toques ao mesmo tempo (duas abas): a outra resposta já foi guardada
+        }
         json_out_then(
             ['ok' => true, 'interactions' => letter_interactions((int) $letter['id'], $uid) ?: new stdClass()],
             fn() => notify_quietly((int) $letter['sender_id'])

@@ -73,7 +73,8 @@
 .tape-btn .st-tape { height: 16px; transform: rotate(-6deg); }
 .tape-btn:hover { border-color: var(--accent); }
 
-.paper-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .45rem; }
+/* só a grade de amostras do painel: o papel "Quadriculado" da carta também se chama .paper-grid */
+.paper-grid:not(.paper) { display: grid; grid-template-columns: repeat(3, 1fr); gap: .45rem; }
 .paper-tile, .font-tile, .scene-tile {
   border: 1px solid var(--line-2); border-radius: 10px; background: var(--field); cursor: pointer;
   font: inherit; font-size: .75rem; font-weight: 500; color: var(--ink); transition: border-color .15s, transform .15s;

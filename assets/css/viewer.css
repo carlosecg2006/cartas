@@ -140,6 +140,8 @@
 .bgm-player.show-frame .bgm-hint { display: block; order: 3; width: 100%; font-size: .75rem; color: var(--muted); padding: .1rem .2rem .35rem; }
 @media (prefers-reduced-motion: reduce) { .bgm-player.is-playing .bgm-eq i, .bgm-player.needs-tap .bgm-toggle { animation: none; } }
 @media print { .bgm-player { display: none !important; } }
+/* o player aberto (vídeo/Spotify) fica fixo no canto: sobra espaço no fim para os botões não ficarem embaixo dele */
+body:has(.bgm-player.show-frame) .viewer, body:has(.bgm-spotify:not(.mini)) .viewer { padding-bottom: 17rem; }
 
 /* releitura: abertura mais curta */
 .envelope-stage.quick { transition-duration: .3s; }

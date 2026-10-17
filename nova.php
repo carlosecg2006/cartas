@@ -6,7 +6,7 @@ require __DIR__ . '/app/bootstrap.php';
 $user = require_login();
 $friends = contacts_of((int) $user['id']);
 $para = (int) ($_GET['para'] ?? 0);
-$suggested = (string) ($_GET['modelo'] ?? '');
+$suggested = is_string($_GET['modelo'] ?? null) ? $_GET['modelo'] : '';
 $recipient = null;
 foreach ($friends as $f) {
     if ((int) $f['id'] === $para) {

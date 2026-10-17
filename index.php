@@ -45,7 +45,7 @@ foreach ($received as $l) {
 
 // ---------- Escritas ----------
 $filterPerson = (int) ($_GET['para'] ?? 0);
-$filterStatus = (string) ($_GET['status'] ?? '');
+$filterStatus = is_string($_GET['status'] ?? null) ? $_GET['status'] : '';
 $where = ['l.sender_id = ?'];
 $params = [$uid, $uid];
 if ($filterPerson) {

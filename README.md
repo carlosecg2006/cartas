@@ -31,7 +31,8 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 - **Editor com blocos (como no Notion)**
   - Texto, títulos, citação, listas, lista de desejos, destaque, foto, **galeria** (espalhada, grade ou filme), **foto e texto lado a lado**, **mensagem de voz gravada no navegador**, música do YouTube/Spotify, segredo, divisórias, assinatura e espaçamento
   - **Blocos interativos**: sanfona (abre ao tocar), linha do tempo, **contador** ("juntos há…" / "faltam…", ao vivo), **quiz** (quem recebe responde e você vê a resposta), **vale/cupom** (quem recebe usa e ganha carimbo), poema, lugar, duas colunas e botão com link
-  - **Efeitos de texto**: marca-texto em 4 cores, sublinhado ondulado, brilho e contorno; filtros de foto (P&B, sépia, vintage, sonho…)
+  - **Efeitos de texto**: marca-texto em qualquer cor, sublinhado ondulado, brilho, contorno, **degradês** (pôr do sol, oceano, arco-íris) e sombra; **letra diferente em cada trecho**; filtros de foto (P&B, sépia, vintage, sonho…)
+  - **Caixa em qualquer bloco**: fundo, borda (linha, tracejada, pontilhada, dupla), cantos, espaço interno, sombra, inclinação e largura; espaçamento de letras e de linhas; texto justificado
   - `/` numa linha vazia abre o menu de blocos; atalhos `#`, `-`, `[]`, `>`, `---`
   - Barra de formatação ao selecionar texto, blocos arrastáveis pela alça
   - **`Ctrl+K`**: busca qualquer ação
@@ -39,11 +40,17 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
 - **Adesivos livres (como no Canva)**
   - Emojis, rabiscos desenhados à mão (com troca de cor), **formas** (coração, estrela, balão de fala, selo…), fitas washi, bilhetes, desenho livre e imagens próprias
   - **Animações** (flutuar, pulsar, balançar, girar, brilhar, quicar), contorno de figurinha e filtros nas imagens
+  - **Caixas de texto livres**: qualquer letra e cor, fundo, negrito, itálico, alinhamento, tamanho e **texto curvo**
+  - **Fotos com moldura**: círculo, coração, estrela, arco, mancha, cantos redondos, polaroid ou selo
+  - **Desenho** com caneta, marcador, lápis, giz e neon, tamanho e cor livres, borracha e desfazer
+  - **Emojis à vontade**: busca em português, recentes e "cole qualquer emoji"
+  - **Vários itens de uma vez** (Shift+clique ou toque longo): mover, alinhar, distribuir, duplicar, travar e apagar
   - **Guias de alinhamento que grudam** ao arrastar (segure `Alt` para soltar livre), girar, redimensionar, espelhar, transparência
   - **Travar posição**, menu do botão direito, **painel de camadas** e atalhos (`Ctrl+D`, `[`, `]`, `Ctrl+L`, `Delete`)
-- Papel (inclui aquarela, linho, caderno, partitura e degradê), cor, tinta, **24 letras**, bordas e cenário
+- Papel (inclui aquarela, linho, caderno, partitura e degradê), cor, tinta, **24 letras**, bordas e cenário, e **formato**: carta, quadrado, cartão-postal, bilhete ou Story
 - **Envelope**: cor, forro, selo de cera, **selo postal ilustrado**, **carimbo com a data de envio** e o texto **"Abra quando…"**
-- **Efeito ao abrir**: corações, confete, pétalas, estrelas ou neve
+- **Efeito ao abrir**: corações, confete (nas suas cores), pétalas, estrelas, neve ou **chuva com os seus emojis**; selo do envelope com **uma foto sua**
+- **Meus modelos**: salve qualquer carta como modelo seu (até 30) e duplique cartas
 - Data mínima para abrir, confirmação de leitura, reações e respostas
 - **Sua própria imagem como papel** (com véu claro/escuro para o texto aparecer) e **como fundo** (com desfoque e escurecer)
 - **Várias páginas** (bloco "Nova página"), **raspadinha** e **texto aparecendo como se estivesse sendo escrito**

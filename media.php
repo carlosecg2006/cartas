@@ -7,7 +7,7 @@ require __DIR__ . '/app/bootstrap.php';
 $user = current_user();
 // Libera a sessão: fotos e áudios carregam em paralelo e não travam o salvamento
 session_write_close();
-$file = (string) ($_GET['f'] ?? '');
+$file = is_string($_GET['f'] ?? null) ? $_GET['f'] : '';
 if (!$user || !preg_match(ANY_MEDIA_RE, $file)) {
     http_response_code(404);
     exit;

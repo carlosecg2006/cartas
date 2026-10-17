@@ -2193,7 +2193,11 @@
   }
 
   async function uploadFile(file, kind) {
-    if (kind !== 'sticker') file = await shrinkForUpload(file);
+    if (kind !== 'sticker') {
+      // a redução conta como envio em andamento: salvar, enviar a carta e sair da página esperam por ela
+      setStatus('saving', 'Preparando a foto…');
+      file = await tracked(shrinkForUpload(file));
+    }
     const fd = new FormData();
     fd.append('id', letterId);
     fd.append('image', file, file.name || 'imagem.png');

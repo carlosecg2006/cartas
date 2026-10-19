@@ -167,7 +167,13 @@ function safe_url($value): string
 
 // ---------- HTML de texto (lista branca) ----------
 
-function sanitize_inline_html($html, int $max = 20000): string
+// Limites de tamanho: um bloco de texto aceita um textão enorme (200 mil caracteres, umas 80 páginas)
+const TEXT_BLOCK_MAX = 200000;
+const TEXT_ITEM_MAX = 50000;
+const LETTER_MAX_BLOCKS = 3000;
+const LETTER_MAX_BYTES = 5000000; // ~5 MB por carta: alguns milhões de caracteres
+
+function sanitize_inline_html($html, int $max = TEXT_BLOCK_MAX): string
 {
     if (!is_string($html)) {
         return '';
@@ -367,7 +373,7 @@ function sanitize_letter_content($raw): array
     }
 
     $ids = [];
-    foreach (array_slice(is_array($raw['blocks'] ?? null) ? $raw['blocks'] : [], 0, 300) as $b) {
+    foreach (array_slice(is_array($raw['blocks'] ?? null) ? $raw['blocks'] : [], 0, LETTER_MAX_BLOCKS) as $b) {
         if (!is_array($b)) {
             continue;
         }
@@ -472,7 +478,7 @@ function sanitize_block(array $b): ?array
             $block['style'] = pick($b['style'] ?? null, ['bullet', 'number'], 'bullet');
             $block['items'] = [];
             foreach (array_slice(is_array($b['items'] ?? null) ? $b['items'] : [], 0, 200) as $item) {
-                $block['items'][] = sanitize_inline_html($item, 5000);
+                $block['items'][] = sanitize_inline_html($item, TEXT_ITEM_MAX);
             }
             if (!$block['items']) {
                 $block['items'] = [''];
@@ -482,7 +488,7 @@ function sanitize_block(array $b): ?array
             $block['items'] = [];
             foreach (array_slice(is_array($b['items'] ?? null) ? $b['items'] : [], 0, 200) as $item) {
                 if (is_array($item)) {
-                    $block['items'][] = ['checked' => !empty($item['checked']), 'html' => sanitize_inline_html($item['html'] ?? '', 5000)];
+                    $block['items'][] = ['checked' => !empty($item['checked']), 'html' => sanitize_inline_html($item['html'] ?? '', TEXT_ITEM_MAX)];
                 }
             }
             if (!$block['items']) {
@@ -578,7 +584,7 @@ function sanitize_block(array $b): ?array
                     $block['items'][] = [
                         'date' => plain($item['date'] ?? '', 40),
                         'title' => plain($item['title'] ?? '', 120),
-                        'html' => sanitize_inline_html($item['html'] ?? '', 5000),
+                        'html' => sanitize_inline_html($item['html'] ?? '', TEXT_ITEM_MAX),
                     ];
                 }
             }
@@ -884,8 +890,8 @@ function letter_derived(string $title, array $content): array
 /** Texto puro da carta usado na busca (segredos e raspadinhas ficam de fora). */
 function letter_search_text(string $title, array $content): string
 {
-    $text = trim($title . ' ' . ($content['envelope']['label'] ?? '') . ' ' . content_excerpt($content, 20000));
-    return mb_substr($text, 0, 20000);
+    $text = trim($title . ' ' . ($content['envelope']['label'] ?? '') . ' ' . content_excerpt($content, 100000));
+    return mb_substr($text, 0, 100000);
 }
 
 /** Tira da carta os arquivos listados (apagados da biblioteca ou de outra pessoa). */

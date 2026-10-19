@@ -304,6 +304,9 @@
     // Só cartas muito longas aceleram (no máximo ~30 letras/s), e "Mostrar tudo" pula quando quiser.
     const totalChars = jobs.reduce((n, j) => n + j.texts.reduce((m, t) => m + t.full.length, 0), 0);
     const perChar = Math.max(32, Math.min(50, 100000 / Math.max(1, totalChars)));
+    // Textão: escreve os primeiros ~2 minutos e mostra o resto de uma vez
+    const typeLimit = totalChars > 6000 ? 3000 : Infinity;
+    let typed = 0;
     const pauseAfter = (ch) => ('.!?…'.includes(ch) ? 7 : ',;:'.includes(ch) ? 3.2 : ch === '\n' ? 4 : 0) * perChar;
     let lastFollow = 0;
     const keepVisible = (now) => {
@@ -345,6 +348,8 @@
             }
             if (!step) continue;
             shown += step;
+            typed += step;
+            if (typed > typeLimit) { finishAll(); return; }
             t.node.nodeValue = t.full.slice(0, shown);
             t.rest.textContent = t.full.slice(shown);
             keepVisible(now);

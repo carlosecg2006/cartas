@@ -57,8 +57,8 @@ switch ($action) {
         }
         $title = plain($in['title'] ?? '', 150);
         $json = json_encode($content, JSON_UNESCAPED_UNICODE);
-        if (strlen($json) > 1500000) {
-            json_error('A carta ficou grande demais (muitos desenhos ou textos enormes). Divida em duas cartas.', 413);
+        if (strlen($json) > LETTER_MAX_BYTES) {
+            json_error('A carta passou de 5 MB de texto (alguns milhões de letras). Divida em duas cartas.', 413);
         }
         if ($json === json_encode($letter['content'], JSON_UNESCAPED_UNICODE) && $title === $letter['title'] && empty($in['checkpoint'])) {
             json_out(['ok' => true, 'savedAt' => date('H:i'), 'unchanged' => true]);

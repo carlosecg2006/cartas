@@ -194,7 +194,7 @@ function save_user_template(int $userId, string $name, array $content): int
         }
     }
     $json = json_encode($content, JSON_UNESCAPED_UNICODE);
-    if (strlen($json) > 1500000) {
+    if (strlen($json) > LETTER_MAX_BYTES) {
         throw new RuntimeException('Essa carta é grande demais para virar modelo.');
     }
     $name = trim(plain($name, 80));
@@ -408,8 +408,10 @@ function save_version(int $letterId, string $title, string $contentJson, bool $f
         return;
     }
     db_insert('letter_versions', ['letter_id' => $letterId, 'title' => $title, 'content' => $contentJson, 'created_at' => now()]);
-    $keep = q_all('SELECT id FROM letter_versions WHERE letter_id = ? ORDER BY id DESC LIMIT 40', [$letterId]);
-    if (count($keep) === 40) {
+    // cartas enormes guardam menos versões, para não encher o banco da hospedagem
+    $max = strlen($contentJson) > 1000000 ? 8 : 40;
+    $keep = q_all('SELECT id FROM letter_versions WHERE letter_id = ? ORDER BY id DESC LIMIT ' . $max, [$letterId]);
+    if (count($keep) === $max) {
         q('DELETE FROM letter_versions WHERE letter_id = ? AND id < ?', [$letterId, (int) end($keep)['id']]);
     }
 }

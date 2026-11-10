@@ -1129,3 +1129,12 @@ button.quiz-opt:focus-visible { outline: 2px solid color-mix(in srgb, var(--ink)
     radial-gradient(closest-side, #000 96%, transparent) top right / var(--sc) var(--sc) no-repeat round,
     linear-gradient(#000 0 0) center / calc(100% - var(--sc)) calc(100% - var(--sc)) no-repeat;
 }
+
+/* ================================================================
+   Foto encaixada no texto: a foto flutua para um lado e as palavras contornam.
+   Larguras em % do papel e margens em em: o contorno é o mesmo em qualquer tela.
+   ================================================================ */
+.lb.lb-wrap { float: left; clear: both; width: var(--wsize, 40%); margin: .2em 1.1em .5em 0; z-index: 1; }
+.lb.lb-wrap.wrap-right { float: right; margin: .2em 0 .5em 1.1em; }
+.lb.lb-wrap .lb-figure, .lb.lb-wrap .lb-figure.w-sm, .lb.lb-wrap .lb-figure.w-md, .lb.lb-wrap .lb-figure.w-lg { width: 100%; margin: 0; }
+.lb.lb-wrap.has-box { padding: .3em; }

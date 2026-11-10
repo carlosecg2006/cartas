@@ -30,6 +30,7 @@
     { key: 'checklist', icon: 'list-check', label: 'Lista de desejos', desc: 'Coisas para fazermos juntos', words: 'checklist tarefas desejos', make: () => ({ type: 'checklist', items: [{ checked: false, html: '' }] }) },
     { key: 'callout', icon: 'sparkle', label: 'Destaque', desc: 'Caixinha colorida com emoji', words: 'destaque callout caixa', make: () => ({ type: 'callout', emoji: '💌', bg: '#fde8e4', html: '' }) },
     { key: 'image', icon: 'image', label: 'Foto', desc: 'Polaroid, moldura ou simples', words: 'foto imagem image polaroid', make: () => ({ type: 'image', src: '', caption: '', frame: 'polaroid', width: 'md', tilt: -2 }) },
+    { key: 'imagewrap', icon: 'photo-text', label: 'Foto no meio do texto', desc: 'As palavras contornam a foto', words: 'foto imagem texto em volta contornar encaixar flutuar meio', make: () => ({ type: 'image', src: '', caption: '', frame: 'plain', width: 'md', tilt: 0, wrap: 'right', wsize: 40 }) },
     { key: 'gallery', icon: 'images', label: 'Galeria', desc: 'Várias fotos: espalhadas, grade ou filme', words: 'galeria fotos varias album', make: () => ({ type: 'gallery', layout: 'scatter', items: [] }) },
     { key: 'phototext', icon: 'photo-text', label: 'Foto e texto', desc: 'Foto de um lado, texto do outro', words: 'foto texto lado colunas', make: () => ({ type: 'phototext', src: '', side: 'left', frame: 'polaroid', html: '' }) },
     { key: 'audio', icon: 'mic', label: 'Mensagem de voz', desc: 'Grave sua voz ou envie um áudio', words: 'audio voz gravar mensagem microfone', make: () => ({ type: 'audio', src: '', label: '', duration: 0, peaks: [] }) },
@@ -515,6 +516,11 @@
       } else {
         const img = fig.querySelector('img');
         if (img) img.addEventListener('load', layout);
+        if (img && b.wrap) {
+          img.draggable = false;
+          img.title = 'Arraste para mudar a foto de lugar no texto';
+          img.addEventListener('pointerdown', (e) => startWrapDrag(e, b));
+        }
       }
       fig.addEventListener('dragover', (e) => { e.preventDefault(); fig.classList.add('drop-hover'); });
       fig.addEventListener('dragleave', () => fig.classList.remove('drop-hover'));
@@ -1491,10 +1497,36 @@
     }
 
     if (b.type === 'image') {
+      const sw = section('Texto em volta');
+      sw.appendChild(optionRow({ '': 'Não', left: 'Foto à esquerda', right: 'Foto à direita' }, b.wrap || '', (v) => update(() => {
+        if (v) {
+          b.wrap = v;
+          b.wsize = b.wsize || 40;
+          if (b.tilt && Math.abs(b.tilt) > 3) b.tilt = 0;
+        } else {
+          delete b.wrap;
+          delete b.wsize;
+        }
+      }), { wrap: true }));
+      if (b.wrap) {
+        sw.appendChild(L.el('p', 'menu-label', { text: 'Tamanho no texto' }));
+        const size = L.el('input', '', { type: 'range', min: '20', max: '70', step: '1', value: String(b.wsize || 40), 'aria-label': 'Tamanho da foto no texto' });
+        size.addEventListener('input', () => {
+          b.wsize = Number(size.value);
+          blockNode(b.id)?.style.setProperty('--wsize', b.wsize + '%');
+          layout();
+        });
+        size.addEventListener('change', commit);
+        sw.appendChild(size);
+        sw.appendChild(L.el('p', 'menu-hint', { text: 'Arraste a foto pela carta: o texto se reorganiza em volta dela.' }));
+      }
+      menu.appendChild(sw);
       const s = section('Moldura');
       s.appendChild(optionRow(L.FRAMES, b.frame, (v) => update(() => { b.frame = v; }), { wrap: true }));
-      s.appendChild(L.el('p', 'menu-label', { text: 'Tamanho' }));
-      s.appendChild(optionRow({ sm: 'Pequena', md: 'Média', lg: 'Grande' }, b.width, (v) => update(() => { b.width = v; })));
+      if (!b.wrap) {
+        s.appendChild(L.el('p', 'menu-label', { text: 'Tamanho' }));
+        s.appendChild(optionRow({ sm: 'Pequena', md: 'Média', lg: 'Grande' }, b.width, (v) => update(() => { b.width = v; })));
+      }
       s.appendChild(L.el('p', 'menu-label', { text: 'Inclinação' }));
       const tilt = L.el('input', '', { type: 'range', min: '-12', max: '12', step: '1', value: String(b.tilt) });
       tilt.addEventListener('input', () => {
@@ -1705,7 +1737,7 @@
       s.appendChild(L.el('p', 'menu-label', { text: 'Espaço entre linhas' }));
       s.appendChild(optionRow(L.LEADINGS, b.leading || '', (v) => update(() => { if (v) b.leading = v; else delete b.leading; }), { wrap: true }));
       menu.appendChild(s);
-    } else if (b.type === 'image') {
+    } else if (b.type === 'image' && !b.wrap) {
       const s = section('Posição');
       s.appendChild(optionRow({ left: 'align-left', center: 'align-center', right: 'align-right' }, b.align, (v) => update(() => { b.align = v; }), {
         titles: { left: 'Esquerda', center: 'Centro', right: 'Direita' }, render: (btn, v, ic) => btn.appendChild(L.icon(ic)), className: 'opt-icons',
@@ -2708,7 +2740,13 @@
     if (!final) return;
     await tracked((async () => {
       const res = await uploadFile(final, 'sticker');
-      if (res) addSticker({ kind: 'image', src: res.src, w: 24 });
+      if (res) {
+        addSticker({ kind: 'image', src: res.src, w: 24 });
+        if (!addStickerFromFile.told) {
+          addStickerFromFile.told = true;
+          toast('A foto ficou solta por cima do papel. Para o texto contornar a foto, toque nela e escolha "Encaixar no texto".');
+        }
+      }
     })());
   }
 
@@ -3116,6 +3154,114 @@
     commit();
   }
 
+  /** Coloca o bloco antes de outro (ou no fim, sem referência), no estado e na tela. */
+  function placeBlockBefore(b, beforeId) {
+    const from = blockIndex(b.id);
+    if (from >= 0) blocks().splice(from, 1);
+    const to = beforeId ? blockIndex(beforeId) : blocks().length;
+    blocks().splice(to < 0 ? blocks().length : to, 0, b);
+    let node = blockNode(b.id);
+    if (!node) node = buildBlock(b);
+    $('.eb-empty', inner)?.remove();
+    const ref = beforeId ? blockNode(beforeId) : null;
+    if (ref) inner.insertBefore(node, ref);
+    else inner.appendChild(node);
+    layout();
+    return node;
+  }
+
+  /** Foto solta vira foto encaixada no texto, no ponto do texto onde ela estava. */
+  function stickerToWrap(s) {
+    const node = stickerNode(s.id);
+    if (!node || s.kind !== 'image') return;
+    const pr = paper.getBoundingClientRect();
+    const r = node.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    // entra antes do bloco em que a foto está (o texto dele passa a contornar a foto)
+    let target = null;
+    $$(':scope > .eb', inner).forEach((blk) => { if (blk.getBoundingClientRect().top <= cy) target = blk; });
+    if (!target) target = $(':scope > .eb', inner);
+    const nb = newBlock('imagewrap');
+    nb.src = s.src;
+    nb.wrap = cx < pr.left + pr.width / 2 ? 'left' : 'right';
+    // largura do adesivo (% do papel) para % da área de texto (o papel tem margens de 8% de cada lado)
+    nb.wsize = Math.max(20, Math.min(70, Math.round((s.w || 24) / 0.84)));
+    if (s.mask === 'polaroid') nb.frame = 'polaroid';
+    else if (s.mask === 'circle') nb.frame = 'circle';
+    else if (s.mask === 'rounded') nb.frame = 'rounded';
+    if (s.fi) nb.filter = s.fi;
+    state.content.stickers = stickers().filter((x) => x.id !== s.id);
+    node.remove();
+    selectedSticker = null;
+    refreshSelection();
+    placeBlockBefore(nb, target ? target.dataset.id : null);
+    commit();
+    toast('Pronto! Agora o texto contorna a foto. Arraste a foto para mudar de lugar.');
+  }
+
+  /**
+   * Arrastar a foto encaixada: ela passa para antes do bloco sob o dedo/mouse e para o lado
+   * (esquerda/direita) da metade do papel; o texto se reorganiza em volta dela na hora.
+   */
+  function startWrapDrag(e, b) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const node = blockNode(b.id);
+    if (!node) return;
+    // ouve na janela: mudar o bloco de lugar na página cancela a captura do ponteiro na imagem
+    const pid = e.pointerId;
+    node.classList.add('wrap-dragging');
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let moved = false;
+    let lastY = e.clientY;
+    let queued = false;
+    let px = e.clientX;
+    let py = e.clientY;
+    const apply = () => {
+      queued = false;
+      const pr = paper.getBoundingClientRect();
+      const side = px < pr.left + pr.width / 2 ? 'left' : 'right';
+      if (side !== b.wrap) {
+        b.wrap = side;
+        node.classList.toggle('wrap-left', side === 'left');
+        node.classList.toggle('wrap-right', side === 'right');
+      }
+      // só troca de lugar quando o ponteiro andou um pouco (evita a foto tremer entre dois parágrafos)
+      if (Math.abs(py - lastY) < 6) { layout(); return; }
+      lastY = py;
+      let before = null;
+      const others = $$(':scope > .eb', inner).filter((n) => n !== node);
+      for (const n of others) {
+        const r = n.getBoundingClientRect();
+        if (py < r.top + Math.min(r.height / 2, 24)) { before = n; break; }
+      }
+      const cur = node.nextElementSibling;
+      if (before !== cur) placeBlockBefore(b, before ? before.dataset.id : null);
+      else layout();
+    };
+    const move = (ev) => {
+      if (ev.pointerId !== pid) return;
+      px = ev.clientX;
+      py = ev.clientY;
+      if (!moved && Math.hypot(px - startX, py - startY) < 5) return;
+      moved = true;
+      if (!queued) { queued = true; requestAnimationFrame(apply); }
+    };
+    const up = (ev) => {
+      if (ev.pointerId !== pid) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      node.classList.remove('wrap-dragging');
+      if (moved) commit();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
   function editStickerText(s) {
     if (s.kind !== 'text') return;
     const node = stickerNode(s.id);
@@ -3205,6 +3351,7 @@
       ['chevron-down', 'Enviar para trás', '[', () => restack(s, 'back')],
       ['flip', 'Espelhar', '', () => flipSticker(s)],
       ['star', 'Animação e efeitos', '', () => { const n = stickerNode(s.id); if (n) openStickerFx(n, s); }],
+      ...(s.kind === 'image' ? [['photo-text', 'Encaixar no texto', '', () => stickerToWrap(s)]] : []),
       ['checks', 'Selecionar vários', 'Shift+clique', () => startMultiMode(s)],
       [s.lk ? 'unlock' : 'lock', s.lk ? 'Destravar' : 'Travar posição', 'Ctrl+L', () => toggleLock(s)],
       ['trash', 'Excluir', 'Del', () => deleteSticker(s.id), 'danger'],
@@ -3309,6 +3456,7 @@
         })());
       });
       btn('image', 'Moldura e recorte', (e) => openMaskPicker(e.currentTarget, s));
+      btn('photo-text', 'Encaixar no texto (as palavras contornam a foto)', () => stickerToWrap(s));
       sep();
     }
     if (s.kind === 'shape') {

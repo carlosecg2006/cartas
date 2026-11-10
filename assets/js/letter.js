@@ -346,6 +346,14 @@
     // filtro de foto (blocos de foto, foto e texto e galeria)
     Array.from(node.classList).forEach((c) => { if (c.startsWith('imgf-')) node.classList.remove(c); });
     if (b.filter && IMAGE_FILTERS[b.filter]) node.classList.add('imgf-' + b.filter);
+    // foto encaixada no texto: flutua para um lado e os blocos seguintes contornam
+    node.classList.remove('lb-wrap', 'wrap-left', 'wrap-right');
+    if (b.type === 'image' && (b.wrap === 'left' || b.wrap === 'right')) {
+      node.classList.add('lb-wrap', 'wrap-' + b.wrap);
+      node.style.setProperty('--wsize', Math.max(20, Math.min(70, Number(b.wsize) || 40)) + '%');
+    } else {
+      node.style.removeProperty('--wsize');
+    }
     applyBlockExtras(node, b);
   }
 
@@ -1315,9 +1323,13 @@
     if (blocks) {
       const cs = getComputedStyle(blocks);
       const last = blocks.lastElementChild;
-      const natural = last
+      let natural = last
         ? last.offsetTop + last.offsetHeight + (parseFloat(getComputedStyle(last).marginBottom) || 0) + (parseFloat(cs.paddingBottom) || 0)
         : blocks.offsetHeight;
+      // uma foto encaixada pode descer além do último bloco
+      blocks.querySelectorAll(':scope > .lb-wrap').forEach((f) => {
+        natural = Math.max(natural, f.offsetTop + f.offsetHeight + (parseFloat(cs.paddingBottom) || 0));
+      });
       contentBottom = blocks.offsetTop + Math.min(blocks.offsetHeight, Math.max(natural, parseFloat(cs.minHeight) || 0));
     }
     const items = [];

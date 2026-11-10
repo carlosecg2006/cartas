@@ -42,6 +42,7 @@ Feito com **PHP + MySQL + HTML + CSS + JavaScript**, sem frameworks e sem instal
   - **Animações** (flutuar, pulsar, balançar, girar, brilhar, quicar), contorno de figurinha e filtros nas imagens
   - **Caixas de texto livres**: qualquer letra e cor, fundo, negrito, itálico, alinhamento, tamanho e **texto curvo**
   - **Fotos com moldura**: círculo, coração, estrela, arco, mancha, cantos redondos, polaroid ou selo
+  - **Foto no meio do texto**: a foto fica de um lado e as palavras contornam; arraste a foto pela carta e o texto se reorganiza na hora. Uma foto solta vira foto encaixada com "Encaixar no texto"
   - **Desenho** com caneta, marcador, lápis, giz e neon, tamanho e cor livres, borracha e desfazer
   - **Emojis à vontade**: busca em português, recentes e "cole qualquer emoji"
   - **Vários itens de uma vez** (Shift+clique ou toque longo): mover, alinhar, distribuir, duplicar, travar e apagar

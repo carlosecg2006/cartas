@@ -508,6 +508,12 @@ function sanitize_block(array $b): ?array
             $block['width'] = pick($b['width'] ?? null, IMAGE_WIDTHS, 'md');
             $block['tilt'] = num($b['tilt'] ?? 0, -12, 12, 0);
             $block['filter'] = pick($b['filter'] ?? '', IMAGE_FILTERS, '');
+            // foto encaixada no texto: as palavras contornam a foto (ausente = foto sozinha na linha, como antes)
+            $wrap = pick($b['wrap'] ?? '', ['left', 'right'], '');
+            if ($wrap !== '') {
+                $block['wrap'] = $wrap;
+                $block['wsize'] = (int) num($b['wsize'] ?? 40, 20, 70, 40);
+            }
             break;
         case 'divider':
             $block['style'] = pick($b['style'] ?? null, DIVIDER_STYLES, 'hearts');

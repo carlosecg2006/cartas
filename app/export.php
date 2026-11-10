@@ -293,6 +293,10 @@ function export_block_style(array $b): string
     if ($lh = ['tight' => '1.2', 'loose' => '2', 'looser' => '2.5'][$b['leading'] ?? ''] ?? null) {
         $css[] = 'line-height:' . $lh;
     }
+    if (($b['type'] ?? '') === 'image' && in_array($b['wrap'] ?? '', ['left', 'right'], true)) {
+        // foto encaixada no texto: flutua e as palavras contornam
+        $css[] = 'float:' . $b['wrap'] . ';clear:both;width:' . (int) ($b['wsize'] ?? 40) . '%;margin:' . ($b['wrap'] === 'left' ? '.2em 1.1em .5em 0' : '.2em 0 .5em 1.1em');
+    }
     $box = is_array($b['box'] ?? null) ? $b['box'] : null;
     if ($box) {
         if (($box['bg'] ?? '') !== '') {
@@ -353,7 +357,7 @@ function export_letter_html(array $l): string
         . '<div class="scene scene-' . e($p['scene']) . '"' . $sceneStyle . '>'
         . '<div class="paper paper-' . e($p['style']) . ' border-' . e($p['border']) . ' size-' . e($p['size']) . '" style="' . e($paperStyle) . '">'
         . implode('', $byBlock[''] ?? [])
-        . ($room > 0 ? '<div class="room" style="min-height:calc(' . round($room, 2) . 'cqw - 12cqw)">' : '<div>');
+        . ($room > 0 ? '<div class="room" style="min-height:calc(' . round($room, 2) . 'cqw - 12cqw)">' : '<div class="room">');
     foreach ($c['blocks'] as $b) {
         $inner = export_block($b, $l);
         $stickers = implode('', $byBlock[$b['id']] ?? []);
@@ -431,7 +435,7 @@ function export_css(): string
         . '.imgf-contraste img,img.imgf-contraste{filter:contrast(1.35) saturate(1.2)}.imgf-sonho img,img.imgf-sonho{filter:saturate(1.3) brightness(1.1) contrast(.9) hue-rotate(-12deg)}'
         // blocos
         . 'img{max-width:100%;height:auto;border-radius:4px}figure{margin:12px auto}figcaption{font-size:.85em;opacity:.75;text-align:center}'
-        . '.photo{max-width:65%;transform:rotate(var(--tilt,0deg))}.photo.w-sm{max-width:40%}.photo.w-lg{max-width:100%}.photo img{display:block;width:100%}'
+        . '.room{display:flow-root}.b[style*="float"] .photo{max-width:100%;margin:0}.photo{max-width:65%;transform:rotate(var(--tilt,0deg))}.photo.w-sm{max-width:40%}.photo.w-lg{max-width:100%}.photo img{display:block;width:100%}'
         . '.frame-polaroid{background:#fff;padding:8px 8px 28px;box-shadow:0 4px 14px rgba(0,0,0,.15);color:#3b3340}.frame-rounded img{border-radius:14px}'
         . '.frame-circle img{border-radius:50%;aspect-ratio:1;object-fit:cover}.frame-tape{box-shadow:0 4px 14px rgba(0,0,0,.12)}'
         . '.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.gallery-strip{grid-auto-flow:column;grid-template-columns:none;overflow-x:auto}'

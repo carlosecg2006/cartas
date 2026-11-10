@@ -773,3 +773,14 @@
   background: #1f1c18; color: #fff; font: 600 .75rem/1.4 var(--font-ui); font-variant-numeric: tabular-nums; white-space: nowrap;
   box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
 }
+
+/* ---------- foto encaixada no texto: arrastar com o texto se reorganizando ---------- */
+.eb.lb-wrap .lb-figure img { cursor: grab; touch-action: none; user-select: none; -webkit-user-drag: none; }
+.eb.lb-wrap.wrap-dragging .lb-figure img { cursor: grabbing; }
+.eb.lb-wrap.wrap-dragging { outline: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 3px; border-radius: 4px; }
+/* os botões (+ e ⠿) da foto encaixada ficam dentro do canto da foto: à esquerda do papel eles
+   cairiam em cima dos botões do parágrafo que começa na mesma altura */
+.eb.lb-wrap > .eb-gutter {
+  left: .35em; top: .35em; flex-direction: row; border-radius: 8px; padding: 1px;
+  background: color-mix(in srgb, var(--surface, #fff) 92%, transparent); box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+}
